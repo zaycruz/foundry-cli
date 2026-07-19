@@ -110,6 +110,189 @@ def test_get_object_type_command(mock_services):
     )
 
 
+def test_create_object_type_command(mock_services):
+    """Test create object type command."""
+    mock_instance = Mock()
+    mock_instance.create_object_type.return_value = {
+        "apiName": "ExampleObject",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-create",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "ExampleObject",
+            "--display-name",
+            "Example Object",
+            "--primary-key",
+            "id",
+            "--backing-dataset",
+            "ri.foundry.main.dataset.example",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "ExampleObject" in result.output
+    mock_instance.create_object_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        api_name="ExampleObject",
+        display_name="Example Object",
+        primary_key="id",
+        backing_dataset="ri.foundry.main.dataset.example",
+        description=None,
+    )
+
+
+def test_create_object_type_command_auth_error(mock_services):
+    """Test object type create command auth error handling."""
+    from pltr.auth.base import ProfileNotFoundError
+
+    mock_instance = Mock()
+    mock_instance.create_object_type.side_effect = ProfileNotFoundError(
+        "Profile not found"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-create",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "ExampleObject",
+            "--display-name",
+            "Example Object",
+            "--primary-key",
+            "id",
+            "--backing-dataset",
+            "ri.foundry.main.dataset.example",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Authentication error" in result.output
+
+
+def test_create_object_type_command_runtime_error(mock_services):
+    """Test object type create command runtime error handling."""
+    mock_instance = Mock()
+    mock_instance.create_object_type.side_effect = RuntimeError("boom")
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-create",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "ExampleObject",
+            "--display-name",
+            "Example Object",
+            "--primary-key",
+            "id",
+            "--backing-dataset",
+            "ri.foundry.main.dataset.example",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Failed to create object type" in result.output
+
+
+def test_create_link_type_command(mock_services):
+    """Test create link type command."""
+    mock_instance = Mock()
+    mock_instance.create_link_type.return_value = {
+        "apiName": "exampleLink",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "link-type-create",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "exampleLink",
+            "--from",
+            "ExampleObject",
+            "--to",
+            "ExampleAgreement",
+            "--reverse-api-name",
+            "linkExample",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "exampleLink" in result.output
+    mock_instance.create_link_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        api_name="exampleLink",
+        from_object_type="ExampleObject",
+        to_object_type="ExampleAgreement",
+        display_name=None,
+        description=None,
+        reverse_api_name="linkExample",
+    )
+
+
+def test_create_link_type_command_auth_error(mock_services):
+    """Test link type create command auth error handling."""
+    from pltr.auth.base import MissingCredentialsError
+
+    mock_instance = Mock()
+    mock_instance.create_link_type.side_effect = MissingCredentialsError(
+        "Missing credentials"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "link-type-create",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "exampleLink",
+            "--from",
+            "ExampleObject",
+            "--to",
+            "ExampleAgreement",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Authentication error" in result.output
+
+
+def test_create_link_type_command_runtime_error(mock_services):
+    """Test link type create command runtime error handling."""
+    mock_instance = Mock()
+    mock_instance.create_link_type.side_effect = RuntimeError("boom")
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "link-type-create",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "exampleLink",
+            "--from",
+            "ExampleObject",
+            "--to",
+            "ExampleAgreement",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Failed to create link type" in result.output
+
+
 # Object operation command tests
 def test_list_objects_command(mock_services):
     """Test list objects command."""
