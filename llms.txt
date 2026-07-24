@@ -41,7 +41,7 @@ Discover the command surface first:
 pltr --agent agent-manifest
 ```
 
-That emits every registered command with its path, arguments and flags. `pltr --agent capabilities` is a different thing: a parity scorecard tracking this CLI against Palantir's published MCP tool catalog. Read it to see what is planned or blocked, not to discover commands.
+That emits every registered command with its path, arguments and flags. MCP parity — how this CLI compares to Palantir's published tool catalog — is tracked in CAPABILITIES.md, a generated report, not a runtime command.
 
 ## Change-impact gate (run before any Foundry change)
 

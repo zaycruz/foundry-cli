@@ -75,18 +75,15 @@ def test_every_status_is_valid_and_counts_are_exact():
         assert counts[status] == sum(c["status"] == status for c in caps)
 
 
-def test_the_two_commands_agree_at_runtime():
-    """The binary's own agent-manifest and capabilities must not contradict."""
+def test_scorecard_agrees_with_the_runtime_command_surface():
+    """capability_manifest must not contradict the live agent-manifest output."""
     with patch("pltr.auth.storage.CredentialStorage", MagicMock()):
         surface = runner.invoke(
             app, ["--agent", "agent-manifest"], catch_exceptions=True
         )
-        scorecard = runner.invoke(
-            app, ["--agent", "capabilities"], catch_exceptions=True
-        )
 
     paths = {c["path"] for c in json.loads(surface.stdout)["data"]["commands"]}
-    caps = json.loads(scorecard.stdout)["data"]["capabilities"]
+    caps = capability_manifest()["capabilities"]
     # implemented must exist; planned must not. blocked/unsupported are exempt:
     # they may name a real fallback command (e.g. `namespace list` stands in for
     # a namespace listing the SDK cannot do) while the capability itself is not

@@ -49,7 +49,6 @@ from pltr.commands import (
     widgets,
     proposal,
     dependency,
-    capabilities,
     agent_manifest,
     notepad,
 )
@@ -145,11 +144,6 @@ app.add_typer(
     dependency.app,
     name="dependency",
     help="Analyze Foundry dependency graphs and coverage",
-)
-app.add_typer(
-    capabilities.app,
-    name="capabilities",
-    help="Inspect native agent-first Foundry capabilities",
 )
 app.add_typer(agent_manifest.app, name="agent-manifest")
 app.add_typer(notepad.app, name="notepad", help="Read Foundry notepad contents")

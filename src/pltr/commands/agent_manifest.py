@@ -101,8 +101,8 @@ def agent_manifest(ctx: typer.Context) -> None:
     """Emit every registered command as deterministic JSON -- the command surface.
 
     This is the authoritative list of what the CLI can do: each entry carries a
-    command path, its arguments and its flags. `pltr capabilities` is a
-    different view -- it scores that surface against Palantir's MCP tool catalog.
+    command path, its arguments and its flags. MCP parity against Palantir's
+    tool catalog is tracked separately in the generated CAPABILITIES.md report.
     """
     try:
         manifest = build_manifest(ctx.find_root().command)
