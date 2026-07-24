@@ -74,3 +74,38 @@ def test_blocked_capability_can_be_recorded_with_a_reason() -> None:
         manifest["counts"]["blocked"]
         == sum(entry.status == "blocked" for entry in CAPABILITIES) + 1
     )
+
+
+def test_webhook_get_capability_is_implemented() -> None:
+    manifest = capability_manifest()
+    entry = next(
+        item
+        for item in manifest["capabilities"]
+        if item["capability_id"] == "view_foundry_rest_api_data_source_webhook"
+    )
+
+    assert entry["status"] == "implemented"
+    assert entry["command"] == "connectivity webhook get"
+    assert entry["blocked_reason"] is None
+    assert "webhooks/api/registry/v0" in entry["api_evidence"]
+
+
+def test_unverifiable_read_capabilities_stay_blocked() -> None:
+    manifest = capability_manifest()
+    entries = {
+        item["capability_id"]: item
+        for item in manifest["capabilities"]
+        if item["capability_id"]
+        in {
+            "get_compute_modules_info",
+            "get_compute_modules_logs",
+            "preview_transform",
+        }
+    }
+
+    assert len(entries) == 3
+    for entry in entries.values():
+        assert entry["status"] == "blocked"
+        assert entry["blocked_reason"]
+    assert "NOT MOUNTED" in entries["get_compute_modules_info"]["blocked_reason"]
+    assert "NOT MOUNTED" in entries["get_compute_modules_logs"]["blocked_reason"]

@@ -631,3 +631,219 @@ class TestConnectivityCommands:
 
         assert result.exit_code == 1
         assert "Error uploading JDBC drivers" in result.stdout
+
+
+class TestWebhookCommands:
+    """Test cases for read-only webhook inspection commands."""
+
+    WEBHOOK_RID = "ri.magritte..webhook.12345678-1234-1234-1234-123456789abc"
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_get_webhook_success(self, mock_service_class):
+        """Test successful webhook get command."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.get_webhook.return_value = {
+            "webhookRid": self.WEBHOOK_RID,
+            "version": 3,
+            "apiName": "my-webhook",
+        }
+
+        result = self.runner.invoke(app, ["webhook", "get", self.WEBHOOK_RID])
+
+        assert result.exit_code == 0
+        mock_service.get_webhook.assert_called_once_with(self.WEBHOOK_RID, version=None)
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_get_webhook_with_version(self, mock_service_class):
+        """Test webhook get with a pinned version."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.get_webhook.return_value = {
+            "webhookRid": self.WEBHOOK_RID,
+            "version": 1,
+        }
+
+        result = self.runner.invoke(
+            app, ["webhook", "get", self.WEBHOOK_RID, "--version", "1"]
+        )
+
+        assert result.exit_code == 0
+        mock_service.get_webhook.assert_called_once_with(self.WEBHOOK_RID, version=1)
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_get_webhook_json_format(self, mock_service_class):
+        """Test webhook get with JSON output."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.get_webhook.return_value = {
+            "webhookRid": self.WEBHOOK_RID,
+            "version": 3,
+        }
+
+        result = self.runner.invoke(
+            app, ["webhook", "get", self.WEBHOOK_RID, "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        assert self.WEBHOOK_RID in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_get_webhook_not_found(self, mock_service_class):
+        """Test webhook get when the registry has no webhook for the RID."""
+        from pltr.services.connectivity import WebhookNotFoundError
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.get_webhook.side_effect = WebhookNotFoundError(
+            f"No webhook found for RID {self.WEBHOOK_RID}"
+        )
+
+        result = self.runner.invoke(app, ["webhook", "get", self.WEBHOOK_RID])
+
+        assert result.exit_code == 1
+        assert "No webhook found" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_get_webhook_error(self, mock_service_class):
+        """Test webhook get error handling."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.get_webhook.side_effect = Exception("registry unreachable")
+
+        result = self.runner.invoke(app, ["webhook", "get", self.WEBHOOK_RID])
+
+        assert result.exit_code == 1
+        assert "Error getting webhook" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_get_webhook_with_profile(self, mock_service_class):
+        """Test webhook get with a specific profile."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.get_webhook.return_value = {"webhookRid": self.WEBHOOK_RID}
+
+        result = self.runner.invoke(
+            app, ["webhook", "get", self.WEBHOOK_RID, "--profile", "test"]
+        )
+
+        assert result.exit_code == 0
+        mock_service_class.assert_called_once_with(profile="test")
+
+
+class TestEgressCommands:
+    """Test cases for read-only network egress commands."""
+
+    HOSTNAME = "api.example.com"
+    POLICY_RID = (
+        "ri.resource-policy-manager.global.network-egress-policy."
+        "00000000-0000-0000-0000-000000000026"
+    )
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_egress_ensure_match(self, mock_service_class):
+        """Test ensure when a matching policy exists."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.ensure_egress_policy.return_value = {
+            "policy_rid": self.POLICY_RID,
+            "hostname": self.HOSTNAME,
+            "status": "exists",
+            "policy": {"targets": [{"hostname": self.HOSTNAME}]},
+        }
+
+        result = self.runner.invoke(app, ["egress", "ensure", self.HOSTNAME])
+
+        assert result.exit_code == 0
+        mock_service.ensure_egress_policy.assert_called_once_with(self.HOSTNAME)
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_egress_ensure_match_json(self, mock_service_class):
+        """Test ensure with JSON output."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.ensure_egress_policy.return_value = {
+            "policy_rid": self.POLICY_RID,
+            "hostname": self.HOSTNAME,
+            "status": "exists",
+            "policy": {},
+        }
+
+        result = self.runner.invoke(
+            app, ["egress", "ensure", self.HOSTNAME, "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        assert self.POLICY_RID in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_egress_ensure_would_create(self, mock_service_class):
+        """Test ensure exits loudly when no policy matches."""
+        from pltr.services.connectivity import EgressPolicyNotFoundError
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.ensure_egress_policy.side_effect = EgressPolicyNotFoundError(
+            f"No existing network egress policy covers hostname '{self.HOSTNAME}'; "
+            "one would be created, but mutations are not enabled."
+        )
+
+        result = self.runner.invoke(app, ["egress", "ensure", self.HOSTNAME])
+
+        assert result.exit_code == 1
+        assert "mutations are not enabled" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_egress_ensure_unverified_shape(self, mock_service_class):
+        """Test ensure fails loudly on unverified response shapes."""
+        from pltr.services.connectivity import EgressPolicyShapeError
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.ensure_egress_policy.side_effect = EgressPolicyShapeError(
+            "Unverified get-all-policies response shape"
+        )
+
+        result = self.runner.invoke(app, ["egress", "ensure", self.HOSTNAME])
+
+        assert result.exit_code == 1
+        assert "Unverified" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_egress_ensure_error(self, mock_service_class):
+        """Test ensure error handling."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.ensure_egress_policy.side_effect = Exception("read timed out")
+
+        result = self.runner.invoke(app, ["egress", "ensure", self.HOSTNAME])
+
+        assert result.exit_code == 1
+        assert "Error ensuring network egress policy" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_egress_ensure_with_profile(self, mock_service_class):
+        """Test ensure with a specific profile."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.ensure_egress_policy.return_value = {
+            "policy_rid": self.POLICY_RID,
+            "hostname": self.HOSTNAME,
+            "status": "exists",
+            "policy": {},
+        }
+
+        result = self.runner.invoke(
+            app, ["egress", "ensure", self.HOSTNAME, "--profile", "test"]
+        )
+
+        assert result.exit_code == 0
+        mock_service_class.assert_called_once_with(profile="test")

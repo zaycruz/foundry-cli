@@ -125,16 +125,17 @@ pltr project get PROJECT_RID
 pltr project list [--space-rid RID]
 pltr project imports PROJECT_RID [--reference-type EXTERNAL|FILESYSTEM] [--page-size N] [--page-token TOKEN]
 pltr project search QUERY [--space-rid SPACE_RID] [--page-size N] [--page-token TOKEN]
-pltr project templates
+pltr project templates list [--namespace-rid RID] [--page-size N] [--page-token TOKEN]
 pltr project update PROJECT_RID [--display-name TEXT] [--description TEXT]
 ```
 
 `project imports` uses the SDK's verified `Project.Reference.list` contract.
 Project search is a bounded client-side filter over visible project metadata;
-its continuation token is a RID keyset cursor, not a Foundry server token. The
-pinned SDK exposes project creation from a known template RID but does not
-expose a
-public template catalog, so `project templates` fails explicitly.
+its continuation token is a RID keyset cursor, not a Foundry server token.
+`project templates list` enumerates templates through the verified internal
+Compass endpoint `GET /compass/api/templates/namespace/{namespaceRid}` —
+across every visible namespace unless `--namespace-rid` narrows it. Without a
+server page token both commands paginate with a client-side offset cursor.
 
 ## Namespace Discovery
 
@@ -142,8 +143,13 @@ public template catalog, so `project templates` fails explicitly.
 pltr namespace list [--page-size N] [--page-token TOKEN] [--format agent]
 ```
 
-SDK 1.95.0 has no separate Namespace resource. This command lists native
-Compass Spaces as namespace discovery records and includes `source_type: space`.
+SDK 1.95.0 has no Namespace resource, so this command uses the verified
+internal Compass hierarchy endpoints (`GET
+/compass/api/hierarchy/v2/all-namespace-rids` plus the `PUT
+/compass/api/hierarchy/v2/batch/namespaces` read-batch hydration) and emits
+records with `source_type: compass-namespace`. Namespaces the hydration
+silently omits (permission filtering returns HTTP 200, never 403) are kept
+with `hydrated: false` instead of being dropped.
 
 ### Add Organizations to Project
 

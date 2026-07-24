@@ -143,3 +143,19 @@ pltr connectivity import list-file --connection $CONNECTION
 echo "Table imports:"
 pltr connectivity import list-table --connection $CONNECTION
 ```
+
+
+## Network Egress Policy Commands
+
+### Ensure Egress Policy (read-only)
+
+Find an existing network egress policy covering a hostname. Read-only: if no
+policy matches, the command exits loudly with a "would create, mutations not
+enabled" message instead of creating one.
+
+```bash
+pltr connectivity egress ensure HOSTNAME [--format FORMAT]
+
+# Example
+pltr connectivity egress ensure api.example.com
+```

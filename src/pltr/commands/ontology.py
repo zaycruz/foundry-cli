@@ -93,6 +93,40 @@ def get_ontology(
         raise typer.Exit(1)
 
 
+@app.command("rid")
+def resolve_ontology_rid(
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Resolve and print the ontology RID for this stack.
+
+    Succeeds only when exactly one ontology is visible; zero or multiple
+    visible ontologies make the RID ambiguous and fail instead of guessing.
+    """
+    try:
+        service = OntologyService(profile=profile)
+
+        with SpinnerProgressTracker().track_spinner("Resolving ontology RID..."):
+            ontology = service.get_ontology_rid()
+
+        formatter.format_dict(ontology, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Ontology RID saved to {output}")
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        formatter.print_error(f"Failed to resolve ontology RID: {e}")
+        raise typer.Exit(1)
+
+
 # Object Type commands
 @app.command("object-type-list")
 def list_object_types(
@@ -164,6 +198,41 @@ def get_object_type(
         raise typer.Exit(1)
 
 
+@app.command("link-type-get")
+def get_link_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    object_type: str = typer.Argument(..., help="Source object type API name"),
+    link_type: str = typer.Argument(..., help="Link type API name"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Get details of a specific outgoing link type of an object type."""
+    try:
+        service = ObjectTypeService(profile=profile)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Fetching link type {link_type}..."
+        ):
+            link = service.get_link_type(ontology_rid, object_type, link_type)
+
+        formatter.format_dict(link, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Link type information saved to {output}")
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        formatter.print_error(f"Failed to get link type: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("object-type-create")
 def create_object_type(
     ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
@@ -215,6 +284,46 @@ def create_object_type(
     except Exception as e:
         formatter.print_error(f"Failed to create object type: {e}")
         raise typer.Exit(1)
+
+
+@app.command("object-type-upsert")
+def upsert_object_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    api_name: str = typer.Option(..., "--api-name", help="Object type API name"),
+    display_name: str = typer.Option(
+        ..., "--display-name", help="Object type display name"
+    ),
+    primary_key: str = typer.Option(
+        ..., "--primary-key", help="Primary key property API name"
+    ),
+    backing_dataset: str = typer.Option(
+        ..., "--backing-dataset", help="Backing dataset RID"
+    ),
+    description: Optional[str] = typer.Option(
+        None, "--description", help="Object type description"
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+):
+    """Create through modifyOntology; existing-type updates are not yet supported."""
+    try:
+        result = ObjectTypeService(profile=profile).upsert_object_type(
+            ontology_rid=ontology_rid,
+            api_name=api_name,
+            display_name=display_name,
+            primary_key=primary_key,
+            backing_dataset=backing_dataset,
+            description=description,
+        )
+        formatter.format_dict(result, format=format)
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        formatter.print_error(f"Failed to upsert object type: {e}")
+        raise typer.Exit(1) from e
 
 
 @app.command("link-type-create")
@@ -597,6 +706,43 @@ def search_objects(
 
 
 # Action commands
+@app.command("action-type-get")
+def get_action_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    action_type: str = typer.Argument(..., help="Action type API name"),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+    branch: Optional[str] = typer.Option(
+        None, "--branch", "-b", help="Foundry branch to load the definition from"
+    ),
+):
+    """Get full metadata of a specific action type (read-only)."""
+    try:
+        service = ActionService(profile=profile)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Fetching action type {action_type}..."
+        ):
+            action = service.get_action_type(ontology_rid, action_type, branch=branch)
+
+        formatter.format_dict(action, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Action type information saved to {output}")
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        formatter.print_error(f"Failed to get action type: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("action-apply")
 def apply_action(
     ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),

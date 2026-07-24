@@ -350,3 +350,112 @@ class TestFunctionsService:
         assert result["apiName"] == query_api_name
         # Verify dict() was called for serialization
         mock_response.dict.assert_called_once()
+
+
+class TestFunctionsServiceSearch:
+    """Test Functions service search functionality."""
+
+    @pytest.fixture
+    def service(self):
+        """Create FunctionsService with a mocked SDK client."""
+        with patch("pltr.services.base.AuthManager") as mock_auth:
+            mock_auth.return_value.get_client.return_value = Mock()
+            return FunctionsService()
+
+    @pytest.fixture
+    def mock_search_service(self):
+        """Mock the SearchService used for the GraphQL title search."""
+        with patch("pltr.services.functions.SearchService") as MockSearch:
+            yield MockSearch
+
+    def test_search_functions_filters_to_functions(self, service, mock_search_service):
+        """Test that search results are filtered locally to function resources."""
+        mock_search_service.return_value.search.return_value = {
+            "status": "ok",
+            "reason": None,
+            "query": "revenue",
+            "limit": 25,
+            "truncation_note": "note",
+            "results": [
+                {
+                    "rid": "ri.function-registry.main.function.abc123",
+                    "name": "computeRevenue",
+                    "path": "/Functions/computeRevenue",
+                    "type": "Function",
+                    "typename": "ResourceMetadata",
+                },
+                {
+                    "rid": "ri.foundry.main.dataset.def456",
+                    "name": "revenue_dataset",
+                    "path": "/Data/revenue",
+                    "type": "Dataset",
+                    "typename": "ResourceMetadata",
+                },
+            ],
+        }
+
+        result = service.search_functions("revenue")
+
+        assert result["status"] == "ok"
+        assert result["mode"] == "functions-search"
+        assert result["local_filters"]["rid_prefix"] == (
+            "ri.function-registry.main.function."
+        )
+        assert len(result["results"]) == 1
+        assert result["results"][0]["rid"] == (
+            "ri.function-registry.main.function.abc123"
+        )
+        mock_search_service.return_value.search.assert_called_once_with(
+            "revenue", limit=25
+        )
+
+    def test_search_functions_matches_type_name(self, service, mock_search_service):
+        """Test function matching by type name when the RID shape differs."""
+        mock_search_service.return_value.search.return_value = {
+            "status": "ok",
+            "reason": None,
+            "query": "forecast",
+            "limit": 10,
+            "results": [
+                {
+                    "rid": "ri.some-other.main.function.abc",
+                    "name": "forecast",
+                    "path": "/forecast",
+                    "type": "Foundry Function",
+                    "typename": "ResourceMetadata",
+                }
+            ],
+        }
+
+        result = service.search_functions("forecast", limit=10)
+
+        assert len(result["results"]) == 1
+        mock_search_service.return_value.search.assert_called_once_with(
+            "forecast", limit=10
+        )
+
+    def test_search_functions_inconclusive_passthrough(
+        self, service, mock_search_service
+    ):
+        """Test that an inconclusive title search is passed through, not emptied."""
+        mock_search_service.return_value.search.return_value = {
+            "status": "inconclusive",
+            "reason": "graphql-error",
+            "query": "revenue",
+            "limit": 25,
+            "results": None,
+        }
+
+        result = service.search_functions("revenue")
+
+        assert result["status"] == "inconclusive"
+        assert result["reason"] == "graphql-error"
+        assert result["results"] is None
+        assert result["mode"] == "functions-search"
+
+    def test_search_functions_transport_error(self, service, mock_search_service):
+        """Test that a transport failure surfaces as a RuntimeError."""
+        mock_search_service.return_value.search.side_effect = Exception("timeout")
+
+        with pytest.raises(RuntimeError, match="Failed to search functions"):
+            service.search_functions("revenue")

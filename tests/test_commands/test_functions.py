@@ -627,3 +627,90 @@ class TestFunctionsCommands:
         # Assert
         assert result.exit_code == 0
         assert "saved to output.json" in result.stdout
+
+
+class TestFunctionsSearchCommand:
+    """Test functions search CLI command."""
+
+    @pytest.fixture
+    def runner(self):
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def mock_service(self):
+        """Create mock FunctionsService."""
+        with patch("pltr.commands.functions.FunctionsService") as MockService:
+            mock_svc = Mock()
+            MockService.return_value = mock_svc
+            yield mock_svc
+
+    def _search_result(self):
+        return {
+            "status": "ok",
+            "reason": None,
+            "query": "revenue",
+            "limit": 25,
+            "mode": "functions-search",
+            "local_filters": {
+                "rid_prefix": "ri.function-registry.main.function.",
+                "type_contains": "function",
+                "scope": "returned-page-only",
+            },
+            "truncation_note": "note",
+            "results": [
+                {
+                    "rid": "ri.function-registry.main.function.abc123",
+                    "name": "computeRevenue",
+                    "path": "/Functions/computeRevenue",
+                    "type": "Function",
+                    "typename": "ResourceMetadata",
+                }
+            ],
+        }
+
+    def test_search_success(self, runner, mock_service):
+        """Test successful functions search command."""
+        mock_service.search_functions.return_value = self._search_result()
+
+        result = runner.invoke(app, ["functions", "search", "revenue"])
+
+        assert result.exit_code == 0
+        mock_service.search_functions.assert_called_once_with("revenue", limit=25)
+
+    def test_search_with_limit_and_json(self, runner, mock_service):
+        """Test functions search with limit and JSON format."""
+        mock_service.search_functions.return_value = self._search_result()
+
+        result = runner.invoke(
+            app,
+            ["functions", "search", "revenue", "--limit", "50", "--format", "json"],
+        )
+
+        assert result.exit_code == 0
+        mock_service.search_functions.assert_called_once_with("revenue", limit=50)
+        assert "computeRevenue" in result.stdout
+
+    def test_search_inconclusive(self, runner, mock_service):
+        """Test that an inconclusive search exits non-zero."""
+        mock_service.search_functions.return_value = {
+            "status": "inconclusive",
+            "reason": "graphql-error",
+            "results": None,
+        }
+
+        result = runner.invoke(app, ["functions", "search", "revenue"])
+
+        assert result.exit_code == 1
+        assert "inconclusive" in result.stdout
+
+    def test_search_error(self, runner, mock_service):
+        """Test functions search error handling."""
+        mock_service.search_functions.side_effect = RuntimeError(
+            "Failed to search functions: timeout"
+        )
+
+        result = runner.invoke(app, ["functions", "search", "revenue"])
+
+        assert result.exit_code == 1
+        assert "Failed to search functions" in result.stdout

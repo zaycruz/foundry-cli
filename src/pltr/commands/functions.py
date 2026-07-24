@@ -33,6 +33,92 @@ console = Console()
 formatter = OutputFormatter(console)
 
 
+@app.command("search")
+def search_functions(
+    query: str = typer.Argument(
+        ...,
+        help="Function name/title search text",
+    ),
+    limit: int = typer.Option(
+        25,
+        "--limit",
+        "-l",
+        min=1,
+        max=100,
+        help="Maximum title-search matches scanned (1-100)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        "-p",
+        help="Profile name",
+        autocompletion=complete_profile,
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """
+    Search Foundry functions by name.
+
+    Uses the verified internal GraphQL title search; function matching is
+    applied locally to the returned page (see the command's JSON output
+    `local_filters` block). Results are capped at --limit and the gateway
+    does not report whether more matches exist.
+
+    Examples:
+
+        # Search functions by name
+        pltr functions search revenue
+
+        # Scan more title matches, output as JSON
+        pltr functions search revenue --limit 50 --format json
+    """
+    try:
+        service = FunctionsService(profile=profile)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Searching functions matching '{query}'..."
+        ):
+            result = service.search_functions(query, limit=limit)
+
+        if result.get("status") != "ok":
+            formatter.print_error(
+                f"Function search inconclusive: {result.get('reason') or 'unknown'}"
+            )
+            raise typer.Exit(1)
+
+        if format in ("json", "agent"):
+            formatter.format_dict(result, format=format, output=output)
+        else:
+            formatter.format_table(
+                result.get("results") or [],
+                columns=["rid", "name", "path", "type"],
+                format=format,
+                output=output,
+            )
+
+        if output:
+            formatter.print_success(f"Function search results saved to {output}")
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except ValueError as e:
+        formatter.print_error(f"Invalid request: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        formatter.print_error(f"Failed to search functions: {e}")
+        raise typer.Exit(1)
+
+
 def parse_parameters(parameters_str: Optional[str]) -> Optional[dict]:
     """
     Parse parameters from string or file.

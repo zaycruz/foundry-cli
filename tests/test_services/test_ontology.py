@@ -316,6 +316,230 @@ def test_create_object_type_with_description(mock_object_type_service):
     assert mock_req.call_args.kwargs["json_data"]["description"] == "Example entity"
 
 
+def test_upsert_object_type_uses_internal_ontology_metadata_api(
+    mock_object_type_service,
+):
+    """Object-type upsert discovers, validates, then applies modifyOntology."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (
+            200,
+            {
+                "type": "error",
+                "error": {
+                    "errors": [
+                        {
+                            "errorData": {
+                                "errorName": "OntologyMetadata:InvalidObjectTypeId",
+                                "errorMessage": "invalid object type id",
+                                "safeArgs": [
+                                    {
+                                        "name": "regex",
+                                        "value": r"^ns0abcde\.([a-z][a-z0-9\-]*)",
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                },
+            },
+            '{"type":"error"}',
+        ),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (
+            200,
+            {
+                "createdObjectTypes": {
+                    "ns0abcde.example-object": (
+                        "ri.ontology.main.object-type.example-object"
+                    )
+                }
+            },
+            '{"createdObjectTypes":{}}',
+        ),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+            description="Example entity",
+        )
+
+    assert result["apiName"] == "ExampleObject"
+    assert result["objectTypeId"] == "ns0abcde.example-object"
+    assert result["rid"] == "ri.ontology.main.object-type.example-object"
+    assert result["ontologyRid"] == "ri.ontology.main.ontology.test"
+    assert mock_client.conjure.call_count == 3
+
+    probe_call, dry_run_call, modify_call = mock_client.conjure.call_args_list
+    expected_dry_run_path = (
+        "/ontology-metadata/api/ontology/v2/modify/dry-run"
+        "?ontologyRid=ri.ontology.main.ontology.test"
+    )
+    expected_modify_path = (
+        "/ontology-metadata/api/ontology/v2/modify"
+        "?ontologyRid=ri.ontology.main.ontology.test"
+    )
+    assert probe_call.args[:2] == ("POST", expected_dry_run_path)
+    assert dry_run_call.args[:2] == ("POST", expected_dry_run_path)
+    assert modify_call.args[:2] == ("POST", expected_modify_path)
+
+    probe_request = probe_call.kwargs["json_body"]["modificationRequest"]
+    assert "probe.bad-id" in probe_request["objectTypes"]
+
+    modification_request = dry_run_call.kwargs["json_body"]["modificationRequest"]
+    object_type_id = "ns0abcde.example-object"
+    object_type = modification_request["objectTypes"][object_type_id]["create"][
+        "objectType"
+    ]
+    assert object_type["apiName"] == "ExampleObject"
+    assert object_type["displayMetadata"]["description"] == "Example entity"
+    assert (
+        object_type["propertyTypes"]["id"]["type"]["string"][
+            "supportsExactMatching"
+        ]
+        is False
+    )
+    assert modification_request["objectTypeEntityMetadata"][object_type_id] == {
+        "targetStorageBackend": {
+            "type": "objectStorageV2",
+            "objectStorageV2": {},
+        }
+    }
+    assert modification_request["objectTypeDatasources"][object_type_id][0]["create"][
+        "objectTypeDatasourceDefinition"
+    ] == {
+        "type": "dataset",
+        "dataset": {
+            "datasetRid": "ri.foundry.main.dataset.example",
+            "propertyMapping": {"id": "id"},
+        },
+    }
+    assert modify_call.kwargs["json_body"] == modification_request
+
+
+def _namespace_probe_response() -> tuple[int, dict, str]:
+    return (
+        200,
+        {
+            "type": "error",
+            "error": {
+                "errors": [
+                    {
+                        "errorData": {
+                            "errorName": "OntologyMetadata:InvalidObjectTypeId",
+                            "safeArgs": [
+                                {
+                                    "name": "regex",
+                                    "value": r"^ns0abcde\.([a-z][a-z0-9\-]*)",
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+        },
+        '{"type":"error"}',
+    )
+
+
+def _validation_error_response(error_name: str) -> tuple[int, dict, str]:
+    return (
+        200,
+        {
+            "type": "error",
+            "error": {
+                "errors": [
+                    {
+                        "errorData": {
+                            "errorName": f"OntologyMetadata:{error_name}",
+                            "errorMessage": error_name,
+                            "safeArgs": [],
+                        }
+                    }
+                ]
+            },
+        },
+        '{"type":"error"}',
+    )
+
+
+def test_upsert_object_type_reports_existing_type_without_modifying(
+    mock_object_type_service,
+):
+    """Existing creates stop after validation and do not delete or recreate."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesAlreadyExistError"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(
+            RuntimeError,
+            match="object type already exists; update path not yet implemented",
+        ),
+    ):
+        service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert mock_client.conjure.call_count == 2
+
+
+def test_upsert_object_type_surfaces_missing_dataset_schema(
+    mock_object_type_service,
+):
+    """Dataset schema validation tells the operator how to unblock creation."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("SchemaForObjectTypeDatasourceNotFound"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(
+            RuntimeError,
+            match="backing dataset has no schema; apply a schema",
+        ),
+    ):
+        service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert mock_client.conjure.call_count == 2
+
+
 def test_create_link_type(mock_object_type_service):
     """Test creating a link type via direct API endpoint."""
     service, _ = mock_object_type_service
@@ -731,3 +955,184 @@ def test_execute_query_with_objects_result(mock_query_service):
     assert "objects" in result
     assert len(result["objects"]) == 1
     mock_query_class.execute.assert_called_once()
+
+
+# Ontology RID resolution tests
+def test_get_ontology_rid_single(mock_ontology_service, sample_ontology):
+    """Test resolving the ontology RID when exactly one ontology is visible."""
+    service, mock_ontology_class = mock_ontology_service
+    mock_response = Mock()
+    mock_response.data = [sample_ontology]
+    mock_ontology_class.list.return_value = mock_response
+
+    result = service.get_ontology_rid()
+
+    assert result["rid"] == "ri.ontology.main.ontology.test"
+    assert result["api_name"] == "test_ontology"
+    mock_ontology_class.list.assert_called_once()
+
+
+def test_get_ontology_rid_none_visible(mock_ontology_service):
+    """Test that resolving with zero visible ontologies raises."""
+    service, mock_ontology_class = mock_ontology_service
+    mock_response = Mock()
+    mock_response.data = []
+    mock_ontology_class.list.return_value = mock_response
+
+    with pytest.raises(RuntimeError, match="No ontologies are visible"):
+        service.get_ontology_rid()
+
+
+def test_get_ontology_rid_multiple_visible(mock_ontology_service, sample_ontology):
+    """Test that resolving with multiple visible ontologies raises."""
+    service, mock_ontology_class = mock_ontology_service
+    other = Mock()
+    other.rid = "ri.ontology.main.ontology.other"
+    other.api_name = "other_ontology"
+    other.display_name = "Other Ontology"
+    other.description = None
+    mock_response = Mock()
+    mock_response.data = [sample_ontology, other]
+    mock_ontology_class.list.return_value = mock_response
+
+    with pytest.raises(RuntimeError, match="Multiple ontologies are visible"):
+        service.get_ontology_rid()
+
+
+def test_get_ontology_rid_list_failure(mock_ontology_service):
+    """Test that an SDK list failure surfaces as a RuntimeError."""
+    service, mock_ontology_class = mock_ontology_service
+    mock_ontology_class.list.side_effect = Exception("connection refused")
+
+    with pytest.raises(RuntimeError, match="Failed to list ontologies"):
+        service.get_ontology_rid()
+
+
+# Link type get tests
+def test_get_link_type(mock_object_type_service):
+    """Test getting a specific outgoing link type."""
+    service, mock_object_type_class = mock_object_type_service
+    link_type = Mock()
+    link_type.link_type_rid = "ri.ontology.main.link-type.abc123"
+    link_type.api_name = "worksAt"
+    link_type.display_name = "Works At"
+    link_type.status = "ACTIVE"
+    link_type.object_type_api_name = "Employee"
+    link_type.cardinality = "MANY_TO_ONE"
+    link_type.foreign_key_property_api_name = "company_id"
+    mock_object_type_class.get_outgoing_link_type.return_value = link_type
+
+    result = service.get_link_type(
+        "ri.ontology.main.ontology.test", "Employee", "worksAt"
+    )
+
+    assert result["rid"] == "ri.ontology.main.link-type.abc123"
+    assert result["api_name"] == "worksAt"
+    assert result["object_type"] == "Employee"
+    assert result["cardinality"] == "MANY_TO_ONE"
+    assert result["foreign_key_property"] == "company_id"
+    mock_object_type_class.get_outgoing_link_type.assert_called_once_with(
+        "ri.ontology.main.ontology.test", "Employee", "worksAt"
+    )
+
+
+def test_get_link_type_error(mock_object_type_service):
+    """Test error handling in get_link_type."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get_outgoing_link_type.side_effect = Exception(
+        "Link type not found"
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to get link type worksAt"):
+        service.get_link_type("ri.ontology.main.ontology.test", "Employee", "worksAt")
+
+
+# Action type get tests (view_foundry_action_type)
+@pytest.fixture
+def mock_action_type_full_metadata_service():
+    """Create a mocked ActionService with an ActionTypeFullMetadata client."""
+    with patch("pltr.services.base.AuthManager") as mock_auth:
+        mock_client = Mock()
+        mock_ontologies = Mock()
+        mock_metadata_class = Mock()
+        mock_ontologies.ActionTypeFullMetadata = mock_metadata_class
+        mock_client.ontologies = mock_ontologies
+        mock_auth.return_value.get_client.return_value = mock_client
+
+        service = ActionService()
+        return service, mock_metadata_class
+
+
+def _sample_action_type_metadata():
+    action_type = Mock()
+    action_type.rid = "ri.actions.main.action-type.00000000-0000-0000-0000-000000000001"
+    action_type.api_name = "modify-example"
+    action_type.display_name = "Modify Example"
+    action_type.description = "Modify an example"
+    action_type.status = "EXPERIMENTAL"
+    action_type.tool_description = None
+    action_type.parameters = {"example": Mock(), "notes": Mock()}
+    action_type.operations = [Mock()]
+    metadata = Mock()
+    metadata.action_type = action_type
+    metadata.full_logic_rules = [Mock()]
+    return metadata
+
+
+def test_get_action_type(mock_action_type_full_metadata_service):
+    """Test getting full metadata for an action type."""
+    service, mock_metadata_class = mock_action_type_full_metadata_service
+    mock_metadata_class.get.return_value = _sample_action_type_metadata()
+
+    result = service.get_action_type("ri.ontology.main.ontology.test", "modify-example")
+
+    assert result["rid"].startswith("ri.actions.main.action-type.")
+    assert result["api_name"] == "modify-example"
+    assert result["display_name"] == "Modify Example"
+    assert result["status"] == "EXPERIMENTAL"
+    assert result["parameters"] == ["example", "notes"]
+    assert result["operations_count"] == 1
+    assert result["logic_rules_count"] == 1
+    mock_metadata_class.get.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "modify-example",
+        branch=None,
+        preview=True,
+    )
+
+
+def test_get_action_type_with_branch(mock_action_type_full_metadata_service):
+    """Test getting an action type from a specific branch."""
+    service, mock_metadata_class = mock_action_type_full_metadata_service
+    mock_metadata_class.get.return_value = _sample_action_type_metadata()
+
+    service.get_action_type(
+        "ri.ontology.main.ontology.test", "modify-example", branch="feature-branch"
+    )
+
+    mock_metadata_class.get.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "modify-example",
+        branch="feature-branch",
+        preview=True,
+    )
+
+
+def test_get_action_type_missing_action_type_field(
+    mock_action_type_full_metadata_service,
+):
+    """Test that a response without action_type fails loudly."""
+    service, mock_metadata_class = mock_action_type_full_metadata_service
+    mock_metadata_class.get.return_value = Mock(action_type=None)
+
+    with pytest.raises(RuntimeError, match="did not contain an 'action_type'"):
+        service.get_action_type("ri.ontology.main.ontology.test", "modify-example")
+
+
+def test_get_action_type_error(mock_action_type_full_metadata_service):
+    """Test action type get error handling."""
+    service, mock_metadata_class = mock_action_type_full_metadata_service
+    mock_metadata_class.get.side_effect = Exception("ActionTypeNotFound")
+
+    with pytest.raises(RuntimeError, match="Failed to get action type"):
+        service.get_action_type("ri.ontology.main.ontology.test", "modify-example")

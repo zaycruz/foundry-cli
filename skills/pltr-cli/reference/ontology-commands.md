@@ -95,6 +95,17 @@ pltr ontology object-linked ri.ontology.main.ontology.abc123 Employee "john.doe"
 
 ## Action Commands
 
+### Get Action Type Details
+
+```bash
+pltr ontology action-type-get ONTOLOGY_RID ACTION_TYPE [--branch BRANCH]
+
+# ACTION_TYPE is the API name; read-only full metadata (preview-gated endpoint)
+
+# Example
+pltr ontology action-type-get ri.ontology.main.ontology.abc123 modify-example
+```
+
 ### Apply Action
 
 ```bash

@@ -71,7 +71,7 @@ class FoundryInternalClient:
         verb: str,
         path: str,
         *,
-        json_body: Optional[Mapping[str, Any]] = None,
+        json_body: Optional[Mapping[str, Any] | Sequence[Any]] = None,
         expected: Optional[int | Iterable[int]] = None,
         request_timeout: float = 30.0,
     ) -> tuple[int, Any, str]:
@@ -80,6 +80,9 @@ class FoundryInternalClient:
         Statuses are intentionally not raised: internal response semantics use
         400/422 responses as contract signals. ``expected`` is accepted as
         operation metadata for callers but does not suppress inspection.
+        ``json_body`` is sent verbatim; several Conjure batch reads (for
+        example ``PUT /compass/api/hierarchy/v2/batch/namespaces``) take a bare
+        JSON array rather than an object.
         """
 
         credentials = CredentialStorage().get_profile(self.profile)
@@ -88,7 +91,7 @@ class FoundryInternalClient:
         response = requests.request(
             method=verb.upper(),
             url=f"{base_url}/{path.lstrip('/')}",
-            json=dict(json_body) if json_body is not None else None,
+            json=json_body if json_body is not None else None,
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",

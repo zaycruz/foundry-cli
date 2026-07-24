@@ -64,7 +64,7 @@ def list_namespaces(
     page_size: Optional[int] = typer.Option(None, "--page-size", min=1),
     page_token: Optional[str] = typer.Option(None, "--page-token"),
 ):
-    """List top-level Compass Spaces as namespace discovery records."""
+    """List Compass namespaces via the verified internal Compass hierarchy API."""
     try:
         result = CompassService(profile=profile).list_namespaces(
             page_size=page_size, page_token=page_token

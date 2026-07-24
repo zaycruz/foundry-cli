@@ -7,7 +7,7 @@ from typing import Optional, List
 from rich.console import Console
 from rich.table import Table
 
-from ..services.compass import CompassService, UnsupportedCapabilityError
+from ..services.compass import CompassService
 from ..services.project import ProjectService
 from ..utils.agent_output import (
     agent_mode_enabled,
@@ -344,8 +344,17 @@ def search_foundry_projects(
         raise typer.Exit(1) from e
 
 
-@app.command("templates")
+templates_app = typer.Typer()
+
+
+@templates_app.command("list")
 def list_foundry_project_templates(
+    namespace_rid: Optional[str] = typer.Option(
+        None,
+        "--namespace-rid",
+        help="Restrict to templates of one Compass namespace RID",
+        autocompletion=complete_rid,
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Profile name", autocompletion=complete_profile
     ),
@@ -356,26 +365,29 @@ def list_foundry_project_templates(
     page_size: Optional[int] = typer.Option(None, "--page-size", min=1),
     page_token: Optional[str] = typer.Option(None, "--page-token"),
 ):
-    """List project templates when a public template catalog is available."""
+    """List project templates via the verified internal Compass templates API."""
     try:
-        CompassService(profile=profile).list_project_templates()
-    except UnsupportedCapabilityError as e:
-        message = str(e)
-        if agent_mode_enabled() or format == "agent":
-            buffer_agent_payload(
-                None,
-                meta={"operation": "list_foundry_project_templates"},
-                errors=[{"type": "unsupported", "message": message}],
-            )
-        else:
-            formatter.print_error(message)
-        raise typer.Exit(2) from e
+        result = CompassService(profile=profile).list_project_templates(
+            namespace_rid=namespace_rid,
+            page_size=page_size,
+            page_token=page_token,
+        )
+        _emit_project_page(
+            result.data,
+            result.metadata.to_dict(),
+            "list_foundry_project_templates",
+            format,
+            output,
+        )
     except (ProfileNotFoundError, MissingCredentialsError) as e:
         formatter.print_error(f"Authentication error: {e}")
         raise typer.Exit(1) from e
     except Exception as e:
         formatter.print_error(f"Failed to list project templates: {e}")
         raise typer.Exit(1) from e
+
+
+app.add_typer(templates_app, name="templates", help="Discover project templates")
 
 
 @app.command("update")
@@ -750,6 +762,9 @@ def main():
         pltr project add-orgs ri.compass.main.project.abc456 -o org-rid-1 -o org-rid-2
         pltr project remove-orgs ri.compass.main.project.abc456 -o org-rid-1
         pltr project list-orgs ri.compass.main.project.abc456
+
+        # List project templates
+        pltr project templates list
 
         # Create from template
         pltr project create-from-template -t template-rid -v "name=MyProject" -v "desc=Description"
