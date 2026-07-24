@@ -2,7 +2,8 @@
 Ontology service wrappers for Foundry SDK.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Union
+import re
+from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 from urllib.parse import quote
 
 import requests
@@ -53,6 +54,36 @@ class OntologyService(BaseService):
         except Exception as e:
             raise RuntimeError(f"Failed to get ontology {ontology_rid}: {e}")
 
+    def get_ontology_rid(self) -> Dict[str, Any]:
+        """
+        Resolve the ontology RID for this stack.
+
+        The SDK exposes no "current ontology" lookup, so resolution lists the
+        visible ontologies and succeeds only when exactly one is visible.
+        Zero or multiple visible ontologies make the RID ambiguous and raise
+        instead of guessing.
+
+        Returns:
+            Ontology information dictionary containing the resolved rid
+
+        Raises:
+            RuntimeError: If zero or multiple ontologies are visible
+        """
+        ontologies = self.list_ontologies()
+        if not ontologies:
+            raise RuntimeError("No ontologies are visible to the current user")
+        if len(ontologies) > 1:
+            choices = ", ".join(
+                f"{ontology.get('api_name') or 'unknown'} ({ontology.get('rid')})"
+                for ontology in ontologies
+            )
+            raise RuntimeError(
+                "Multiple ontologies are visible; the ontology RID cannot be "
+                "resolved unambiguously. Pick one with 'pltr ontology list': "
+                f"{choices}"
+            )
+        return ontologies[0]
+
     def _format_ontology_info(self, ontology: Any) -> Dict[str, Any]:
         """Format ontology information for consistent output."""
         return {
@@ -66,6 +97,13 @@ class OntologyService(BaseService):
 class ObjectTypeService(BaseService):
     """Service wrapper for object type operations."""
 
+    _MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
+    _NAMESPACE_PROBE_OBJECT_TYPE_ID = "probe.bad-id"
+    _ALREADY_EXISTS_ERROR_NAMES = {
+        "ObjectTypesAlreadyExistError",
+        "ObjectTypesAlreadyExist",
+        "objectTypesAlreadyExist",
+    }
     _OBJECT_TYPE_CREATE_ENDPOINTS = [
         "/v2/ontologies/{ontology}/objectTypes",
         "/v1/ontologies/{ontology}/objectTypes",
@@ -160,6 +198,368 @@ class ObjectTypeService(BaseService):
             entity_id=api_name,
         )
 
+    def upsert_object_type(
+        self,
+        ontology_rid: str,
+        api_name: str,
+        display_name: str,
+        primary_key: str,
+        backing_dataset: str,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create an object type through the verified modifyOntology contract.
+
+        The internal API requires an ontology-specific namespace in new object
+        type IDs. It does not expose that namespace directly, so a dry-run with
+        a deliberately invalid ID discovers the namespace regex. The completed
+        request is then dry-run validated before the real modification.
+
+        Existing object types are intentionally not updated yet. Foundry's
+        create validation is used to detect that case rather than attempting a
+        destructive delete-and-recreate.
+        """
+        from .foundry_internal_client import FoundryInternalClient
+
+        effective_profile = self.profile or self.auth_manager.get_current_profile()
+        if not effective_profile:
+            from ..auth.base import ProfileNotFoundError
+
+            raise ProfileNotFoundError(
+                "No profile specified and no default profile configured. "
+                "Run 'pltr configure configure' to set up authentication."
+            )
+
+        client = FoundryInternalClient(profile=effective_profile)
+        dry_run_endpoint = (
+            f"{self._MODIFY_ENDPOINT}/dry-run"
+            f"?ontologyRid={quote(ontology_rid, safe='')}"
+        )
+        modify_endpoint = (
+            f"{self._MODIFY_ENDPOINT}?ontologyRid={quote(ontology_rid, safe='')}"
+        )
+
+        probe_request = self._build_object_type_modification_request(
+            object_type_id=self._NAMESPACE_PROBE_OBJECT_TYPE_ID,
+            api_name=api_name,
+            display_name=display_name,
+            primary_key=primary_key,
+            backing_dataset=backing_dataset,
+            description=description,
+        )
+        status, parsed, raw = client.conjure(
+            "POST",
+            dry_run_endpoint,
+            json_body={"modificationRequest": probe_request},
+            expected=200,
+        )
+        self._require_successful_internal_response(
+            status, parsed, raw, operation="object type namespace discovery"
+        )
+        namespace = self._extract_object_type_namespace(parsed)
+
+        object_type_id = f"{namespace}.{self._object_type_id_suffix(api_name)}"
+        modification_request = self._build_object_type_modification_request(
+            object_type_id=object_type_id,
+            api_name=api_name,
+            display_name=display_name,
+            primary_key=primary_key,
+            backing_dataset=backing_dataset,
+            description=description,
+        )
+        status, parsed, raw = client.conjure(
+            "POST",
+            dry_run_endpoint,
+            json_body={"modificationRequest": modification_request},
+            expected=200,
+        )
+        self._require_successful_internal_response(
+            status, parsed, raw, operation="object type dry-run"
+        )
+        self._require_successful_dry_run(parsed)
+
+        status, parsed, raw = client.conjure(
+            "POST",
+            modify_endpoint,
+            json_body=modification_request,
+            expected=200,
+        )
+        self._require_successful_internal_response(
+            status, parsed, raw, operation="object type modify"
+        )
+        if not isinstance(parsed, Mapping):
+            raise RuntimeError(
+                "Object type modify returned an invalid response shape: "
+                "expected a JSON object"
+            )
+        created = parsed.get("createdObjectTypes")
+        if not isinstance(created, Mapping) or not isinstance(
+            created.get(object_type_id), str
+        ):
+            raise RuntimeError(
+                "Object type modify succeeded but did not return the created "
+                f"object type RID for {object_type_id}"
+            )
+
+        return {
+            "apiName": api_name,
+            "objectTypeId": object_type_id,
+            "rid": created[object_type_id],
+            "ontologyRid": ontology_rid,
+        }
+
+    @staticmethod
+    def _object_type_id_suffix(api_name: str) -> str:
+        """Convert an API name into the lower-kebab ID required by OMS."""
+        with_word_boundaries = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", api_name)
+        with_word_boundaries = re.sub(
+            r"([a-z0-9])([A-Z])", r"\1-\2", with_word_boundaries
+        )
+        suffix = re.sub(
+            r"[^a-z0-9]+", "-", with_word_boundaries.casefold()
+        ).strip("-")
+        if not suffix or not suffix[0].isalpha():
+            raise RuntimeError(
+                f"Cannot derive a valid object type ID from API name {api_name!r}; "
+                "the derived ID must start with a letter"
+            )
+        return suffix
+
+    @staticmethod
+    def _build_object_type_modification_request(
+        *,
+        object_type_id: str,
+        api_name: str,
+        display_name: str,
+        primary_key: str,
+        backing_dataset: str,
+        description: Optional[str],
+    ) -> Dict[str, Any]:
+        """Build the minimal contract-verified ObjectType create modification."""
+        object_display_metadata: Dict[str, Any] = {
+            "displayName": display_name,
+            "pluralDisplayName": display_name,
+            "icon": {
+                "type": "blueprint",
+                "blueprint": {"color": "#4C90F0", "locator": "cube"},
+            },
+            "visibility": "NORMAL",
+        }
+        if description is not None:
+            object_display_metadata["description"] = description
+
+        return {
+            "objectTypes": {
+                object_type_id: {
+                    "type": "create",
+                    "create": {
+                        "markings": [],
+                        "objectType": {
+                            "id": object_type_id,
+                            "apiName": api_name,
+                            "displayMetadata": object_display_metadata,
+                            "implementsInterfaces": [],
+                            "implementsInterfaces2": [],
+                            "primaryKeys": [primary_key],
+                            "propertyTypes": {
+                                primary_key: {
+                                    "id": primary_key,
+                                    "apiName": primary_key,
+                                    "displayMetadata": {
+                                        "displayName": primary_key,
+                                        "visibility": "NORMAL",
+                                    },
+                                    "indexedForSearch": True,
+                                    "typeClasses": [],
+                                    "type": {
+                                        "type": "string",
+                                        "string": {
+                                            "isLongText": False,
+                                            "supportsExactMatching": False,
+                                        },
+                                    },
+                                }
+                            },
+                            "sharedPropertyTypes": {},
+                            "titlePropertyTypeId": primary_key,
+                            "traits": {"workflowObjectTypeTraits": {}},
+                            "typeGroups": [],
+                        },
+                    },
+                }
+            },
+            "objectTypeEntityMetadata": {
+                object_type_id: {
+                    "targetStorageBackend": {
+                        "type": "objectStorageV2",
+                        "objectStorageV2": {},
+                    }
+                }
+            },
+            "objectTypeDatasources": {
+                object_type_id: [
+                    {
+                        "type": "create",
+                        "create": {
+                            "objectTypeDatasourceDefinition": {
+                                "type": "dataset",
+                                "dataset": {
+                                    "datasetRid": backing_dataset,
+                                    "propertyMapping": {
+                                        primary_key: primary_key,
+                                    },
+                                },
+                            }
+                        },
+                    }
+                ]
+            },
+        }
+
+    @classmethod
+    def _extract_object_type_namespace(cls, payload: Any) -> str:
+        """Extract the ontology namespace from the intentional ID error."""
+        for error in cls._dry_run_errors(payload):
+            error_data = error.get("errorData")
+            if not isinstance(error_data, Mapping):
+                continue
+            error_name = str(error_data.get("errorName") or "")
+            if cls._error_terminal_name(error_name) != "InvalidObjectTypeId":
+                continue
+            safe_args = error_data.get("safeArgs")
+            if not isinstance(safe_args, list):
+                continue
+            for safe_arg in safe_args:
+                if not isinstance(safe_arg, Mapping):
+                    continue
+                if safe_arg.get("name") != "regex":
+                    continue
+                regex_value = cls._unwrap_flexible_value(safe_arg.get("value"))
+                namespace_match = re.match(
+                    r"^\^?([a-z][a-z0-9-]*)\\\.",
+                    str(regex_value or ""),
+                )
+                if namespace_match:
+                    return namespace_match.group(1)
+        raise RuntimeError(
+            "Could not discover the ontology object type namespace: the dry-run "
+            "probe did not return OntologyMetadata:InvalidObjectTypeId with a "
+            "parseable regex safe argument"
+        )
+
+    @staticmethod
+    def _unwrap_flexible_value(value: Any) -> Any:
+        """Unwrap a Foundry flexible-value union to its scalar payload.
+
+        Safe args arrive as `{"type": "string", "string": "..."}` and may
+        nest inside `{"type": "optional", "optional": {"value": {...}}}`.
+        """
+        while isinstance(value, Mapping):
+            if "string" in value:
+                return value["string"]
+            nested = value.get("optional")
+            if isinstance(nested, Mapping) and "value" in nested:
+                value = nested["value"]
+                continue
+            return None
+        return value
+
+    @classmethod
+    def _require_successful_dry_run(cls, payload: Any) -> None:
+        """Accept only the explicit dry-run success variant."""
+        if isinstance(payload, Mapping) and payload.get("type") == "success":
+            return
+        errors = cls._dry_run_errors(payload)
+        if errors:
+            messages = [cls._format_validation_error(error) for error in errors]
+            raise RuntimeError(
+                "Object type dry-run validation failed: " + "; ".join(messages)
+            )
+        raise RuntimeError(
+            "Object type dry-run returned an invalid response shape: expected "
+            "{'type': 'success'} or {'type': 'error', 'error': {'errors': [...]}}"
+        )
+
+    @staticmethod
+    def _dry_run_errors(payload: Any) -> List[Mapping[str, Any]]:
+        if not isinstance(payload, Mapping) or payload.get("type") != "error":
+            return []
+        error_status = payload.get("error")
+        if not isinstance(error_status, Mapping):
+            return []
+        errors = error_status.get("errors")
+        if not isinstance(errors, list):
+            return []
+        return [error for error in errors if isinstance(error, Mapping)]
+
+    @classmethod
+    def _format_validation_error(cls, error: Mapping[str, Any]) -> str:
+        error_data = error.get("errorData")
+        if not isinstance(error_data, Mapping):
+            return "unknown ontology validation error"
+        error_name = str(error_data.get("errorName") or "unknown")
+        terminal_name = cls._error_terminal_name(error_name)
+        if terminal_name in cls._ALREADY_EXISTS_ERROR_NAMES:
+            return (
+                "object type already exists; update path not yet implemented "
+                f"({error_name})"
+            )
+        messages = {
+            "InvalidObjectTypeId": (
+                "Foundry rejected the generated object type ID for this "
+                "ontology namespace"
+            ),
+            "CannotCreateV1ObjectType": (
+                "Foundry requires objectStorageV2 metadata for new object types"
+            ),
+            "ObjectTypeWithZeroDatasourcesNotAllowed": (
+                "Foundry requires at least one datasource for a new object type"
+            ),
+            "SchemaForObjectTypeDatasourceNotFound": (
+                "the backing dataset has no schema; apply a schema to the "
+                "dataset before creating the object type"
+            ),
+            "TooManyObjectTypesInOntology": (
+                "the ontology has reached its object type limit"
+            ),
+        }
+        mapped = messages.get(terminal_name)
+        if mapped:
+            return f"{mapped} ({error_name})"
+        error_message = error_data.get("errorMessage")
+        if isinstance(error_message, str) and error_message:
+            return f"{error_name}: {error_message}"
+        return error_name
+
+    @staticmethod
+    def _error_terminal_name(error_name: str) -> str:
+        return error_name.rsplit(":", 1)[-1]
+
+    @staticmethod
+    def _require_successful_internal_response(
+        status: int,
+        payload: Any,
+        raw: str,
+        *,
+        operation: str,
+    ) -> None:
+        """Separate transport/deserialization failures from validation errors."""
+        if status == 200:
+            return
+        error_name = (
+            payload.get("errorName") if isinstance(payload, Mapping) else None
+        )
+        if status == 400:
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"{operation} request failed during contract deserialization "
+                f"with HTTP 400{detail}; the modifyOntology request shape was "
+                f"rejected before validation: {str(raw)[:300]}"
+            )
+        detail = f" ({error_name})" if error_name else ""
+        raise RuntimeError(
+            f"{operation} failed with HTTP {status}{detail}: {str(raw)[:300]}"
+        )
+
     def create_link_type(
         self,
         ontology_rid: str,
@@ -220,6 +620,32 @@ class ObjectTypeService(BaseService):
             entity_id=api_name,
         )
 
+    def get_link_type(
+        self, ontology_rid: str, object_type: str, link_type: str
+    ) -> Dict[str, Any]:
+        """
+        Get a specific outgoing link type of an object type.
+
+        Uses the public SDK endpoint
+        GET /v2/ontologies/{ontology}/objectTypes/{objectType}/outgoingLinkTypes/{linkType}.
+
+        Args:
+            ontology_rid: Ontology Resource Identifier
+            object_type: Source object type API name
+            link_type: Link type API name
+
+        Returns:
+            Link type information dictionary
+        """
+        try:
+            # ObjectType is nested under Ontology in the SDK
+            link = self.service.Ontology.ObjectType.get_outgoing_link_type(
+                ontology_rid, object_type, link_type
+            )
+            return self._format_link_type_side_info(link)
+        except Exception as e:
+            raise RuntimeError(f"Failed to get link type {link_type}: {e}")
+
     def list_outgoing_link_types(
         self, ontology_rid: str, object_type: str
     ) -> List[Dict[str, Any]]:
@@ -263,6 +689,20 @@ class ObjectTypeService(BaseService):
             "display_name": getattr(link_type, "display_name", None),
             "object_type": getattr(link_type, "object_type", None),
             "linked_object_type": getattr(link_type, "linked_object_type", None),
+        }
+
+    def _format_link_type_side_info(self, link_type: Any) -> Dict[str, Any]:
+        """Format a LinkTypeSideV2 response for consistent output."""
+        return {
+            "rid": getattr(link_type, "link_type_rid", None),
+            "api_name": link_type.api_name,
+            "display_name": getattr(link_type, "display_name", None),
+            "status": getattr(link_type, "status", None),
+            "object_type": getattr(link_type, "object_type_api_name", None),
+            "cardinality": getattr(link_type, "cardinality", None),
+            "foreign_key_property": getattr(
+                link_type, "foreign_key_property_api_name", None
+            ),
         }
 
     def _create_schema_entity(
@@ -680,6 +1120,59 @@ class ActionService(BaseService):
             return self._format_batch_action_result(result)
         except Exception as e:
             raise RuntimeError(f"Failed to apply batch actions: {e}")
+
+    def get_action_type(
+        self,
+        ontology_rid: str,
+        action_type: str,
+        branch: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get the full metadata of a specific action type.
+
+        Uses the public SDK endpoint
+        GET /v2/ontologies/{ontology}/actionTypes/{actionType}/fullMetadata,
+        contract-verified on a live Foundry deployment. The endpoint is gated behind
+        the preview flag, so ``preview=True`` is always passed.
+
+        Args:
+            ontology_rid: Ontology Resource Identifier
+            action_type: Action type API name
+            branch: Optional Foundry branch to load the definition from
+
+        Returns:
+            Action type information dictionary
+        """
+        try:
+            metadata = self.service.ActionTypeFullMetadata.get(
+                ontology_rid, action_type, branch=branch, preview=True
+            )
+            return self._format_action_type_info(metadata)
+        except Exception as e:
+            raise RuntimeError(f"Failed to get action type {action_type}: {e}")
+
+    def _format_action_type_info(self, metadata: Any) -> Dict[str, Any]:
+        """Format an ActionTypeFullMetadata response for consistent output."""
+        action_type = getattr(metadata, "action_type", None)
+        if action_type is None:
+            raise RuntimeError(
+                "Action type full metadata response did not contain an "
+                "'action_type' field"
+            )
+        parameters = getattr(action_type, "parameters", None) or {}
+        operations = getattr(action_type, "operations", None) or []
+        logic_rules = getattr(metadata, "full_logic_rules", None) or []
+        return {
+            "rid": getattr(action_type, "rid", None),
+            "api_name": getattr(action_type, "api_name", None),
+            "display_name": getattr(action_type, "display_name", None),
+            "description": getattr(action_type, "description", None),
+            "status": getattr(action_type, "status", None),
+            "tool_description": getattr(action_type, "tool_description", None),
+            "parameters": sorted(str(key) for key in parameters),
+            "operations_count": len(operations),
+            "logic_rules_count": len(logic_rules),
+        }
 
     def _format_action_result(self, result: Any) -> Dict[str, Any]:
         """Format action result for consistent output."""

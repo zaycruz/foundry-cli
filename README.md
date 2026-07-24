@@ -103,7 +103,7 @@ Nine capability areas and two global flags that upstream does not have:
 
 - `pltr lineage graph <rid>` — build a bounded graph from native filesystem relationships.
 - `pltr search <text>` — search by title, or add `--path-prefix` for bounded paginated resource discovery.
-- `pltr namespace list` — list top-level Compass Spaces as namespace discovery records.
+- `pltr namespace list` — list Compass namespaces via the verified internal hierarchy API.
 - `pltr notepad list --path-prefix <path>` — enumerate notepads without guessing an instance root.
 - `pltr notepad get <rid>` — read a notepad's latest body and its embedded resource references.
 

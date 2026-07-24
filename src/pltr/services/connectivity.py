@@ -2,14 +2,33 @@
 Connectivity service wrapper for Foundry SDK.
 """
 
+import json
 import logging
 import os
 from collections import deque
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping, Optional
 
 from .base import BaseService
+from .foundry_internal_client import FoundryInternalClient
 
 logger = logging.getLogger(__name__)
+
+
+class WebhookNotFoundError(RuntimeError):
+    """Raised when the webhook registry returns no webhook for a RID."""
+
+
+class EgressPolicyNotFoundError(RuntimeError):
+    """Raised when no existing egress policy matches a requested target.
+
+    The CLI never creates network egress policies (mutations are not
+    enabled), so a missing match is a loud, explicit failure carrying the
+    "would create" intent rather than a silent create.
+    """
+
+
+class EgressPolicyShapeError(RuntimeError):
+    """Raised when an egress policy read does not match the verified shape."""
 
 
 class ConnectivityService(BaseService):
@@ -314,6 +333,208 @@ class ConnectivityService(BaseService):
             return [self._format_import_info(imp) for imp in imports]
         except Exception as e:
             raise RuntimeError(f"Failed to list table imports: {e}")
+
+    def get_webhook(
+        self, webhook_rid: str, version: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get a data-source webhook definition from the webhook registry.
+
+        Read-only against the internal webhooks API, which the 2026-07-22 gap
+        analysis marks VERIFIED: GET /webhooks/api/registry/v0/{webhookRid}/latest
+        and GET /webhooks/api/registry/v0/{webhookRid}/version/{version}.
+
+        Args:
+            webhook_rid: Webhook Resource Identifier
+            version: Specific webhook version to fetch (default: latest)
+
+        Returns:
+            Webhook definition dictionary
+
+        Raises:
+            WebhookNotFoundError: If the registry returns no webhook for the RID
+            RuntimeError: If the registry read fails or is unreachable
+        """
+        if version is None:
+            path = f"webhooks/api/registry/v0/{webhook_rid}/latest"
+        else:
+            path = f"webhooks/api/registry/v0/{webhook_rid}/version/{version}"
+
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure("GET", path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to read webhook {webhook_rid}: {e}") from e
+
+        if not 200 <= status < 300:
+            error_name = (
+                payload.get("errorName") if isinstance(payload, Mapping) else None
+            )
+            if error_name == "Route:RouteNotMounted":
+                raise RuntimeError(
+                    "The webhooks registry API is not mounted on this stack "
+                    f"(Route:RouteNotMounted for /{path})"
+                )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"Webhook registry read failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}"
+            )
+
+        # A missing webhook yields an empty body (HTTP 204), not an error, so
+        # an empty payload must fail loudly instead of rendering as a result.
+        if not isinstance(payload, Mapping) or not payload:
+            raise WebhookNotFoundError(
+                f"No webhook found for RID {webhook_rid}"
+                + (f" version {version}" if version is not None else "")
+            )
+
+        return dict(payload)
+
+    EGRESS_BATCH_SIZE = 50
+    # get-all-policies took ~60s in live verification; the default 30s
+    # internal-client timeout is not enough for these reads.
+    EGRESS_READ_TIMEOUT = 120.0
+
+    def ensure_egress_policy(self, hostname: str) -> Dict[str, Any]:
+        """
+        Find an existing network egress policy covering a hostname.
+
+        READ-ONLY "ensure": this implements the read half of the MCP
+        ``get_or_create_network_egress_policy`` tool against the internal
+        resource-policy-manager API (verified on a live Foundry deployment):
+
+        - ``POST /network-egress-policies/get-all-policies`` (read-POST;
+          returns a map of policy RID -> summary, values may be null)
+        - ``POST /network-egress-policies/get-batch`` (read-POST; bare JSON
+          array of policy RIDs, returns a map of policy RID -> policy)
+
+        If no existing policy mentions the hostname, nothing is created:
+        EgressPolicyNotFoundError is raised with a "would create, mutations
+        not enabled" message. The detailed policy shape is UNVERIFIED (the
+        a live Foundry deployment's get-batch returns an empty map), so matching is
+        defensive: the hostname is searched case-insensitively in the raw
+        policy payload rather than projected from guessed fields.
+
+        Args:
+            hostname: Hostname the egress policy must cover
+
+        Returns:
+            Dictionary with the matched policy RID and its raw policy payload
+
+        Raises:
+            EgressPolicyNotFoundError: If no existing policy covers the
+                hostname (the CLI never creates one)
+            EgressPolicyShapeError: If a read response is not the verified
+                RID map shape
+            RuntimeError: If a read fails or the API is not mounted
+        """
+        if not hostname or not hostname.strip():
+            raise ValueError("hostname is required")
+        hostname = hostname.strip().lower()
+
+        client = self._internal_client()
+        policy_rids = self._list_egress_policy_rids(client)
+        if not policy_rids:
+            raise EgressPolicyNotFoundError(
+                f"No network egress policies exist on this stack; one would be "
+                f"created for hostname '{hostname}', but mutations are not "
+                "enabled. Create the policy in Foundry and re-run."
+            )
+
+        for chunk_start in range(0, len(policy_rids), self.EGRESS_BATCH_SIZE):
+            chunk = policy_rids[chunk_start : chunk_start + self.EGRESS_BATCH_SIZE]
+            policies = self._get_egress_policies_batch(client, chunk)
+            for policy_rid, policy in policies.items():
+                if not isinstance(policy, Mapping):
+                    continue
+                if hostname in json.dumps(policy, default=str).lower():
+                    return {
+                        "policy_rid": policy_rid,
+                        "hostname": hostname,
+                        "status": "exists",
+                        "policy": dict(policy),
+                    }
+
+        raise EgressPolicyNotFoundError(
+            f"No existing network egress policy covers hostname '{hostname}'; "
+            "one would be created, but mutations are not enabled. Create the "
+            "policy in Foundry and re-run."
+        )
+
+    def _list_egress_policy_rids(self, client: FoundryInternalClient) -> List[str]:
+        """Read all network egress policy RIDs, failing loud on surprises."""
+        try:
+            status, payload, raw = client.conjure(
+                "POST",
+                "resource-policy-manager/api/network-egress-policies/get-all-policies",
+                json_body={},
+                request_timeout=self.EGRESS_READ_TIMEOUT,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to list network egress policies: {e}") from e
+        self._raise_egress_for_status(status, payload, raw, "get-all-policies")
+        if not isinstance(payload, Mapping):
+            raise EgressPolicyShapeError(
+                "Unverified get-all-policies response shape: expected a JSON "
+                f"object keyed by policy RID, got {str(raw)[:200]!r}. "
+                "Refusing to guess at the contract."
+            )
+        return [str(rid) for rid in payload]
+
+    def _get_egress_policies_batch(
+        self, client: FoundryInternalClient, policy_rids: List[str]
+    ) -> Dict[str, Any]:
+        """Read one batch of egress policies by RID (bare-array read-POST)."""
+        try:
+            status, payload, raw = client.conjure(
+                "POST",
+                "resource-policy-manager/api/network-egress-policies/get-batch",
+                json_body=policy_rids,
+                request_timeout=self.EGRESS_READ_TIMEOUT,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to read network egress policies: {e}") from e
+        self._raise_egress_for_status(status, payload, raw, "get-batch")
+        if not isinstance(payload, Mapping):
+            raise EgressPolicyShapeError(
+                "Unverified get-batch response shape: expected a JSON object "
+                f"keyed by policy RID, got {str(raw)[:200]!r}. Refusing to "
+                "guess at the contract."
+            )
+        return dict(payload)
+
+    @staticmethod
+    def _raise_egress_for_status(
+        status: int, payload: Any, raw: Any, operation: str
+    ) -> None:
+        """Fail loudly on non-2xx resource-policy-manager responses."""
+        if 200 <= status < 300:
+            return
+        error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
+        if error_name == "Route:RouteNotMounted":
+            raise RuntimeError(
+                "The resource-policy-manager API is not mounted on this stack "
+                f"(Route:RouteNotMounted during {operation})"
+            )
+        detail = f" ({error_name})" if error_name else ""
+        raise RuntimeError(
+            f"Network egress policy {operation} failed with HTTP "
+            f"{status}{detail}: {str(raw)[:200]}"
+        )
+
+    def _internal_client(self) -> FoundryInternalClient:
+        """Build an internal API client for the active profile."""
+        from ..auth.base import ProfileNotFoundError
+        from ..config.profiles import ProfileManager
+
+        profile_name = self.profile or ProfileManager().get_active_profile()
+        if not profile_name:
+            raise ProfileNotFoundError(
+                "No profile specified and no default profile configured. "
+                "Run 'pltr configure configure' to set up authentication."
+            )
+        return FoundryInternalClient(profile_name)
 
     def _format_connection_info(self, connection: Any) -> Dict[str, Any]:
         """

@@ -6,7 +6,12 @@ import pytest
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
-from pltr.services.connectivity import ConnectivityService
+from pltr.services.connectivity import (
+    ConnectivityService,
+    EgressPolicyNotFoundError,
+    EgressPolicyShapeError,
+    WebhookNotFoundError,
+)
 
 
 class TestConnectivityService:
@@ -625,3 +630,265 @@ class TestConnectivityService:
                 "ri.conn.main.connection.123",
                 str(jar_file),
             )
+
+
+class TestWebhookRegistryReads:
+    """Test cases for read-only webhook registry access."""
+
+    WEBHOOK_RID = "ri.magritte..webhook.12345678-1234-1234-1234-123456789abc"
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_get_webhook_latest_success(self, mock_client_class):
+        """Test fetching the latest webhook version."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        payload = {
+            "webhookRid": self.WEBHOOK_RID,
+            "version": 3,
+            "apiName": "my-webhook",
+        }
+        mock_client.conjure.return_value = (200, payload, '{"webhookRid": "..."}')
+
+        service = ConnectivityService(profile="test")
+        result = service.get_webhook(self.WEBHOOK_RID)
+
+        assert result == payload
+        mock_client_class.assert_called_once_with("test")
+        mock_client.conjure.assert_called_once_with(
+            "GET", f"webhooks/api/registry/v0/{self.WEBHOOK_RID}/latest"
+        )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_get_webhook_specific_version(self, mock_client_class):
+        """Test fetching a pinned webhook version."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        payload = {"webhookRid": self.WEBHOOK_RID, "version": 1}
+        mock_client.conjure.return_value = (200, payload, "{}")
+
+        service = ConnectivityService(profile="test")
+        result = service.get_webhook(self.WEBHOOK_RID, version=1)
+
+        assert result == payload
+        mock_client.conjure.assert_called_once_with(
+            "GET", f"webhooks/api/registry/v0/{self.WEBHOOK_RID}/version/1"
+        )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_get_webhook_empty_response_is_not_found(self, mock_client_class):
+        """Test that an empty (HTTP 204) registry response fails loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (204, "", "")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(WebhookNotFoundError, match="No webhook found"):
+            service.get_webhook(self.WEBHOOK_RID)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_get_webhook_route_not_mounted(self, mock_client_class):
+        """Test a clear error when the webhooks API is not mounted."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            404,
+            {"errorName": "Route:RouteNotMounted"},
+            '{"errorName": "Route:RouteNotMounted"}',
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="not mounted"):
+            service.get_webhook(self.WEBHOOK_RID)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_get_webhook_http_error(self, mock_client_class):
+        """Test that non-2xx registry responses fail loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (500, "boom", "boom")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 500"):
+            service.get_webhook(self.WEBHOOK_RID)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_get_webhook_transport_error(self, mock_client_class):
+        """Test that transport failures are wrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = Exception("connection refused")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="Failed to read webhook"):
+            service.get_webhook(self.WEBHOOK_RID)
+
+    def test_get_webhook_without_profile_raises(self):
+        """Test that a missing profile fails before any network call."""
+        from pltr.auth.base import ProfileNotFoundError
+
+        service = ConnectivityService()
+        with patch(
+            "pltr.config.profiles.ProfileManager.get_active_profile",
+            return_value=None,
+        ):
+            with pytest.raises(ProfileNotFoundError, match="No profile specified"):
+                service.get_webhook(self.WEBHOOK_RID)
+
+
+class TestEgressPolicyEnsure:
+    """Test cases for read-only network egress policy ensure."""
+
+    HOSTNAME = "api.example.com"
+    POLICY_RID = (
+        "ri.resource-policy-manager.global.network-egress-policy."
+        "00000000-0000-0000-0000-000000000026"
+    )
+
+    def _mock_client(self, mock_client_class, responses):
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = responses
+        return mock_client
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_finds_matching_policy(self, mock_client_class):
+        """Test that an existing policy covering the hostname is returned."""
+        self._mock_client(
+            mock_client_class,
+            [
+                (200, {self.POLICY_RID: None}, "{...}"),
+                (
+                    200,
+                    {self.POLICY_RID: {"targets": [{"hostname": "api.example.com"}]}},
+                    "{...}",
+                ),
+            ],
+        )
+
+        service = ConnectivityService(profile="test")
+        result = service.ensure_egress_policy(self.HOSTNAME)
+
+        assert result["policy_rid"] == self.POLICY_RID
+        assert result["status"] == "exists"
+        assert result["policy"] == {"targets": [{"hostname": "api.example.com"}]}
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_matches_hostname_case_insensitively(self, mock_client_class):
+        """Test hostname matching is case-insensitive."""
+        self._mock_client(
+            mock_client_class,
+            [
+                (200, {self.POLICY_RID: None}, "{...}"),
+                (200, {self.POLICY_RID: {"host": "API.Example.COM"}}, "{...}"),
+            ],
+        )
+
+        service = ConnectivityService(profile="test")
+        result = service.ensure_egress_policy(self.HOSTNAME)
+
+        assert result["policy_rid"] == self.POLICY_RID
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_no_match_would_create(self, mock_client_class):
+        """Test a missing match raises the loud 'would create' error."""
+        self._mock_client(
+            mock_client_class,
+            [
+                (200, {self.POLICY_RID: None}, "{...}"),
+                (200, {self.POLICY_RID: {"host": "other.example.org"}}, "{...}"),
+            ],
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(
+            EgressPolicyNotFoundError, match="would be created, but mutations"
+        ):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_no_policies_would_create(self, mock_client_class):
+        """Test an empty policy inventory raises the 'would create' error."""
+        self._mock_client(mock_client_class, [(200, {}, "{}")])
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(
+            EgressPolicyNotFoundError, match="mutations are not enabled"
+        ):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_skips_null_policy_details(self, mock_client_class):
+        """Test that null policy detail entries do not crash matching."""
+        self._mock_client(
+            mock_client_class,
+            [
+                (200, {self.POLICY_RID: None}, "{...}"),
+                (200, {self.POLICY_RID: None}, "{...}"),
+            ],
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(EgressPolicyNotFoundError):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_list_unverified_shape(self, mock_client_class):
+        """Test that a non-map get-all-policies response fails loudly."""
+        self._mock_client(mock_client_class, [(200, ["not-a-map"], "[...]")])
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(EgressPolicyShapeError, match="Unverified"):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_batch_unverified_shape(self, mock_client_class):
+        """Test that a non-map get-batch response fails loudly."""
+        self._mock_client(
+            mock_client_class,
+            [
+                (200, {self.POLICY_RID: None}, "{...}"),
+                (200, "not-a-map", '"not-a-map"'),
+            ],
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(EgressPolicyShapeError, match="Unverified"):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_route_not_mounted(self, mock_client_class):
+        """Test a clear error when resource-policy-manager is not mounted."""
+        self._mock_client(
+            mock_client_class,
+            [(404, {"errorName": "Route:RouteNotMounted"}, "{}")],
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="not mounted"):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_http_error(self, mock_client_class):
+        """Test that non-2xx reads fail loudly."""
+        self._mock_client(mock_client_class, [(500, "boom", "boom")])
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 500"):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_ensure_transport_error_wrapped(self, mock_client_class):
+        """Test that transport failures are wrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = Exception("read timed out")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="Failed to list network egress"):
+            service.ensure_egress_policy(self.HOSTNAME)
+
+    def test_ensure_empty_hostname_rejected(self):
+        """Test that an empty hostname fails before any network call."""
+        service = ConnectivityService(profile="test")
+        with pytest.raises(ValueError, match="hostname is required"):
+            service.ensure_egress_policy("  ")

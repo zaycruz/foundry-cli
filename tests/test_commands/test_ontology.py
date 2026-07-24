@@ -203,6 +203,102 @@ def test_create_object_type_command_runtime_error(mock_services):
     assert "Failed to create object type" in result.output
 
 
+def _object_type_upsert_args(*extra: str) -> list[str]:
+    return [
+        "object-type-upsert",
+        "ri.ontology.main.ontology.test",
+        "--api-name",
+        "ExampleObject",
+        "--display-name",
+        "Example Object",
+        "--primary-key",
+        "id",
+        "--backing-dataset",
+        "ri.foundry.main.dataset.example",
+        *extra,
+    ]
+
+
+def test_upsert_object_type_command_success(mock_services):
+    """Command returns formatted upsert result on success."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.return_value = {
+        "apiName": "ExampleObject",
+        "objectTypeId": "ns0abcde.example-object",
+        "rid": "ri.ontology.main.object-type.example-object",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(app, _object_type_upsert_args())
+
+    assert result.exit_code == 0
+    mock_instance.upsert_object_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        api_name="ExampleObject",
+        display_name="Example Object",
+        primary_key="id",
+        backing_dataset="ri.foundry.main.dataset.example",
+        description=None,
+    )
+
+
+def test_upsert_object_type_command_surfaces_existing_type(mock_services):
+    """Command preserves the service's explicit no-update-yet boundary."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.side_effect = RuntimeError(
+        "object type already exists; update path not yet implemented "
+        "(OntologyMetadata:ObjectTypesAlreadyExistError)"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(app, _object_type_upsert_args())
+
+    assert result.exit_code == 1
+    assert "Failed to upsert object type" in result.output
+    normalized_output = " ".join(result.output.split())
+    assert "object type already exists; update path not yet implemented" in (
+        normalized_output
+    )
+
+
+def test_upsert_object_type_command_surfaces_missing_dataset_schema(mock_services):
+    """Command tells the user to schema the backing dataset first."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.side_effect = RuntimeError(
+        "the backing dataset has no schema; apply a schema to the dataset "
+        "before creating the object type "
+        "(OntologyMetadata:SchemaForObjectTypeDatasourceNotFound)"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(app, _object_type_upsert_args())
+
+    assert result.exit_code == 1
+    normalized_output = " ".join(result.output.split())
+    assert "backing dataset has no schema; apply a schema" in normalized_output
+
+
+def test_object_type_upsert_capability_uses_internal_ontology_metadata_api():
+    """The live catalog maps upsert to the internal ontology-metadata API."""
+    from pltr.capabilities import all_capabilities
+
+    all_capabilities.cache_clear()
+    capability = next(
+        item
+        for item in all_capabilities()
+        if item.capability_id == "create_or_update_foundry_object_type"
+    )
+
+    assert capability.command == "ontology object-type-upsert"
+    assert capability.status == "blocked"
+    assert capability.blocked_reason is not None
+    assert "internal ontology-metadata API" in capability.blocked_reason
+    assert "POST /ontology-metadata/api/ontology/v2/modify" in (
+        capability.blocked_reason
+    )
+
+
 def test_create_link_type_command(mock_services):
     """Test create link type command."""
     mock_instance = Mock()
@@ -702,3 +798,142 @@ def test_output_formats(mock_services):
         result = runner.invoke(app, ["list", "--output", "output.json"])
         assert result.exit_code == 0
         assert "Ontologies saved to output.json" in result.output
+
+
+def test_resolve_ontology_rid_command(mock_services):
+    """Test resolve ontology RID command."""
+    mock_instance = Mock()
+    mock_instance.get_ontology_rid.return_value = {
+        "rid": "ri.ontology.main.ontology.test",
+        "api_name": "test_ontology",
+        "display_name": "Test Ontology",
+        "description": "A test ontology",
+    }
+    mock_services["ontology"].return_value = mock_instance
+
+    result = runner.invoke(app, ["rid"])
+
+    assert result.exit_code == 0
+    mock_instance.get_ontology_rid.assert_called_once_with()
+
+
+def test_resolve_ontology_rid_command_ambiguous(mock_services):
+    """Test resolve ontology RID command with ambiguous ontologies."""
+    mock_instance = Mock()
+    mock_instance.get_ontology_rid.side_effect = RuntimeError(
+        "Multiple ontologies are visible"
+    )
+    mock_services["ontology"].return_value = mock_instance
+
+    result = runner.invoke(app, ["rid"])
+
+    assert result.exit_code == 1
+    assert "Failed to resolve ontology RID" in result.output
+
+
+def test_get_link_type_command(mock_services):
+    """Test get link type command."""
+    mock_instance = Mock()
+    mock_instance.get_link_type.return_value = {
+        "rid": "ri.ontology.main.link-type.abc123",
+        "api_name": "worksAt",
+        "display_name": "Works At",
+        "status": "ACTIVE",
+        "object_type": "Employee",
+        "cardinality": "MANY_TO_ONE",
+        "foreign_key_property": "company_id",
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        ["link-type-get", "ri.ontology.main.ontology.test", "Employee", "worksAt"],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.get_link_type.assert_called_once_with(
+        "ri.ontology.main.ontology.test", "Employee", "worksAt"
+    )
+
+
+def test_get_link_type_command_not_found(mock_services):
+    """Test get link type command error handling."""
+    mock_instance = Mock()
+    mock_instance.get_link_type.side_effect = RuntimeError(
+        "Failed to get link type worksAt: not found"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        ["link-type-get", "ri.ontology.main.ontology.test", "Employee", "worksAt"],
+    )
+
+    assert result.exit_code == 1
+    assert "Failed to get link type" in result.output
+
+
+# Action type get command tests
+def test_get_action_type_command(mock_services):
+    """Test action-type-get command."""
+    mock_instance = Mock()
+    mock_instance.get_action_type.return_value = {
+        "rid": "ri.actions.main.action-type.00000000-0000-0000-0000-000000000001",
+        "api_name": "modify-example",
+        "display_name": "Modify Example",
+        "description": "Modify an example",
+        "status": "EXPERIMENTAL",
+        "tool_description": None,
+        "parameters": ["example", "notes"],
+        "operations_count": 1,
+        "logic_rules_count": 1,
+    }
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app, ["action-type-get", "ri.ontology.main.ontology.test", "modify-example"]
+    )
+
+    assert result.exit_code == 0
+    mock_instance.get_action_type.assert_called_once_with(
+        "ri.ontology.main.ontology.test", "modify-example", branch=None
+    )
+
+
+def test_get_action_type_command_with_branch(mock_services):
+    """Test action-type-get with a branch option."""
+    mock_instance = Mock()
+    mock_instance.get_action_type.return_value = {"api_name": "modify-example"}
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-get",
+            "ri.ontology.main.ontology.test",
+            "modify-example",
+            "--branch",
+            "feature-branch",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.get_action_type.assert_called_once_with(
+        "ri.ontology.main.ontology.test", "modify-example", branch="feature-branch"
+    )
+
+
+def test_get_action_type_command_not_found(mock_services):
+    """Test action-type-get when the action type does not exist."""
+    mock_instance = Mock()
+    mock_instance.get_action_type.side_effect = RuntimeError(
+        "Failed to get action type modify-example: ActionTypeNotFound"
+    )
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app, ["action-type-get", "ri.ontology.main.ontology.test", "modify-example"]
+    )
+
+    assert result.exit_code == 1
+    assert "Failed to get action type" in result.stdout

@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import List, Optional
 from rich.console import Console
 
-from ..services.connectivity import ConnectivityService
+from ..services.connectivity import (
+    ConnectivityService,
+    EgressPolicyNotFoundError,
+    EgressPolicyShapeError,
+    WebhookNotFoundError,
+)
+from ..utils.agent_output import agent_mode_enabled, buffer_agent_payload
 from ..utils.formatting import OutputFormatter
 from ..utils.progress import SpinnerProgressTracker
 from ..auth.base import ProfileNotFoundError, MissingCredentialsError
@@ -22,12 +28,16 @@ from ..utils.completion import (
 app = typer.Typer()
 connection_app = typer.Typer()
 import_app = typer.Typer()
+webhook_app = typer.Typer()
+egress_app = typer.Typer()
 console = Console()
 formatter = OutputFormatter(console)
 
 # Add sub-apps
 app.add_typer(connection_app, name="connection", help="Manage connections")
 app.add_typer(import_app, name="import", help="Manage data imports")
+app.add_typer(webhook_app, name="webhook", help="Inspect data-source webhooks")
+app.add_typer(egress_app, name="egress", help="Inspect network egress policies")
 
 
 def _load_json_param(
@@ -593,4 +603,135 @@ def get_table_import(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error getting table import: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@webhook_app.command("get")
+def get_webhook(
+    webhook_rid: str = typer.Argument(
+        ..., help="Webhook Resource Identifier", autocompletion=complete_rid
+    ),
+    version: Optional[int] = typer.Option(
+        None,
+        "--version",
+        help="Specific webhook version to fetch (default: latest)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """View a REST API data-source webhook definition (read-only).
+
+    Reads the webhook registry via the internal webhooks API
+    (GET /webhooks/api/registry/v0/{webhookRid}/latest, or /version/{version}
+    when --version is given).
+    """
+    try:
+        cache_rid(webhook_rid)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Fetching webhook {webhook_rid}..."
+        ):
+            service = ConnectivityService(profile=profile)
+            webhook = service.get_webhook(webhook_rid, version=version)
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                webhook,
+                meta={
+                    "operation": "view_foundry_rest_api_data_source_webhook",
+                    "webhook_rid": webhook_rid,
+                    "version": version if version is not None else "latest",
+                },
+            )
+        else:
+            formatter.format_output([webhook], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except WebhookNotFoundError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error getting webhook: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@egress_app.command("ensure")
+def ensure_egress_policy(
+    hostname: str = typer.Argument(
+        ..., help="Hostname the network egress policy must cover"
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Ensure a network egress policy covers a hostname (read-only).
+
+    Implements the read half of get-or-create semantics against the internal
+    resource-policy-manager API: existing policies are read and matched
+    against the hostname. If none matches, the command exits loudly with a
+    "would create" message -- this CLI never creates egress policies.
+    """
+    try:
+        with SpinnerProgressTracker().track_spinner(
+            f"Checking network egress policies for {hostname}..."
+        ):
+            service = ConnectivityService(profile=profile)
+            match = service.ensure_egress_policy(hostname)
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                match,
+                meta={
+                    "operation": "get_or_create_network_egress_policy",
+                    "hostname": hostname,
+                },
+            )
+        else:
+            formatter.format_output([match], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except EgressPolicyNotFoundError as e:
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                None,
+                meta={
+                    "operation": "get_or_create_network_egress_policy",
+                    "hostname": hostname,
+                    "result_type": "would_create",
+                },
+                errors=[{"type": "would_create", "message": str(e)}],
+            )
+        else:
+            console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except (EgressPolicyShapeError,) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error ensuring network egress policy: {e}[/red]")
         raise typer.Exit(1)

@@ -48,10 +48,17 @@ from pltr.commands import (
     audit,
     widgets,
     proposal,
+    repository,
+    global_branch,
+    global_proposal,
     dependency,
     capabilities,
     agent_manifest,
     notepad,
+    dev_console,
+    docs,
+    osdk,
+    platform_sdk,
 )
 from pltr.commands.cp import cp_command
 from pltr.commands.search import search_command
@@ -137,6 +144,21 @@ app.add_typer(
     help="Manage code pull requests and Ontology Global Proposals",
 )
 app.add_typer(
+    repository.app,
+    name="repository",
+    help="Inspect code repositories and pull requests",
+)
+app.add_typer(
+    global_branch.app,
+    name="global-branch",
+    help="Inspect Ontology Global Branches",
+)
+app.add_typer(
+    global_proposal.app,
+    name="global-proposal",
+    help="Inspect Ontology Global Proposals",
+)
+app.add_typer(
     admin.app,
     name="admin",
     help="Admin operations for user, group, and organization management",
@@ -153,6 +175,26 @@ app.add_typer(
 )
 app.add_typer(agent_manifest.app, name="agent-manifest")
 app.add_typer(notepad.app, name="notepad", help="Read Foundry notepad contents")
+app.add_typer(
+    dev_console.app,
+    name="dev-console",
+    help="Developer Console operations for generated OSDK packages",
+)
+app.add_typer(
+    docs.app,
+    name="docs",
+    help="Read Palantir's public Foundry documentation (verbatim, read-only)",
+)
+app.add_typer(
+    osdk.app,
+    name="osdk",
+    help="Inspect Ontology SDK (OSDK) context and examples",
+)
+app.add_typer(
+    platform_sdk.app,
+    name="platform-sdk",
+    help="Inspect the installed foundry-platform-sdk API surface",
+)
 app.command("search", help="Search Foundry resources by title (read-only)")(
     search_command
 )

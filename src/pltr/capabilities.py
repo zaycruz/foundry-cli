@@ -190,7 +190,7 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
     (
         "ontology",
         "create_or_update_foundry_object_type",
-        "ontology object-type-create",
+        "ontology object-type-upsert",
         "ObjectTypeService",
         "official-catalog",
     ),
@@ -412,10 +412,10 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
         "official-catalog",
     ),
     (
-        "compute",
+        "documentation",
         "get_compute_modules_documentation",
-        "compute docs",
-        "ComputeService",
+        "docs compute",
+        "DocumentationService",
         "official-catalog",
     ),
     (
@@ -557,22 +557,97 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
 # status — status is derived from whether the mapped command actually exists in
 # the CLI (see _spec_status) — it only replaces the generic "official-catalog"
 # evidence string with the concrete SDK path when one is known.
+_DOCS_SITE_EVIDENCE = (
+    "public Palantir docs site (verified): verbatim markdown from "
+    "__NEXT_DATA__ + XML sitemap corpus; stack-side /documentation API is "
+    "NOT VERIFIED and deliberately not guessed"
+)
 _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "get_project_imports": "foundry-platform-sdk==1.95.0: filesystem.Project.Reference.list",
+    "list_foundry_namespaces": (
+        "internal compass (contract-verified): GET "
+        "/compass/api/hierarchy/v2/all-namespace-rids + PUT "
+        "/compass/api/hierarchy/v2/batch/namespaces (read-PUT batch get)"
+    ),
+    "list_foundry_project_templates": (
+        "internal compass (contract-verified): GET "
+        "/compass/api/templates/namespace/{namespaceRid}"
+    ),
     "search_foundry_projects": "foundry-platform-sdk==1.95.0: filesystem.Space.list + Folder.children",
     "get_dataset_stats": "foundry-platform-sdk==1.95.0: datasets.Dataset.File.list + Dataset.transactions",
     "get_resource_graph": "foundry-platform-sdk==1.95.0: filesystem.Resource.get + Folder.children + Project.Reference.list",
+    "view_foundry_rest_api_data_source_webhook": "internal webhooks API (VERIFIED): GET /webhooks/api/registry/v0/{webhookRid}/latest + /version/{version}",
+    "get_foundry_ontology_rid": "foundry-platform-sdk==1.95.0: ontologies.Ontology.list (single-ontology resolution)",
+    "search_foundry_functions": "internal GraphQL gateway: search(title:, limit:) root field (VERIFIED) with local function matching",
+    "view_foundry_link_type": "foundry-platform-sdk==1.95.0: ontologies.Ontology.ObjectType.get_outgoing_link_type",
+    "view_foundry_action_type": "foundry-platform-sdk==1.95.0: ontologies.ActionTypeFullMetadata.get (contract-verified; preview flag required)",
+    "list_code_repository_pull_requests": (
+        "internal stemma-pull-request (contract-verified): GET "
+        "/stemma-pull-request/api/pulls returns {'values': [...]}; repository "
+        "query parameter is silently ignored server-side, so repository "
+        "filtering is client-side"
+    ),
+    "get_code_repository_pull_request": (
+        "internal stemma-pull-request (contract-verified): GET "
+        "/stemma-pull-request/api/pulls/{pullRequestRid}"
+    ),
+    "view_global_branch": (
+        "internal branch-service (contract-verified): PUT "
+        "/branch-service/api/branch/load/{branchRid} (empty-body load; "
+        "success shape UNVERIFIED — branch-service is unused on the a live Foundry deployment "
+        "stack, responses passed through raw)"
+    ),
+    "view_global_proposal": (
+        "internal branch-service (contract-verified): PUT "
+        "/branch-service/api/branch/proposal/load/{proposalRid} (empty-body "
+        "load; success shape UNVERIFIED — branch-service is unused on the "
+        "a live Foundry deployment, responses passed through raw)"
+    ),
+    "get_or_create_network_egress_policy": (
+        "internal resource-policy-manager (read-verified): POST "
+        "/network-egress-policies/get-all-policies + get-batch (read-POSTs); "
+        "read-only ensure — the CLI never creates a policy and fails loudly "
+        "with a 'would create' message when no policy matches"
+    ),
+    # Documentation: verbatim Palantir-authored content proxied from the
+    # public docs site (stack-side /documentation API is NOT VERIFIED, so it
+    # is not guessed). Pages embed raw markdown in __NEXT_DATA__; the corpus
+    # comes from the XML sitemaps. Verified.
+    "get_python_transforms_documentation": _DOCS_SITE_EVIDENCE,
+    "get_typescript_v1_functions_documentation": _DOCS_SITE_EVIDENCE,
+    "get_typescript_v2_functions_documentation": _DOCS_SITE_EVIDENCE,
+    "get_custom_widget_documentation": _DOCS_SITE_EVIDENCE,
+    "get_ml_documentation": _DOCS_SITE_EVIDENCE,
+    "get_spark_profile_documentation": _DOCS_SITE_EVIDENCE,
+    "get_osdk_react_components_documentation": _DOCS_SITE_EVIDENCE,
+    "get_compute_modules_documentation": _DOCS_SITE_EVIDENCE,
+    "load_foundry_documentation_page": _DOCS_SITE_EVIDENCE,
+    "get_documentation_summaries": _DOCS_SITE_EVIDENCE,
+    "search_foundry_documentation": _DOCS_SITE_EVIDENCE,
+    "get_ontology_sdk_context": (
+        "foundry-platform-sdk==1.95.0: ontologies.Ontology.list + "
+        "Ontology.get_full_metadata + vendored @osdk/foundry.ontologies@2.69.0 "
+        "type declarations (the captured contract)"
+    ),
+    "get_ontology_sdk_examples": (
+        "verbatim code blocks from palantir.com/docs OSDK pages + bindings "
+        "generated from live ontology metadata (marked generated: true)"
+    ),
+    "list_platform_sdk_apis": (
+        "local AST introspection of installed foundry-platform-sdk==1.95.0 "
+        "(foundry_sdk/v2/*/_client.py + resource modules); no network"
+    ),
+    "get_platform_sdk_api_reference": (
+        "local AST introspection of installed foundry-platform-sdk==1.95.0; "
+        "docstrings quoted verbatim from the package"
+    ),
 }
 
-# Out of scope for a Foundry operations CLI. These MCP tools fetch
-# documentation, generate or inspect SDK code, or drive a local IDE / dev
-# console -- none of which are Foundry control-plane operations. They are
-# reported so the parity picture is complete, marked unsupported (with a
-# reason) rather than dangled as "planned" work this CLI intends to build.
-_DOC_REASON = (
-    "Documentation retrieval is an IDE-assistant function, not a Foundry "
-    "operation; this CLI does not proxy Palantir's documentation."
-)
+# Out of scope for a Foundry operations CLI. These MCP tools generate or
+# inspect SDK code, or drive a local IDE / dev console -- none of which are
+# Foundry control-plane operations. They are reported so the parity picture
+# is complete, marked unsupported (with a reason) rather than dangled as
+# "planned" work this CLI intends to build.
 _SDK_REASON = (
     "SDK generation and inspection is a codegen / IDE-assistant function "
     "outside the scope of a Foundry operations CLI."
@@ -581,27 +656,9 @@ _WORKSPACE_REASON = (
     "Local workspace and dev-console actions run in an IDE, not a headless CLI."
 )
 _UNSUPPORTED: dict[str, str] = {
-    # documentation retrieval
-    "get_python_transforms_documentation": _DOC_REASON,
-    "get_typescript_v1_functions_documentation": _DOC_REASON,
-    "get_typescript_v2_functions_documentation": _DOC_REASON,
-    "get_custom_widget_documentation": _DOC_REASON,
-    "get_ml_documentation": _DOC_REASON,
-    "get_spark_profile_documentation": _DOC_REASON,
-    "get_osdk_react_components_documentation": _DOC_REASON,
-    "get_compute_modules_documentation": _DOC_REASON,
-    "load_foundry_documentation_page": _DOC_REASON,
-    "get_documentation_summaries": _DOC_REASON,
-    "search_foundry_documentation": _DOC_REASON,
     # SDK / OSDK codegen and inspection
-    "get_ontology_sdk_context": _SDK_REASON,
-    "get_ontology_sdk_examples": _SDK_REASON,
-    "list_platform_sdk_apis": _SDK_REASON,
-    "get_platform_sdk_api_reference": _SDK_REASON,
     "convert_to_osdk_react": _SDK_REASON,
     "generate_new_ontology_sdk_version": _SDK_REASON,
-    "install_sdk_package": _SDK_REASON,
-    "view_osdk_definition": _SDK_REASON,
     # local IDE / dev console / workspace
     "connect_to_dev_console_app": _WORKSPACE_REASON,
     "clone_code_repository_locally": _WORKSPACE_REASON,
@@ -616,18 +673,62 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "search_foundry_projects": "tests/test_services/test_project.py;tests/test_commands/test_project.py",
     "get_dataset_stats": "tests/test_services/test_dataset.py;tests/test_commands/test_dataset.py",
     "get_resource_graph": "tests/test_services/test_lineage.py;tests/test_commands/test_lineage.py",
+    "create_or_update_foundry_object_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "view_foundry_rest_api_data_source_webhook": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
+    "get_foundry_ontology_rid": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "search_foundry_functions": "tests/test_services/test_functions.py;tests/test_commands/test_functions.py",
+    "view_foundry_link_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "view_foundry_action_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "list_code_repository_pull_requests": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "get_code_repository_pull_request": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "view_global_branch": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_branch.py",
+    "view_global_proposal": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_proposal.py",
+    "get_or_create_network_egress_policy": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
+    "get_python_transforms_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_typescript_v1_functions_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_typescript_v2_functions_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_custom_widget_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_ml_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_spark_profile_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_osdk_react_components_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_compute_modules_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "load_foundry_documentation_page": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_documentation_summaries": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "search_foundry_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
+    "get_ontology_sdk_context": "tests/test_services/test_osdk.py;tests/test_commands/test_osdk.py",
+    "get_ontology_sdk_examples": "tests/test_services/test_osdk.py;tests/test_commands/test_osdk.py",
+    "list_platform_sdk_apis": "tests/test_services/test_platform_sdk.py;tests/test_commands/test_platform_sdk.py",
+    "get_platform_sdk_api_reference": "tests/test_services/test_platform_sdk.py;tests/test_commands/test_platform_sdk.py",
 }
 
 _U3_BLOCKED: dict[str, str] = {
-    "list_foundry_namespaces": (
-        "foundry-platform-sdk==1.95.0 exposes filesystem.Space.list but no "
-        "Namespace resource or documented namespace-list operation; the CLI "
-        "offers Space discovery as an explicit namespace-like fallback"
+    "create_or_update_foundry_object_type": (
+        "foundry-platform-sdk==1.95.0 exposes read-only Ontologies object-type "
+        "schema operations, but Foundry's internal ontology-metadata API exposes "
+        "object-type creation via "
+        "POST /ontology-metadata/api/ontology/v2/modify; "
+        "the CLI uses the internal API as the authoring surface"
     ),
-    "list_foundry_project_templates": (
-        "foundry-platform-sdk==1.95.0 exposes create_from_template and a "
-        "ProjectTemplateRid type, but no public template-list operation or "
-        "documented template catalog endpoint"
+    "get_compute_modules_info": (
+        "the internal module-group API backing compute-module info "
+        "(/module-group/api/deployed-apps/*) is NOT MOUNTED on the verified "
+        "stack (Route:RouteNotMounted on every verified prefix; re-verified "
+        "2026-07-24 on the default profile), and foundry-platform-sdk==1.95.0 "
+        "exposes no compute-module surface"
+    ),
+    "get_compute_modules_logs": (
+        "the internal module-group API backing compute-module logs/diagnostics "
+        "(/module-group/api/deployed-apps/*) is NOT MOUNTED on the verified "
+        "stack (Route:RouteNotMounted on every verified prefix; re-verified "
+        "2026-07-24 on the default profile), and foundry-platform-sdk==1.95.0 "
+        "exposes no compute-module surface"
+    ),
+    "preview_transform": (
+        "foundry-platform-sdk==1.95.0 exposes no transform preview or dry-run "
+        "operation in its orchestration module (its 'preview' flag only gates "
+        "preview API features), and the 2026-07-22 gap analysis catalogues no "
+        "VERIFIED internal transform-preview endpoint; implementing one would "
+        "require guessing an unverified request contract"
     ),
 }
 
