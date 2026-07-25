@@ -13,6 +13,7 @@ from ..services.connectivity import (
     EgressPolicyNotFoundError,
     EgressPolicyShapeError,
     WebhookNotFoundError,
+    WebhookShapeError,
 )
 from ..utils.agent_output import agent_mode_enabled, buffer_agent_payload
 from ..utils.formatting import OutputFormatter
@@ -30,14 +31,18 @@ connection_app = typer.Typer()
 import_app = typer.Typer()
 webhook_app = typer.Typer()
 egress_app = typer.Typer()
+rest_source_app = typer.Typer()
 console = Console()
 formatter = OutputFormatter(console)
 
 # Add sub-apps
 app.add_typer(connection_app, name="connection", help="Manage connections")
 app.add_typer(import_app, name="import", help="Manage data imports")
-app.add_typer(webhook_app, name="webhook", help="Inspect data-source webhooks")
+app.add_typer(webhook_app, name="webhook", help="Manage data-source webhooks")
 app.add_typer(egress_app, name="egress", help="Inspect network egress policies")
+app.add_typer(
+    rest_source_app, name="rest-source", help="Manage REST API data sources"
+)
 
 
 def _load_json_param(
@@ -665,6 +670,312 @@ def get_webhook(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error getting webhook: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@webhook_app.command("create")
+def create_webhook(
+    name: str = typer.Argument(..., help="Webhook display name"),
+    source_rid: str = typer.Option(
+        ...,
+        "--source-rid",
+        help="Magritte source RID the webhook targets",
+        autocompletion=complete_rid,
+    ),
+    api_name: Optional[str] = typer.Option(
+        None,
+        "--api-name",
+        help="Webhook API name (default: the display name; the server "
+        "enforces a pattern -- a letters-only PascalCase name like "
+        "'Getbars' is accepted, trailing digits were rejected in validation)",
+    ),
+    description: str = typer.Option(
+        "", "--description", help="Webhook description"
+    ),
+    spec: Optional[str] = typer.Option(
+        None, "--spec", help="Full webhook spec override as JSON"
+    ),
+    spec_file: Optional[str] = typer.Option(
+        None, "--spec-file", help="Path to a JSON file with the full webhook spec"
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the mutation (default: dry-run plan only)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create a REST API data-source webhook (plan-first).
+
+    Backed by the internal webhooks API ``POST /registry/v0``
+    (createWebhook). The request contract is contract-verified up to
+    the Compass permission boundary: the full body passed server-side
+    validation on a live Foundry deployment and failed only with
+    ``403 Compass:InsufficientPermissions``. The 2xx success shape is
+    UNVERIFIED and passed through raw.
+
+    Without ``--apply`` the command prints the dry-run plan (the exact
+    request body) and issues no network request. ``--apply`` sends the
+    verified body; a permission failure surfaces as a loud error.
+    """
+    try:
+        cache_rid(source_rid)
+        service = ConnectivityService(profile=profile)
+        resolved_api_name = api_name if api_name is not None else name
+
+        spec_override: Optional[dict] = None
+        if spec or spec_file:
+            spec_override = _load_json_param(spec, spec_file, "spec")
+
+        body = service.build_create_webhook_body(
+            name, resolved_api_name, description, source_rid, spec_override
+        )
+
+        if not apply:
+            plan = {
+                "mode": "plan",
+                "request": {
+                    "verb": "POST",
+                    "path": "/webhooks/api/registry/v0",
+                    "body": body,
+                },
+                "contract": ConnectivityService.CREATE_WEBHOOK_CONTRACT,
+            }
+            if agent_mode_enabled() or format == "agent":
+                buffer_agent_payload(
+                    plan,
+                    meta={
+                        "operation": "create_foundry_rest_api_data_source_webhook",
+                        "mode": "plan",
+                        "shape_verified": False,
+                    },
+                )
+            else:
+                formatter.format_output([plan], format, output)
+            return
+
+        with SpinnerProgressTracker().track_spinner(f"Creating webhook {name}..."):
+            result = service.create_webhook(
+                name, resolved_api_name, description, source_rid, spec_override
+            )
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                result,
+                meta={
+                    "operation": "create_foundry_rest_api_data_source_webhook",
+                    "mode": "applied",
+                    "shape_verified": False,
+                },
+            )
+        else:
+            formatter.format_output([result], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except WebhookShapeError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error creating webhook: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@webhook_app.command("update")
+def update_webhook(
+    webhook_rid: str = typer.Argument(
+        ..., help="Webhook Resource Identifier", autocompletion=complete_rid
+    ),
+    spec: Optional[str] = typer.Argument(
+        None, help="Replacement webhook spec in JSON format"
+    ),
+    spec_file: Optional[str] = typer.Option(
+        None, "--spec-file", help="Path to JSON file with the replacement spec"
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the mutation (default: dry-run plan only)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Publish a new webhook version (plan-first; --apply currently blocked).
+
+    Backed by the internal webhooks API ``POST /registry/v0/{webhookRid}``
+    (publishWebhookVersion). 2026-07-24 contract-recovery validation confirmed
+    only the ``spec`` request key; the full body could not be recovered
+    without a creatable webhook (creation is permission-blocked on the a live Foundry deployment
+    stack), so ``--apply`` refuses rather than guessing.
+
+    Without ``--apply`` the command prints the dry-run plan and issues no
+    network request.
+    """
+    try:
+        cache_rid(webhook_rid)
+        spec_dict = _load_json_param(spec, spec_file, "spec")
+        service = ConnectivityService(profile=profile)
+        plan = service.plan_update_webhook(webhook_rid, spec_dict)
+
+        if not apply:
+            if agent_mode_enabled() or format == "agent":
+                buffer_agent_payload(
+                    plan,
+                    meta={
+                        "operation": "update_foundry_rest_api_data_source_webhook",
+                        "webhook_rid": webhook_rid,
+                        "mode": "plan",
+                        "shape_verified": False,
+                        "write_verified": False,
+                    },
+                )
+            else:
+                formatter.format_output([plan], format, output)
+            return
+
+        message = (
+            "update_foundry_rest_api_data_source_webhook write contract "
+            f"UNVERIFIED: {ConnectivityService.UPDATE_WEBHOOK_CONTRACT} "
+            "Not issuing the mutation. Evidence: "
+            "the captured contract"
+        )
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                plan,
+                meta={
+                    "operation": "update_foundry_rest_api_data_source_webhook",
+                    "webhook_rid": webhook_rid,
+                    "mode": "blocked",
+                    "shape_verified": False,
+                    "write_verified": False,
+                },
+                errors=[{"type": "unverified-write-contract", "message": message}],
+            )
+        else:
+            console.print(f"[red]{message}[/red]")
+        raise typer.Exit(1)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error updating webhook: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@rest_source_app.command("create")
+def create_rest_source(
+    name: str = typer.Argument(..., help="Source display name"),
+    host: str = typer.Option(
+        ...,
+        "--host",
+        help="Hostname for the source domain (use a dummy value; never a "
+        "real credential-bearing endpoint unless you intend a real source)",
+    ),
+    scheme: str = typer.Option("HTTPS", "--scheme", help="URL scheme"),
+    port: int = typer.Option(443, "--port", help="Port"),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the mutation (default: dry-run plan only)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create a REST API data source (plan-only; --apply currently blocked).
+
+    Backed by magritte-coordinator ``POST /source-store/source/v2`` (or
+    ``/v3``). The write contract could NOT be recovered: the service drops
+    unknown JSON keys leniently, which defeats field-name validation, and every
+    candidate envelope was rejected with ``400 Default:InvalidArgument``
+    (2026-07-24, a live Foundry deployment). The command therefore ships plan-only: the
+    printed candidate body models the live REDACTED config shape with dummy
+    values, is labeled as server-rejected, and is never sent. This CLI
+    never calls the plaintext-secret config endpoint and never accepts real
+    credentials.
+
+    ``--apply`` refuses rather than guessing a request body.
+    """
+    try:
+        service = ConnectivityService(profile=profile)
+        plan = service.plan_create_rest_source(name, host, scheme, port)
+
+        if not apply:
+            if agent_mode_enabled() or format == "agent":
+                buffer_agent_payload(
+                    plan,
+                    meta={
+                        "operation": "create_foundry_rest_api_data_source",
+                        "mode": "plan",
+                        "shape_verified": False,
+                        "write_verified": False,
+                    },
+                )
+            else:
+                formatter.format_output([plan], format, output)
+            return
+
+        message = (
+            "create_foundry_rest_api_data_source write contract UNVERIFIED: "
+            f"{ConnectivityService.REST_SOURCE_CONTRACT} "
+            "Not issuing the mutation. Evidence: "
+            "the captured contract"
+        )
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                plan,
+                meta={
+                    "operation": "create_foundry_rest_api_data_source",
+                    "mode": "blocked",
+                    "shape_verified": False,
+                    "write_verified": False,
+                },
+                errors=[{"type": "unverified-write-contract", "message": message}],
+            )
+        else:
+            console.print(f"[red]{message}[/red]")
+        raise typer.Exit(1)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error creating REST API data source: {e}[/red]")
         raise typer.Exit(1)
 
 

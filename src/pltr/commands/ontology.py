@@ -3,8 +3,11 @@ Ontology commands for interacting with Foundry ontologies.
 """
 
 import json
+import sys
+from pathlib import Path
+from typing import Any, Optional
+
 import typer
-from typing import Optional
 from rich.console import Console
 
 from ..services.ontology import (
@@ -14,6 +17,7 @@ from ..services.ontology import (
     ActionService,
     QueryService,
 )
+from ..utils.agent_output import require_confirmation
 from ..utils.formatting import OutputFormatter
 from ..utils.pagination import PaginationConfig
 from ..utils.progress import SpinnerProgressTracker
@@ -302,12 +306,31 @@ def upsert_object_type(
     description: Optional[str] = typer.Option(
         None, "--description", help="Object type description"
     ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real modification (default: dry-run only)",
+    ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
     format: str = typer.Option(
         "table", "--format", "-f", help="Output format (table, json, csv, agent)"
     ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
 ):
-    """Create through modifyOntology; existing-type updates are not yet supported."""
+    """Create an object type via modifyOntology (dry-run unless --apply).
+
+    This command is step 3 of the required ontology contract publication
+    order: 1) modify backing dataset schemas, 2) implement transaction
+    functions, 3) object-type-upsert, 4) link-type-upsert,
+    5) action-type-upsert, 6) validate actions and re-read test objects,
+    7) regenerate OSDK, 8) enable the corresponding application controls.
+    Complete steps 1-2 first; the backing dataset must carry a schema.
+
+    Existing object types are not updated yet; the create validation reports
+    that case explicitly instead of attempting a delete-and-recreate.
+    """
     try:
         result = ObjectTypeService(profile=profile).upsert_object_type(
             ontology_rid=ontology_rid,
@@ -316,13 +339,416 @@ def upsert_object_type(
             primary_key=primary_key,
             backing_dataset=backing_dataset,
             description=description,
+            apply=apply,
         )
-        formatter.format_dict(result, format=format)
+        formatter.format_dict(result, format=format, output=output)
+        _exit_on_validation_error(result)
+        _warn_on_unverified(result)
+    except (typer.Exit, typer.Abort):
+        raise
     except (ProfileNotFoundError, MissingCredentialsError) as e:
         formatter.print_error(f"Authentication error: {e}")
         raise typer.Exit(1) from e
     except Exception as e:
         formatter.print_error(f"Failed to upsert object type: {e}")
+        raise typer.Exit(1) from e
+
+
+def _exit_on_validation_error(result: dict) -> None:
+    """Exit non-zero when a dry-run plan failed Foundry validation."""
+    validation = result.get("validation") if isinstance(result, dict) else None
+    if isinstance(validation, dict) and validation.get("status") == "error":
+        errors = validation.get("errors")
+        if isinstance(errors, list):
+            for error in errors:
+                formatter.print_error(f"Dry-run validation failed: {error}")
+        else:
+            formatter.print_error("Dry-run validation failed")
+        raise typer.Exit(1)
+
+
+def _warn_on_unverified(result: dict) -> None:
+    """Warn honestly when a real mutation could not be read back."""
+    verification = result.get("verification") if isinstance(result, dict) else None
+    if isinstance(verification, dict) and verification.get("status") != "verified":
+        formatter.print_warning(
+            f"Mutation applied but not verified: {verification.get('detail')}"
+        )
+
+
+def _delete_preview(
+    *,
+    service_delete: Any,
+    plan_kwargs: dict,
+    format: str,
+    output: Optional[str],
+) -> None:
+    """Run and display the read-only dry-run preview for a delete."""
+    plan = service_delete(**plan_kwargs, apply=False)
+    formatter.format_dict(plan, format=format, output=output)
+    _exit_on_validation_error(plan)
+
+
+def _delete_apply(
+    *,
+    service_delete: Any,
+    plan_kwargs: dict,
+    format: str,
+) -> None:
+    """Run and display the real deletion after confirmation."""
+    result = service_delete(**plan_kwargs, apply=True)
+    formatter.format_dict(result, format=format)
+    _warn_on_unverified(result)
+
+
+@app.command("object-type-delete")
+def delete_object_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    object_type_id: str = typer.Argument(
+        ...,
+        help="Internal ObjectTypeId (e.g. 'ns1exmpl.my-type'), not the API name",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real deletion (default: dry-run preview only)",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip the confirmation prompt (with --apply)"
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Delete an object type via modifyOntology (dry-run unless --apply --yes).
+
+    Deletes run in reverse publication order: delete dependent action types
+    (step 5) and link types (step 4) before the object type (step 3). The
+    dry-run preview reports remaining dependents.
+    """
+    try:
+        service = ObjectTypeService(profile=profile)
+        plan_kwargs = {
+            "ontology_rid": ontology_rid,
+            "object_type_id": object_type_id,
+        }
+        _delete_preview(
+            service_delete=service.delete_object_type,
+            plan_kwargs=plan_kwargs,
+            format=format,
+            output=output,
+        )
+        if not apply:
+            formatter.print_info(
+                f"Dry-run only; pass --apply to delete object type "
+                f"{object_type_id}."
+            )
+            return
+        if not require_confirmation(
+            f"Delete object type {object_type_id} from ontology "
+            f"{ontology_rid}? This action cannot be undone.",
+            confirmed=yes,
+            option_name="--yes",
+        ):
+            formatter.print_info("Deletion cancelled")
+            raise typer.Exit(0)
+        _delete_apply(
+            service_delete=service.delete_object_type,
+            plan_kwargs=plan_kwargs,
+            format=format,
+        )
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        formatter.print_error(f"Failed to delete object type: {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("link-type-upsert")
+def upsert_link_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    api_name: str = typer.Option(
+        ..., "--api-name", help="Link type API name (camelCase, one-to-many side)"
+    ),
+    from_object_type_id: str = typer.Option(
+        ...,
+        "--from-object-type-id",
+        help="Internal ObjectTypeId of the one side (e.g. 'ns1exmpl.my-type')",
+    ),
+    to_object_type_id: str = typer.Option(
+        ...,
+        "--to-object-type-id",
+        help="Internal ObjectTypeId of the many side (e.g. 'ns1exmpl.my-type')",
+    ),
+    display_name: Optional[str] = typer.Option(
+        None, "--display-name", help="Link type display name"
+    ),
+    reverse_api_name: Optional[str] = typer.Option(
+        None, "--reverse-api-name", help="Many-to-one direction API name"
+    ),
+    one_side_primary_key: str = typer.Option(
+        "id", "--one-side-primary-key", help="Primary key property on the one side"
+    ),
+    many_side_property: Optional[str] = typer.Option(
+        None,
+        "--many-side-property",
+        help="Foreign key property on the many side (default: same as one side)",
+    ),
+    description: Optional[str] = typer.Option(
+        None, "--description", help="Link type description"
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real modification (default: dry-run only)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create a one-to-many link type via modifyOntology (dry-run unless --apply).
+
+    This command is step 4 of the required ontology contract publication
+    order (see object-type-upsert --help for the full sequence). Both object
+    types must already exist — run object-type-upsert (step 3) first.
+
+    Existing link types are not updated yet; the create validation reports
+    that case explicitly.
+    """
+    try:
+        result = ObjectTypeService(profile=profile).upsert_link_type(
+            ontology_rid=ontology_rid,
+            api_name=api_name,
+            one_side_object_type_id=from_object_type_id,
+            many_side_object_type_id=to_object_type_id,
+            display_name=display_name,
+            reverse_api_name=reverse_api_name,
+            one_side_primary_key=one_side_primary_key,
+            many_side_property=many_side_property,
+            description=description,
+            apply=apply,
+        )
+        formatter.format_dict(result, format=format, output=output)
+        _exit_on_validation_error(result)
+        _warn_on_unverified(result)
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        formatter.print_error(f"Failed to upsert link type: {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("link-type-delete")
+def delete_link_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    link_type_id: str = typer.Argument(
+        ...,
+        help="Internal LinkTypeId (e.g. 'ns1exmpl.my-link'), not the API name",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real deletion (default: dry-run preview only)",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip the confirmation prompt (with --apply)"
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Delete a link type via modifyOntology (dry-run unless --apply --yes).
+
+    Deletes run in reverse publication order: link types (step 4) are
+    deleted after their dependent action types (step 5) and before their
+    object types (step 3).
+    """
+    try:
+        service = ObjectTypeService(profile=profile)
+        plan_kwargs = {
+            "ontology_rid": ontology_rid,
+            "link_type_id": link_type_id,
+        }
+        _delete_preview(
+            service_delete=service.delete_link_type,
+            plan_kwargs=plan_kwargs,
+            format=format,
+            output=output,
+        )
+        if not apply:
+            formatter.print_info(
+                f"Dry-run only; pass --apply to delete link type "
+                f"{link_type_id}."
+            )
+            return
+        if not require_confirmation(
+            f"Delete link type {link_type_id} from ontology "
+            f"{ontology_rid}? This action cannot be undone.",
+            confirmed=yes,
+            option_name="--yes",
+        ):
+            formatter.print_info("Deletion cancelled")
+            raise typer.Exit(0)
+        _delete_apply(
+            service_delete=service.delete_link_type,
+            plan_kwargs=plan_kwargs,
+            format=format,
+        )
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        formatter.print_error(f"Failed to delete link type: {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("action-type-upsert")
+def upsert_action_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    definition: str = typer.Option(
+        ...,
+        "--definition",
+        help="Path to a JSON file with the ActionTypeCreate definition "
+        "('-' reads stdin)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real modification (default: dry-run only)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create an action type via modifyOntology (dry-run unless --apply).
+
+    This command is step 5 of the required ontology contract publication
+    order (see object-type-upsert --help for the full sequence). Referenced
+    object types (step 3) and link types (step 4) must already exist. After
+    applying, continue with step 6 (validate actions and re-read test
+    objects), step 7 (regenerate OSDK), and step 8 (enable the
+    corresponding application controls).
+
+    The definition is an ActionTypeCreate JSON document (see
+    the captured contract section 4). Existing action types
+    are not updated yet; the create validation reports that case explicitly.
+    """
+    try:
+        if definition == "-":
+            raw_definition = sys.stdin.read()
+        else:
+            raw_definition = Path(definition).read_text()
+        try:
+            parsed_definition = json.loads(raw_definition)
+        except json.JSONDecodeError as e:
+            formatter.print_error(f"Invalid JSON in action type definition: {e}")
+            raise typer.Exit(1) from e
+
+        result = ActionService(profile=profile).upsert_action_type(
+            ontology_rid=ontology_rid,
+            definition=parsed_definition,
+            apply=apply,
+        )
+        formatter.format_dict(result, format=format, output=output)
+        _exit_on_validation_error(result)
+        _warn_on_unverified(result)
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        formatter.print_error(f"Failed to upsert action type: {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("action-type-delete")
+def delete_action_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    action_type: str = typer.Argument(..., help="Action type API name"),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real deletion (default: dry-run preview only)",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip the confirmation prompt (with --apply)"
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Delete an action type via modifyOntology (dry-run unless --apply --yes).
+
+    Deletes run in reverse publication order: action types (step 5) are
+    deleted first, before link types (step 4) and object types (step 3).
+    """
+    try:
+        service = ActionService(profile=profile)
+        plan_kwargs = {
+            "ontology_rid": ontology_rid,
+            "action_type": action_type,
+        }
+        _delete_preview(
+            service_delete=service.delete_action_type,
+            plan_kwargs=plan_kwargs,
+            format=format,
+            output=output,
+        )
+        if not apply:
+            formatter.print_info(
+                f"Dry-run only; pass --apply to delete action type "
+                f"{action_type}."
+            )
+            return
+        if not require_confirmation(
+            f"Delete action type {action_type} from ontology "
+            f"{ontology_rid}? This action cannot be undone.",
+            confirmed=yes,
+            option_name="--yes",
+        ):
+            formatter.print_info("Deletion cancelled")
+            raise typer.Exit(0)
+        _delete_apply(
+            service_delete=service.delete_action_type,
+            plan_kwargs=plan_kwargs,
+            format=format,
+        )
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        formatter.print_error(f"Failed to delete action type: {e}")
         raise typer.Exit(1) from e
 
 

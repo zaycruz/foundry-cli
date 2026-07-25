@@ -262,6 +262,22 @@ pltr admin marking batch-get MARKING_IDS...
 pltr admin marking batch-get marking-1 marking-2 marking-3
 ```
 
+## Audit Log Commands
+
+Organization audit log files, read-only.
+
+```bash
+# List audit log files for an organization within a date range
+pltr audit list ORGANIZATION_RID START_DATE [--end-date DATE] [--page-size N] [--format FORMAT]
+
+# Download the content of one audit log file
+pltr audit get ORGANIZATION_RID LOG_FILE_ID [--output FILE]
+
+# Examples
+pltr audit list ri.foundry.main.organization.abc123 2026-07-01 --end-date 2026-07-24
+pltr audit get ri.foundry.main.organization.abc123 log-file-id-456 --output audit.json
+```
+
 ## Common Patterns
 
 ### Audit users

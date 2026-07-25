@@ -25,17 +25,22 @@ This skill helps you use the pltr-cli to interact with Palantir Foundry effectiv
 pltr-cli is a comprehensive CLI with 100+ commands for:
 - **Dataset operations**: Get info, list files, download files, manage branches and transactions
 - **SQL queries**: Execute queries, export results, manage async queries
-- **Ontology**: List ontologies, object types, objects, execute actions and queries
+- **Ontology**: List ontologies, object types, objects, execute actions and queries; plan-first ontology authoring (object/link/action type upserts and deletes via modifyOntology)
 - **Orchestration**: Manage builds, jobs, and schedules
 - **Filesystem**: Folders, spaces/namespaces, projects, imports, resources, bounded graphs, cross-resource search, and notepads
-- **Admin**: User, group, role management
-- **Connectivity**: External connections and data imports
+- **Admin**: User, group, role management, and organization audit logs
+- **Connectivity**: External connections, data imports, REST sources and webhooks (plan-first writes), network egress checks
 - **MediaSets**: Media file management
-- **Language Models**: Interact with Anthropic Claude models and OpenAI embeddings
+- **Language Models**: Interact with Anthropic Claude models and OpenAI embeddings; enrollment list/status/enroll
 - **Streams**: Create and manage streaming datasets, publish real-time data
-- **Functions**: Execute queries and inspect value types
+- **Functions**: Execute queries, search functions, inspect value types
 - **AIP Agents**: Manage AI agents, sessions, and versions
 - **Models**: ML model registry for model and version management
+- **Repositories**: Pull-request inspection and verified writes, headless repo context, git clone
+- **Global branching**: Ontology Global Branch and Global Proposal reads plus plan-first create/close
+- **Dev console & OSDK**: Third-party app inspection, OSDK definition reads, SDK install, local React codegen, platform-SDK introspection
+- **Docs**: Search and read the real Foundry documentation corpus
+- **Data health**: Data health checks and check reports
 - **Dependency analysis**: Evidence-backed dependency paths, coverage gaps, provenance, and complete local graph artifacts
 - **Agent contract**: Stable `pltr-agent-v1` envelopes with resumable pagination for native discovery and dataset statistics
 
@@ -96,19 +101,27 @@ Load these files based on the user's task:
 | Task Type | Reference File |
 |-----------|----------------|
 | Setup, authentication, getting started | `reference/quick-start.md` |
-| Dataset operations (get, files, branches, transactions) | `reference/dataset-commands.md` |
+| CLI introspection (agent-manifest, capabilities), aliases | `reference/cli-utility-commands.md` |
+| Dataset operations (get, files, branches, transactions, views, jobs, schedules) | `reference/dataset-commands.md` |
 | SQL queries | `reference/sql-commands.md` |
 | Builds, jobs, schedules | `reference/orchestration-commands.md` |
-| Ontologies, objects, actions | `reference/ontology-commands.md` |
-| Users, groups, roles, orgs | `reference/admin-commands.md` |
+| Ontologies, objects, actions, plan-first ontology authoring | `reference/ontology-commands.md` |
+| Users, groups, roles, orgs, audit logs | `reference/admin-commands.md` |
 | Folders, spaces/namespaces, projects, imports, resources, permissions, graphs, search, notepads | `reference/filesystem-commands.md` |
-| Connections, imports | `reference/connectivity-commands.md` |
+| Connections, imports, REST sources/webhooks, egress | `reference/connectivity-commands.md` |
 | Media sets, media items | `reference/mediasets-commands.md` |
-| Anthropic Claude models, OpenAI embeddings | `reference/language-models-commands.md` |
+| Anthropic Claude models, OpenAI embeddings, enrollment | `reference/language-models-commands.md` |
 | Streaming datasets, real-time data publishing | `reference/streams-commands.md` |
-| Functions queries, value types | `reference/functions-commands.md` |
+| Functions queries, function search, value types | `reference/functions-commands.md` |
 | AIP Agents, sessions, versions | `reference/aip-agents-commands.md` |
 | ML model registry, model versions | `reference/models-commands.md` |
+| Repository pull requests, repo context, clone | `reference/repository-commands.md` |
+| Ontology Global Branches and Global Proposals | `reference/global-branching-commands.md` |
+| Dev console, OSDK, platform-SDK introspection, third-party apps | `reference/dev-console-commands.md` |
+| Foundry documentation corpus | `reference/docs-commands.md` |
+| Data health checks and reports | `reference/data-health-commands.md` |
+| Proposal review workflows | `reference/proposal-commands.md` |
+| Custom widget sets and releases | `reference/widgets-commands.md` |
 | Dependency and change-impact analysis | `reference/dependency-commands.md` |
 
 ## Workflow Files
@@ -166,7 +179,16 @@ pltr notepad list --path-prefix "/Finance" --page-size 100 --format json
 pltr orchestration builds search
 
 # Interactive shell mode
-pltr shell
+pltr shell start
+
+# Search the Foundry docs corpus
+pltr docs search "incremental transforms" --limit 5
+
+# List pull requests for a repository
+pltr repository pull-request list ri.stemma.main.repository.abc123
+
+# Inspect an application's OSDK definition
+pltr dev-console osdk definition ri.foundry.third-party-application.main.application.abc123
 
 # Send message to Claude model
 pltr language-models anthropic messages ri.language-models.main.model.xxx \
@@ -209,7 +231,7 @@ pltr models version list ri.foundry.main.model.abc123
 3. **Preserve uncertainty**: Partial, unsupported, inaccessible, unresolved, and budget-exhausted coverage are not proof of no impact.
 4. **Use appropriate output mode**: `agent` for compact reasoning, `ci` for pipeline gating, and `graph` for full programmatic detail.
 5. **Use async for large queries**: `pltr sql submit` + `pltr sql wait` for long-running queries.
-6. **Use shell mode for exploration**: `pltr shell` provides tab completion and history.
+6. **Use shell mode for exploration**: `pltr shell start` provides tab completion and history.
 
 ## Getting Help
 

@@ -203,3 +203,253 @@ def test_capabilities_flip_to_implemented_for_dev_console_commands():
     assert by_id["view_osdk_definition"]["command"] == "dev-console osdk definition"
     assert by_id["install_sdk_package"]["status"] == "implemented"
     assert by_id["install_sdk_package"]["command"] == "dev-console sdk install"
+    assert by_id["connect_to_dev_console_app"]["status"] == "implemented"
+    assert by_id["connect_to_dev_console_app"]["command"] == "dev-console connect"
+    assert by_id["generate_new_ontology_sdk_version"]["status"] == "implemented"
+    assert (
+        by_id["generate_new_ontology_sdk_version"]["command"]
+        == "dev-console sdk generate"
+    )
+    assert by_id["convert_to_osdk_react"]["status"] == "implemented"
+    assert (
+        by_id["convert_to_osdk_react"]["command"]
+        == "dev-console convert-osdk-react"
+    )
+
+
+# ---------------------------------------------------------------------------
+# connect
+# ---------------------------------------------------------------------------
+
+
+def _connect_result():
+    return {
+        "application_rid": APP_RID,
+        "name": "My App",
+        "organization_rid": "ri.multipass..organization.org-1",
+        "client_type": "public",
+        "grants": {"authorization_code": True, "refresh_token": True},
+        "redirect_urls": ["https://app.example.com/auth/callback"],
+        "data_scope": {"ontology_rid": "ri.ontology.main.ontology.x",
+                       "objectTypes": 2, "linkTypes": 1, "actionTypes": 0},
+        "status": "connected",
+        "mode": "read-only",
+        "warnings": ["headless read-only form"],
+    }
+
+
+def test_connect_renders_json_and_calls_service():
+    with patch(SERVICE) as service:
+        service.return_value.get_connection_context.return_value = (
+            _connect_result()
+        )
+        result = runner.invoke(
+            app, ["dev-console", "connect", APP_RID, "--profile", "qa"]
+        )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "connected"
+    assert payload["mode"] == "read-only"
+    service.assert_called_once_with(profile="qa")
+    service.return_value.get_connection_context.assert_called_once_with(APP_RID)
+
+
+def test_connect_agent_mode_emits_single_envelope():
+    with patch(SERVICE) as service:
+        service.return_value.get_connection_context.return_value = (
+            _connect_result()
+        )
+        result = runner.invoke(
+            app, ["--agent", "dev-console", "connect", APP_RID]
+        )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.stdout)
+    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["meta"]["result_type"] == "dev-console-connect"
+    assert envelope["data"]["application_rid"] == APP_RID
+    assert "headless read-only form" in envelope["warnings"]
+
+
+def test_connect_drift_exits_nonzero_and_fails_loud():
+    with patch(SERVICE) as service:
+        service.return_value.get_connection_context.side_effect = (
+            SdkDefinitionDriftError("no 'application' object")
+        )
+        result = runner.invoke(app, ["dev-console", "connect", APP_RID])
+
+    assert result.exit_code == 1
+    assert "DRIFT [application-shape]" in result.output
+
+
+def test_connect_token_expired_exits_nonzero():
+    with patch(SERVICE) as service:
+        service.return_value.get_connection_context.side_effect = (
+            TokenExpiredError()
+        )
+        result = runner.invoke(app, ["dev-console", "connect", APP_RID])
+
+    assert result.exit_code == 1
+    assert "token-expired" in result.output
+
+
+# ---------------------------------------------------------------------------
+# sdk generate (blocked posture)
+# ---------------------------------------------------------------------------
+
+
+def _generate_result():
+    return {
+        "application_rid": APP_RID,
+        "status": "blocked",
+        "reason": "createSdkV2-contract-unverified: ...",
+        "evidence": ["POST {} (empty body) -> 400 Default:InvalidArgument"],
+        "current_sdks": [{"version": "0.7.0", "npmPackageName": "@my-app/sdk"}],
+        "warnings": [],
+    }
+
+
+def test_sdk_generate_reports_blocked_with_exit_2():
+    with patch(SERVICE) as service:
+        service.return_value.plan_sdk_generation.return_value = (
+            _generate_result()
+        )
+        result = runner.invoke(app, ["dev-console", "sdk", "generate", APP_RID])
+
+    assert result.exit_code == 2
+    assert "SDK GENERATE [blocked]" in result.output
+    assert "BLOCKED" in result.output
+    assert "createSdkV2-contract-unverified" in result.output
+    service.return_value.plan_sdk_generation.assert_called_once_with(APP_RID)
+
+
+def test_sdk_generate_agent_mode_carries_blocked_error():
+    with patch(SERVICE) as service:
+        service.return_value.plan_sdk_generation.return_value = (
+            _generate_result()
+        )
+        result = runner.invoke(
+            app, ["--agent", "dev-console", "sdk", "generate", APP_RID]
+        )
+
+    assert result.exit_code == 2, result.output
+    envelope = json.loads(result.stdout)
+    assert envelope["meta"]["result_type"] == "sdk-generate"
+    assert envelope["meta"]["status"] == "blocked"
+    assert envelope["errors"][0]["type"] == "blocked"
+
+
+# ---------------------------------------------------------------------------
+# convert-osdk-react
+# ---------------------------------------------------------------------------
+
+
+def _convert_result(status: str = "generated"):
+    result = {
+        "application_rid": APP_RID,
+        "ontology_rid": "ri.ontology.main.ontology.x",
+        "output_dir": "/tmp/scaffold",
+        "status": status,
+        "reason": None,
+        "object_types": ["Program"],
+        "files": ["/tmp/scaffold/ProgramCard.tsx", "/tmp/scaffold/index.ts"],
+        "warnings": [],
+    }
+    if status == "unresolved":
+        result.update(
+            object_types=[], files=[], reason="data-scope-unresolved: ..."
+        )
+    if status == "conflict":
+        result.update(
+            files=[],
+            conflicts=["/tmp/scaffold/ProgramCard.tsx"],
+            reason="output-files-exist: ...",
+        )
+    return result
+
+
+def test_convert_renders_generated_files(tmp_path):
+    with patch(SERVICE) as service:
+        service.return_value.generate_react_scaffold.return_value = (
+            _convert_result()
+        )
+        result = runner.invoke(
+            app,
+            ["dev-console", "convert-osdk-react", APP_RID,
+             "--output-dir", str(tmp_path)],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "CONVERT-OSDK-REACT [generated]" in result.output
+    assert "ProgramCard.tsx" in result.output
+    kwargs = service.return_value.generate_react_scaffold.call_args
+    assert kwargs.args[0] == APP_RID
+    assert kwargs.args[1] == tmp_path
+    assert kwargs.kwargs["force"] is False
+
+
+def test_convert_passes_force_through(tmp_path):
+    with patch(SERVICE) as service:
+        service.return_value.generate_react_scaffold.return_value = (
+            _convert_result()
+        )
+        result = runner.invoke(
+            app,
+            ["dev-console", "convert-osdk-react", APP_RID,
+             "--output-dir", str(tmp_path), "--force"],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        service.return_value.generate_react_scaffold.call_args.kwargs["force"]
+        is True
+    )
+
+
+def test_convert_unresolved_exits_2(tmp_path):
+    with patch(SERVICE) as service:
+        service.return_value.generate_react_scaffold.return_value = (
+            _convert_result("unresolved")
+        )
+        result = runner.invoke(
+            app,
+            ["dev-console", "convert-osdk-react", APP_RID,
+             "--output-dir", str(tmp_path)],
+        )
+
+    assert result.exit_code == 2
+    assert "RESIDUAL GAP" in result.output
+
+
+def test_convert_conflict_exits_1(tmp_path):
+    with patch(SERVICE) as service:
+        service.return_value.generate_react_scaffold.return_value = (
+            _convert_result("conflict")
+        )
+        result = runner.invoke(
+            app,
+            ["dev-console", "convert-osdk-react", APP_RID,
+             "--output-dir", str(tmp_path)],
+        )
+
+    assert result.exit_code == 1
+    assert "conflict" in result.output
+
+
+def test_convert_agent_mode_emits_single_envelope(tmp_path):
+    with patch(SERVICE) as service:
+        service.return_value.generate_react_scaffold.return_value = (
+            _convert_result()
+        )
+        result = runner.invoke(
+            app,
+            ["--agent", "dev-console", "convert-osdk-react", APP_RID,
+             "--output-dir", str(tmp_path)],
+        )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.stdout)
+    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["meta"]["result_type"] == "convert-osdk-react"
+    assert envelope["meta"]["status"] == "generated"

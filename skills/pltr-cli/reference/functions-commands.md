@@ -8,6 +8,21 @@ Commands for executing Functions queries and inspecting value types in Foundry.
 
 ## Query Commands
 
+### Search Functions by Name
+
+```bash
+pltr functions search QUERY [--limit N] [--format FORMAT]
+
+# Uses the verified internal GraphQL title search; function matching is
+# applied locally to the returned page (see the JSON output `local_filters`
+# block). Results are capped at --limit and the gateway does not report
+# whether more matches exist.
+
+# Examples
+pltr functions search revenue
+pltr functions search revenue --limit 50 --format json
+```
+
 ### Get Query by API Name
 
 Retrieve query metadata by its API name.

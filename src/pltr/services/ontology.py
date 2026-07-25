@@ -3,7 +3,8 @@ Ontology service wrappers for Foundry SDK.
 """
 
 import re
-from typing import Any, Callable, Dict, List, Mapping, Optional, Union
+import uuid
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 from urllib.parse import quote
 
 import requests
@@ -12,6 +13,383 @@ from foundry_sdk.v2.ontologies.models import ApplyActionRequestOptions
 from ..config.settings import Settings
 from ..utils.pagination import PaginationConfig, PaginationResult
 from .base import BaseService
+
+# Verified request contract for OntologyModificationService.modifyOntology:
+# the captured contract (contract-verified on a live Foundry deployment).
+_MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
+_NAMESPACE_PROBE_OBJECT_TYPE_ID = "probe.bad-id"
+
+# Terminal error names that prove an entity is gone when a delete is
+# re-issued as a dry-run (read-back verification for deletions).
+_GONE_ERROR_NAMES = {
+    "ObjectTypesNotFound",
+    "LinkTypesNotFound",
+    "ActionTypesNotFound",
+}
+
+_ALREADY_EXISTS_ERROR_NAMES = {
+    "ObjectTypesAlreadyExistError",
+    "ObjectTypesAlreadyExist",
+    "objectTypesAlreadyExist",
+    "LinkTypesAlreadyExistError",
+    "LinkTypesAlreadyExist",
+    "linkTypesAlreadyExist",
+    "ActionTypesAlreadyExistError",
+    "ActionTypesAlreadyExist",
+    "actionTypesAlreadyExist",
+}
+
+_COMMON_ERROR_MESSAGES = {
+    "InvalidObjectTypeId": (
+        "Foundry rejected the generated object type ID for this "
+        "ontology namespace"
+    ),
+    "CannotCreateV1ObjectType": (
+        "Foundry requires objectStorageV2 metadata for new object types"
+    ),
+    "ObjectTypeWithZeroDatasourcesNotAllowed": (
+        "Foundry requires at least one datasource for a new object type"
+    ),
+    "SchemaForObjectTypeDatasourceNotFound": (
+        "the backing dataset has no schema; apply a schema to the "
+        "dataset before creating the object type"
+    ),
+    "TooManyObjectTypesInOntology": (
+        "the ontology has reached its object type limit"
+    ),
+}
+
+
+def _modify_urls(ontology_rid: str) -> Tuple[str, str]:
+    """Return the (dry-run, real) modifyOntology URLs for an ontology."""
+    encoded = quote(ontology_rid, safe="")
+    return (
+        f"{_MODIFY_ENDPOINT}/dry-run?ontologyRid={encoded}",
+        f"{_MODIFY_ENDPOINT}?ontologyRid={encoded}",
+    )
+
+
+def _internal_client(service: BaseService) -> Any:
+    """Build a FoundryInternalClient for the service's effective profile."""
+    from .foundry_internal_client import FoundryInternalClient
+
+    effective_profile = service.profile or service.auth_manager.get_current_profile()
+    if not effective_profile:
+        from ..auth.base import ProfileNotFoundError
+
+        raise ProfileNotFoundError(
+            "No profile specified and no default profile configured. "
+            "Run 'pltr configure configure' to set up authentication."
+        )
+    return FoundryInternalClient(profile=effective_profile)
+
+
+def _require_successful_internal_response(
+    status: int,
+    payload: Any,
+    raw: str,
+    *,
+    operation: str,
+) -> None:
+    """Separate transport/deserialization failures from validation errors."""
+    if status == 200:
+        return
+    error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
+    if status == 400:
+        detail = f" ({error_name})" if error_name else ""
+        raise RuntimeError(
+            f"{operation} request failed during contract deserialization "
+            f"with HTTP 400{detail}; the modifyOntology request shape was "
+            f"rejected before validation: {str(raw)[:300]}"
+        )
+    detail = f" ({error_name})" if error_name else ""
+    raise RuntimeError(
+        f"{operation} failed with HTTP {status}{detail}: {str(raw)[:300]}"
+    )
+
+
+def _dry_run_errors(payload: Any) -> List[Mapping[str, Any]]:
+    if not isinstance(payload, Mapping) or payload.get("type") != "error":
+        return []
+    error_status = payload.get("error")
+    if not isinstance(error_status, Mapping):
+        return []
+    errors = error_status.get("errors")
+    if not isinstance(errors, list):
+        return []
+    return [error for error in errors if isinstance(error, Mapping)]
+
+
+def _error_terminal_name(error_name: str) -> str:
+    return error_name.rsplit(":", 1)[-1]
+
+
+def _format_validation_error(error: Mapping[str, Any], *, entity: str) -> str:
+    error_data = error.get("errorData")
+    if not isinstance(error_data, Mapping):
+        return "unknown ontology validation error"
+    error_name = str(error_data.get("errorName") or "unknown")
+    terminal_name = _error_terminal_name(error_name)
+    if terminal_name in _ALREADY_EXISTS_ERROR_NAMES:
+        return (
+            f"{entity} already exists; update path not yet implemented "
+            f"({error_name})"
+        )
+    mapped = _COMMON_ERROR_MESSAGES.get(terminal_name)
+    if mapped:
+        return f"{mapped} ({error_name})"
+    error_message = error_data.get("errorMessage")
+    if isinstance(error_message, str) and error_message:
+        return f"{error_name}: {error_message}"
+    return error_name
+
+
+def _run_dry_run(
+    client: Any,
+    ontology_rid: str,
+    modification_request: Mapping[str, Any],
+    *,
+    operation: str,
+    entity: str,
+) -> List[str]:
+    """POST a dry-run validation; return formatted errors ([] on success)."""
+    dry_run_url, _ = _modify_urls(ontology_rid)
+    status, parsed, raw = client.conjure(
+        "POST",
+        dry_run_url,
+        json_body={"modificationRequest": modification_request},
+        expected=200,
+    )
+    _require_successful_internal_response(
+        status, parsed, raw, operation=operation
+    )
+    if isinstance(parsed, Mapping) and parsed.get("type") == "success":
+        return []
+    errors = _dry_run_errors(parsed)
+    if errors:
+        return [
+            _format_validation_error(error, entity=entity) for error in errors
+        ]
+    raise RuntimeError(
+        f"{operation} returned an invalid response shape: expected "
+        "{'type': 'success'} or {'type': 'error', 'error': {'errors': [...]}}"
+    )
+
+
+def _run_modify(
+    client: Any,
+    ontology_rid: str,
+    modification_request: Mapping[str, Any],
+    *,
+    operation: str,
+) -> Mapping[str, Any]:
+    """POST the real modifyOntology request (no dry-run wrapper)."""
+    _, modify_url = _modify_urls(ontology_rid)
+    status, parsed, raw = client.conjure(
+        "POST",
+        modify_url,
+        json_body=modification_request,
+        expected=200,
+    )
+    _require_successful_internal_response(
+        status, parsed, raw, operation=operation
+    )
+    if not isinstance(parsed, Mapping):
+        raise RuntimeError(
+            f"{operation} returned an invalid response shape: "
+            "expected a JSON object"
+        )
+    return parsed
+
+
+def _collect_terminal_error_names(status: int, payload: Any) -> List[str]:
+    """Collect terminal error names from an error body or dry-run union."""
+    names: List[str] = []
+    if isinstance(payload, Mapping):
+        error_name = payload.get("errorName")
+        if isinstance(error_name, str):
+            names.append(_error_terminal_name(error_name))
+    for error in _dry_run_errors(payload):
+        error_data = error.get("errorData")
+        if isinstance(error_data, Mapping):
+            names.append(
+                _error_terminal_name(str(error_data.get("errorName") or ""))
+            )
+    return names
+
+
+def _verify_entity_gone(
+    client: Any,
+    ontology_rid: str,
+    modification_request: Mapping[str, Any],
+    *,
+    gone_error_names: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Verify a deletion landed by re-issuing it as a dry-run.
+
+    Deserialization on this stack is lenient, so a 200 on the real modify
+    call is not proof of effect. A deleted entity makes the same request
+    fail validation with a NotFound error, which is a positive read-back
+    signal from the verified dry-run endpoint.
+    """
+    names = set(gone_error_names or _GONE_ERROR_NAMES)
+    dry_run_url, _ = _modify_urls(ontology_rid)
+    status, parsed, raw = client.conjure(
+        "POST",
+        dry_run_url,
+        json_body={"modificationRequest": modification_request},
+        expected=200,
+    )
+    terminal_names = _collect_terminal_error_names(status, parsed)
+    if status in (200, 400) and any(name in names for name in terminal_names):
+        return {
+            "status": "verified",
+            "detail": (
+                "post-delete dry-run now reports the entity as not found"
+            ),
+        }
+    if (
+        status == 200
+        and isinstance(parsed, Mapping)
+        and parsed.get("type") == "success"
+    ):
+        return {
+            "status": "not-verified",
+            "detail": (
+                "post-delete dry-run still validates, so the entity "
+                "may not be deleted"
+            ),
+        }
+    return {
+        "status": "not-verified",
+        "detail": (
+            f"post-delete verification inconclusive (HTTP {status}): "
+            f"{str(raw)[:200]}"
+        ),
+    }
+
+
+def _verify_entity_present(
+    client: Any,
+    ontology_rid: str,
+    modification_request: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Verify a creation landed by re-issuing it as a dry-run.
+
+    A created entity makes the same create request fail validation with an
+    already-exists error, which is a positive read-back signal from the
+    verified dry-run endpoint.
+    """
+    dry_run_url, _ = _modify_urls(ontology_rid)
+    status, parsed, raw = client.conjure(
+        "POST",
+        dry_run_url,
+        json_body={"modificationRequest": modification_request},
+        expected=200,
+    )
+    terminal_names = _collect_terminal_error_names(status, parsed)
+    if status == 200 and any(
+        "AlreadyExist" in name for name in terminal_names
+    ):
+        return {
+            "status": "verified",
+            "detail": (
+                "post-create dry-run now reports the entity as "
+                "already existing"
+            ),
+        }
+    if (
+        status == 200
+        and isinstance(parsed, Mapping)
+        and parsed.get("type") == "success"
+    ):
+        return {
+            "status": "not-verified",
+            "detail": (
+                "post-create dry-run still validates as a create, so the "
+                "entity may not have been created"
+            ),
+        }
+    return {
+        "status": "not-verified",
+        "detail": (
+            f"post-create verification inconclusive (HTTP {status}): "
+            f"{str(raw)[:200]}"
+        ),
+    }
+
+
+def _entity_id_suffix(api_name: str) -> str:
+    """Convert an API name into the lower-kebab ID required by OMS."""
+    with_word_boundaries = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", api_name)
+    with_word_boundaries = re.sub(
+        r"([a-z0-9])([A-Z])", r"\1-\2", with_word_boundaries
+    )
+    suffix = re.sub(r"[^a-z0-9]+", "-", with_word_boundaries.casefold()).strip(
+        "-"
+    )
+    if not suffix or not suffix[0].isalpha():
+        raise RuntimeError(
+            f"Cannot derive a valid entity ID from API name {api_name!r}; "
+            "the derived ID must start with a letter"
+        )
+    return suffix
+
+
+def _is_uuid(value: Any) -> bool:
+    try:
+        uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return True
+
+
+# Required ontology contract publication order. Referenced by
+# the upsert/delete commands' help text and by validation hints.
+PUBLICATION_ORDER_STEPS = (
+    "modify backing dataset schemas",
+    "implement transaction functions",
+    "object-type-upsert",
+    "link-type-upsert",
+    "action-type-upsert",
+    "validate actions and re-read test objects",
+    "regenerate OSDK",
+    "enable the corresponding application controls",
+)
+
+PUBLICATION_ORDER_TEXT = "; ".join(
+    f"{index}) {step}" for index, step in enumerate(PUBLICATION_ORDER_STEPS, 1)
+)
+
+OBJECT_TYPE_UPSERT_STEP = 3
+LINK_TYPE_UPSERT_STEP = 4
+ACTION_TYPE_UPSERT_STEP = 5
+
+
+def _order_hint(
+    errors: List[str],
+    *,
+    step: int,
+    triggers: Mapping[str, str],
+) -> List[str]:
+    """Append a required-order hint when validation reports a missing dependency.
+
+    ``triggers`` maps terminal Foundry error names (matched as substrings of
+    the formatted errors) to guidance for the dependency they signal. The
+    hint is appended as an extra entry so it surfaces in JSON plans and
+    printed output alike; it is operator guidance, not a Foundry error.
+    """
+    matched = sorted(
+        {trigger for trigger in triggers if any(trigger in e for e in errors)}
+    )
+    if not matched:
+        return errors
+    guidance = "; ".join(triggers[trigger] for trigger in matched)
+    return [
+        *errors,
+        f"hint (step {step} of the required publication order): {guidance}. "
+        f"Full order: {PUBLICATION_ORDER_TEXT}",
+    ]
 
 
 class OntologyService(BaseService):
@@ -97,13 +475,6 @@ class OntologyService(BaseService):
 class ObjectTypeService(BaseService):
     """Service wrapper for object type operations."""
 
-    _MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
-    _NAMESPACE_PROBE_OBJECT_TYPE_ID = "probe.bad-id"
-    _ALREADY_EXISTS_ERROR_NAMES = {
-        "ObjectTypesAlreadyExistError",
-        "ObjectTypesAlreadyExist",
-        "objectTypesAlreadyExist",
-    }
     _OBJECT_TYPE_CREATE_ENDPOINTS = [
         "/v2/ontologies/{ontology}/objectTypes",
         "/v1/ontologies/{ontology}/objectTypes",
@@ -206,58 +577,29 @@ class ObjectTypeService(BaseService):
         primary_key: str,
         backing_dataset: str,
         description: Optional[str] = None,
+        apply: bool = False,
     ) -> Dict[str, Any]:
         """Create an object type through the verified modifyOntology contract.
 
-        The internal API requires an ontology-specific namespace in new object
-        type IDs. It does not expose that namespace directly, so a dry-run with
-        a deliberately invalid ID discovers the namespace regex. The completed
-        request is then dry-run validated before the real modification.
+        Defaults to a dry-run: the request is validated against
+        ``POST /ontology/v2/modify/dry-run`` and the validated plan is
+        returned. With ``apply=True`` the real modification is issued and the
+        result is verified by reading the object type back through the SDK,
+        because deserialization on this stack is lenient and a 200 is not
+        proof of effect.
+
+        The internal API requires an ontology-specific namespace in new
+        object type IDs. It does not expose that namespace directly, so a
+        dry-run with a deliberately invalid ID discovers the namespace regex.
 
         Existing object types are intentionally not updated yet. Foundry's
-        create validation is used to detect that case rather than attempting a
-        destructive delete-and-recreate.
+        create validation is used to detect that case rather than attempting
+        a destructive delete-and-recreate.
         """
-        from .foundry_internal_client import FoundryInternalClient
+        client = _internal_client(self)
+        namespace = self._discover_object_type_namespace(client, ontology_rid)
 
-        effective_profile = self.profile or self.auth_manager.get_current_profile()
-        if not effective_profile:
-            from ..auth.base import ProfileNotFoundError
-
-            raise ProfileNotFoundError(
-                "No profile specified and no default profile configured. "
-                "Run 'pltr configure configure' to set up authentication."
-            )
-
-        client = FoundryInternalClient(profile=effective_profile)
-        dry_run_endpoint = (
-            f"{self._MODIFY_ENDPOINT}/dry-run"
-            f"?ontologyRid={quote(ontology_rid, safe='')}"
-        )
-        modify_endpoint = (
-            f"{self._MODIFY_ENDPOINT}?ontologyRid={quote(ontology_rid, safe='')}"
-        )
-
-        probe_request = self._build_object_type_modification_request(
-            object_type_id=self._NAMESPACE_PROBE_OBJECT_TYPE_ID,
-            api_name=api_name,
-            display_name=display_name,
-            primary_key=primary_key,
-            backing_dataset=backing_dataset,
-            description=description,
-        )
-        status, parsed, raw = client.conjure(
-            "POST",
-            dry_run_endpoint,
-            json_body={"modificationRequest": probe_request},
-            expected=200,
-        )
-        self._require_successful_internal_response(
-            status, parsed, raw, operation="object type namespace discovery"
-        )
-        namespace = self._extract_object_type_namespace(parsed)
-
-        object_type_id = f"{namespace}.{self._object_type_id_suffix(api_name)}"
+        object_type_id = f"{namespace}.{_entity_id_suffix(api_name)}"
         modification_request = self._build_object_type_modification_request(
             object_type_id=object_type_id,
             api_name=api_name,
@@ -266,63 +608,414 @@ class ObjectTypeService(BaseService):
             backing_dataset=backing_dataset,
             description=description,
         )
-        status, parsed, raw = client.conjure(
-            "POST",
-            dry_run_endpoint,
-            json_body={"modificationRequest": modification_request},
-            expected=200,
-        )
-        self._require_successful_internal_response(
-            status, parsed, raw, operation="object type dry-run"
-        )
-        self._require_successful_dry_run(parsed)
+        plan: Dict[str, Any] = {
+            "operation": "object-type-upsert",
+            "apiName": api_name,
+            "objectTypeId": object_type_id,
+            "ontologyRid": ontology_rid,
+        }
 
-        status, parsed, raw = client.conjure(
-            "POST",
-            modify_endpoint,
-            json_body=modification_request,
-            expected=200,
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type dry-run",
+            entity="object type",
         )
-        self._require_successful_internal_response(
-            status, parsed, raw, operation="object type modify"
+        validation_errors = _order_hint(
+            validation_errors,
+            step=OBJECT_TYPE_UPSERT_STEP,
+            triggers={
+                "SchemaForObjectTypeDatasourceNotFound": (
+                    "the backing dataset schema must be updated before "
+                    "object types are created or changed (step 1)"
+                )
+            },
         )
-        if not isinstance(parsed, Mapping):
-            raise RuntimeError(
-                "Object type modify returned an invalid response shape: "
-                "expected a JSON object"
-            )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Object type dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        parsed = _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type modify",
+        )
         created = parsed.get("createdObjectTypes")
-        if not isinstance(created, Mapping) or not isinstance(
-            created.get(object_type_id), str
-        ):
+        rid = created.get(object_type_id) if isinstance(created, Mapping) else None
+        if not isinstance(rid, str):
             raise RuntimeError(
                 "Object type modify succeeded but did not return the created "
                 f"object type RID for {object_type_id}"
             )
 
         return {
-            "apiName": api_name,
+            **plan,
+            "mode": "applied",
+            "rid": rid,
+            "validation": {"status": "success", "errors": []},
+            "verification": self._verify_object_type_present(
+                ontology_rid, api_name
+            ),
+        }
+
+    def delete_object_type(
+        self,
+        ontology_rid: str,
+        object_type_id: str,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Delete an object type through the verified modifyOntology contract.
+
+        ``object_type_id`` is the internal ObjectTypeId (for example
+        ``ns1exmpl.my-type``), not the API name: the delete variant is keyed
+        by ObjectTypeId. Defaults to a dry-run; ``apply=True`` issues the
+        real deletion and verifies it by re-issuing the delete as a dry-run,
+        which must then report the object type as not found.
+        """
+        if "." not in object_type_id:
+            raise RuntimeError(
+                "object-type-delete requires the internal ObjectTypeId "
+                "(for example 'ns1exmpl.my-type'), not an API name. The ID is "
+                "returned by 'pltr ontology object-type-upsert' and visible "
+                "in the Foundry ontology manager."
+            )
+        client = _internal_client(self)
+        modification_request: Dict[str, Any] = {
+            "objectTypes": {object_type_id: {"type": "delete", "delete": {}}}
+        }
+        plan: Dict[str, Any] = {
+            "operation": "object-type-delete",
             "objectTypeId": object_type_id,
-            "rid": created[object_type_id],
             "ontologyRid": ontology_rid,
         }
 
-    @staticmethod
-    def _object_type_id_suffix(api_name: str) -> str:
-        """Convert an API name into the lower-kebab ID required by OMS."""
-        with_word_boundaries = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", api_name)
-        with_word_boundaries = re.sub(
-            r"([a-z0-9])([A-Z])", r"\1-\2", with_word_boundaries
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type delete dry-run",
+            entity="object type",
         )
-        suffix = re.sub(
-            r"[^a-z0-9]+", "-", with_word_boundaries.casefold()
-        ).strip("-")
-        if not suffix or not suffix[0].isalpha():
+        validation_errors = _order_hint(
+            validation_errors,
+            step=OBJECT_TYPE_UPSERT_STEP,
+            triggers={
+                "LinkType": (
+                    "dependent link types still reference this object "
+                    "type; delete dependents in reverse publication order "
+                    "— action-type-delete (step 5), then link-type-delete "
+                    "(step 4), then object-type-delete (step 3)"
+                )
+            },
+        )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Object type delete dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type delete",
+        )
+        return {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+            "verification": _verify_entity_gone(
+                client,
+                ontology_rid,
+                modification_request,
+                gone_error_names={"ObjectTypesNotFound"},
+            ),
+        }
+
+    def _discover_object_type_namespace(
+        self, client: Any, ontology_rid: str
+    ) -> str:
+        """Discover the ontology ID namespace via a deliberate ID error."""
+        dry_run_url, _ = _modify_urls(ontology_rid)
+        probe_request = self._build_object_type_modification_request(
+            object_type_id=_NAMESPACE_PROBE_OBJECT_TYPE_ID,
+            api_name="PltrNamespaceProbe",
+            display_name="pltr namespace check",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.pltr-namespace-probe",
+            description=None,
+        )
+        status, parsed, raw = client.conjure(
+            "POST",
+            dry_run_url,
+            json_body={"modificationRequest": probe_request},
+            expected=200,
+        )
+        _require_successful_internal_response(
+            status, parsed, raw, operation="object type namespace discovery"
+        )
+        return self._extract_object_type_namespace(parsed)
+
+    def _verify_object_type_present(
+        self, ontology_rid: str, api_name: str
+    ) -> Dict[str, Any]:
+        """Read a created object type back through the verified SDK get."""
+        try:
+            self.get_object_type(ontology_rid, api_name)
+        except Exception as e:
+            return {
+                "status": "not-verified",
+                "detail": (
+                    "read-back via SDK ontologies ObjectType.get failed: "
+                    f"{e}"
+                ),
+            }
+        return {
+            "status": "verified",
+            "detail": "read back via SDK ontologies ObjectType.get",
+        }
+
+    def upsert_link_type(
+        self,
+        ontology_rid: str,
+        api_name: str,
+        one_side_object_type_id: str,
+        many_side_object_type_id: str,
+        display_name: Optional[str] = None,
+        reverse_api_name: Optional[str] = None,
+        one_side_primary_key: str = "id",
+        many_side_property: Optional[str] = None,
+        description: Optional[str] = None,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Create a one-to-many link type through modifyOntology.
+
+        The link definition references object types by their internal
+        ObjectTypeIds (for example ``ns1exmpl.my-type``), which is the only
+        identifier the verified contract accepts. Defaults to a dry-run;
+        ``apply=True`` issues the real modification and verifies the create
+        by re-issuing it as a dry-run, which must then report the link type
+        as already existing.
+
+        Existing link types are intentionally not updated yet.
+        """
+        client = _internal_client(self)
+        namespace = self._discover_object_type_namespace(client, ontology_rid)
+
+        link_type_id = f"{namespace}.{_entity_id_suffix(api_name)}"
+        reverse_name = reverse_api_name or f"{api_name}Reverse"
+        many_side = many_side_property or one_side_primary_key
+        link_display = display_name or api_name
+
+        def _link_metadata(name: str, display: str) -> Dict[str, Any]:
+            return {
+                "apiName": name,
+                "displayMetadata": {
+                    "displayName": display,
+                    "pluralDisplayName": display,
+                    "visibility": "NORMAL",
+                },
+                "typeClasses": [],
+            }
+
+        modification_request: Dict[str, Any] = {
+            "linkTypes": {
+                link_type_id: {
+                    "type": "create",
+                    "create": {
+                        "linkType": {
+                            "linkTypeId": link_type_id,
+                            "definition": {
+                                "type": "oneToMany",
+                                "oneToMany": {
+                                    "cardinalityHint": "ONE_TO_MANY",
+                                    "objectTypeIdOneSide": one_side_object_type_id,
+                                    "objectTypeIdManySide": many_side_object_type_id,
+                                    "oneSidePrimaryKeyToManySidePropertyMapping": {
+                                        one_side_primary_key: many_side,
+                                    },
+                                    "oneToManyLinkMetadata": _link_metadata(
+                                        api_name, link_display
+                                    ),
+                                    "manyToOneLinkMetadata": _link_metadata(
+                                        reverse_name, reverse_name
+                                    ),
+                                },
+                            },
+                            "description": description,
+                            "status": None,
+                        },
+                        "markings": [],
+                        "packageRid": None,
+                        "projectRid": None,
+                    },
+                }
+            }
+        }
+        plan: Dict[str, Any] = {
+            "operation": "link-type-upsert",
+            "apiName": api_name,
+            "linkTypeId": link_type_id,
+            "ontologyRid": ontology_rid,
+        }
+
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="link type dry-run",
+            entity="link type",
+        )
+        validation_errors = _order_hint(
+            validation_errors,
+            step=LINK_TYPE_UPSERT_STEP,
+            triggers={
+                "ObjectTypesNotFound": (
+                    "one of the referenced object types does not exist "
+                    "yet; run object-type-upsert (step 3) before "
+                    "link-type-upsert"
+                )
+            },
+        )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Link type dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        parsed = _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="link type modify",
+        )
+        created = parsed.get("createdLinkTypes")
+        rid = created.get(link_type_id) if isinstance(created, Mapping) else None
+        result: Dict[str, Any] = {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+            "verification": _verify_entity_present(
+                client, ontology_rid, modification_request
+            ),
+        }
+        if isinstance(rid, str):
+            result["rid"] = rid
+        return result
+
+    def delete_link_type(
+        self,
+        ontology_rid: str,
+        link_type_id: str,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Delete a link type through the verified modifyOntology contract.
+
+        ``link_type_id`` is the internal LinkTypeId (for example
+        ``ns1exmpl.my-link``), not the API name. Defaults to a dry-run;
+        ``apply=True`` issues the real deletion and verifies it by
+        re-issuing the delete as a dry-run, which must then report the link
+        type as not found.
+        """
+        if "." not in link_type_id:
             raise RuntimeError(
-                f"Cannot derive a valid object type ID from API name {api_name!r}; "
-                "the derived ID must start with a letter"
+                "link-type-delete requires the internal LinkTypeId "
+                "(for example 'ns1exmpl.my-link'), not an API name. The ID is "
+                "returned by 'pltr ontology link-type-upsert' and visible "
+                "in the Foundry ontology manager."
             )
-        return suffix
+        client = _internal_client(self)
+        modification_request: Dict[str, Any] = {
+            "linkTypes": {link_type_id: {"type": "delete", "delete": {}}}
+        }
+        plan: Dict[str, Any] = {
+            "operation": "link-type-delete",
+            "linkTypeId": link_type_id,
+            "ontologyRid": ontology_rid,
+        }
+
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="link type delete dry-run",
+            entity="link type",
+        )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Link type delete dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="link type delete",
+        )
+        return {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+            "verification": _verify_entity_gone(
+                client,
+                ontology_rid,
+                modification_request,
+                gone_error_names={"LinkTypesNotFound"},
+            ),
+        }
 
     @staticmethod
     def _build_object_type_modification_request(
@@ -418,12 +1111,12 @@ class ObjectTypeService(BaseService):
     @classmethod
     def _extract_object_type_namespace(cls, payload: Any) -> str:
         """Extract the ontology namespace from the intentional ID error."""
-        for error in cls._dry_run_errors(payload):
+        for error in _dry_run_errors(payload):
             error_data = error.get("errorData")
             if not isinstance(error_data, Mapping):
                 continue
             error_name = str(error_data.get("errorName") or "")
-            if cls._error_terminal_name(error_name) != "InvalidObjectTypeId":
+            if _error_terminal_name(error_name) != "InvalidObjectTypeId":
                 continue
             safe_args = error_data.get("safeArgs")
             if not isinstance(safe_args, list):
@@ -462,103 +1155,6 @@ class ObjectTypeService(BaseService):
                 continue
             return None
         return value
-
-    @classmethod
-    def _require_successful_dry_run(cls, payload: Any) -> None:
-        """Accept only the explicit dry-run success variant."""
-        if isinstance(payload, Mapping) and payload.get("type") == "success":
-            return
-        errors = cls._dry_run_errors(payload)
-        if errors:
-            messages = [cls._format_validation_error(error) for error in errors]
-            raise RuntimeError(
-                "Object type dry-run validation failed: " + "; ".join(messages)
-            )
-        raise RuntimeError(
-            "Object type dry-run returned an invalid response shape: expected "
-            "{'type': 'success'} or {'type': 'error', 'error': {'errors': [...]}}"
-        )
-
-    @staticmethod
-    def _dry_run_errors(payload: Any) -> List[Mapping[str, Any]]:
-        if not isinstance(payload, Mapping) or payload.get("type") != "error":
-            return []
-        error_status = payload.get("error")
-        if not isinstance(error_status, Mapping):
-            return []
-        errors = error_status.get("errors")
-        if not isinstance(errors, list):
-            return []
-        return [error for error in errors if isinstance(error, Mapping)]
-
-    @classmethod
-    def _format_validation_error(cls, error: Mapping[str, Any]) -> str:
-        error_data = error.get("errorData")
-        if not isinstance(error_data, Mapping):
-            return "unknown ontology validation error"
-        error_name = str(error_data.get("errorName") or "unknown")
-        terminal_name = cls._error_terminal_name(error_name)
-        if terminal_name in cls._ALREADY_EXISTS_ERROR_NAMES:
-            return (
-                "object type already exists; update path not yet implemented "
-                f"({error_name})"
-            )
-        messages = {
-            "InvalidObjectTypeId": (
-                "Foundry rejected the generated object type ID for this "
-                "ontology namespace"
-            ),
-            "CannotCreateV1ObjectType": (
-                "Foundry requires objectStorageV2 metadata for new object types"
-            ),
-            "ObjectTypeWithZeroDatasourcesNotAllowed": (
-                "Foundry requires at least one datasource for a new object type"
-            ),
-            "SchemaForObjectTypeDatasourceNotFound": (
-                "the backing dataset has no schema; apply a schema to the "
-                "dataset before creating the object type"
-            ),
-            "TooManyObjectTypesInOntology": (
-                "the ontology has reached its object type limit"
-            ),
-        }
-        mapped = messages.get(terminal_name)
-        if mapped:
-            return f"{mapped} ({error_name})"
-        error_message = error_data.get("errorMessage")
-        if isinstance(error_message, str) and error_message:
-            return f"{error_name}: {error_message}"
-        return error_name
-
-    @staticmethod
-    def _error_terminal_name(error_name: str) -> str:
-        return error_name.rsplit(":", 1)[-1]
-
-    @staticmethod
-    def _require_successful_internal_response(
-        status: int,
-        payload: Any,
-        raw: str,
-        *,
-        operation: str,
-    ) -> None:
-        """Separate transport/deserialization failures from validation errors."""
-        if status == 200:
-            return
-        error_name = (
-            payload.get("errorName") if isinstance(payload, Mapping) else None
-        )
-        if status == 400:
-            detail = f" ({error_name})" if error_name else ""
-            raise RuntimeError(
-                f"{operation} request failed during contract deserialization "
-                f"with HTTP 400{detail}; the modifyOntology request shape was "
-                f"rejected before validation: {str(raw)[:300]}"
-            )
-        detail = f" ({error_name})" if error_name else ""
-        raise RuntimeError(
-            f"{operation} failed with HTTP {status}{detail}: {str(raw)[:300]}"
-        )
 
     def create_link_type(
         self,
@@ -1150,6 +1746,240 @@ class ActionService(BaseService):
             return self._format_action_type_info(metadata)
         except Exception as e:
             raise RuntimeError(f"Failed to get action type {action_type}: {e}")
+
+    def upsert_action_type(
+        self,
+        ontology_rid: str,
+        definition: Mapping[str, Any],
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Create an action type through the verified modifyOntology contract.
+
+        ``definition`` is an ``ActionTypeCreate`` JSON document (see
+        the captured contract §4). It must contain
+        ``apiName``, ``logic``, and at least one action-type-level entry in
+        ``validations`` — all required by Foundry. ``actionTypesToCreate``
+        and ``validations`` map keys must be UUID strings on the wire, so
+        the request key is always generated and any non-UUID ``validations``
+        keys are rewritten (``validationsOrdering`` is kept in sync).
+
+        Defaults to a dry-run; ``apply=True`` issues the real modification
+        and verifies the create by reading the action type back through the
+        SDK full-metadata endpoint. Existing action types are intentionally
+        not updated yet.
+        """
+        create = self._normalize_action_type_create(definition)
+        api_name = create["apiName"]
+        client = _internal_client(self)
+
+        id_in_request = str(uuid.uuid4())
+        modification_request: Dict[str, Any] = {
+            "actionTypesToCreate": {id_in_request: create}
+        }
+        plan: Dict[str, Any] = {
+            "operation": "action-type-upsert",
+            "apiName": api_name,
+            "ontologyRid": ontology_rid,
+        }
+
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="action type dry-run",
+            entity="action type",
+        )
+        validation_errors = _order_hint(
+            validation_errors,
+            step=ACTION_TYPE_UPSERT_STEP,
+            triggers={
+                "ObjectTypesNotFound": (
+                    "a parameter or rule references an object type that "
+                    "does not exist yet; run object-type-upsert (step 3) "
+                    "and link-type-upsert (step 4) before "
+                    "action-type-upsert"
+                )
+            },
+        )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Action type dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        parsed = _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="action type modify",
+        )
+        created = parsed.get("createdActionTypeRids")
+        rid = created.get(id_in_request) if isinstance(created, Mapping) else None
+        result: Dict[str, Any] = {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+            "verification": self._verify_action_type_present(
+                ontology_rid, api_name
+            ),
+        }
+        if isinstance(rid, str):
+            result["rid"] = rid
+        return result
+
+    def delete_action_type(
+        self,
+        ontology_rid: str,
+        action_type: str,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Delete an action type through the verified modifyOntology contract.
+
+        ``action_type`` is the action type API name; its RID is resolved
+        through the verified SDK full-metadata read. Defaults to a dry-run;
+        ``apply=True`` issues the real deletion and verifies it by
+        re-issuing the delete as a dry-run, which must then report the
+        action type as not found.
+        """
+        metadata = self.get_action_type(ontology_rid, action_type)
+        rid = metadata.get("rid")
+        if not isinstance(rid, str) or not rid:
+            raise RuntimeError(
+                f"Could not resolve a RID for action type {action_type}; "
+                "deletion requires the action type RID"
+            )
+        client = _internal_client(self)
+        modification_request: Dict[str, Any] = {"actionTypesToDelete": [rid]}
+        plan: Dict[str, Any] = {
+            "operation": "action-type-delete",
+            "apiName": action_type,
+            "rid": rid,
+            "ontologyRid": ontology_rid,
+        }
+
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="action type delete dry-run",
+            entity="action type",
+        )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Action type delete dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="action type delete",
+        )
+        return {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+            "verification": _verify_entity_gone(
+                client,
+                ontology_rid,
+                modification_request,
+                gone_error_names={"ActionTypesNotFound"},
+            ),
+        }
+
+    @staticmethod
+    def _normalize_action_type_create(
+        definition: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """Validate and UUID-normalize an ActionTypeCreate definition."""
+        if not isinstance(definition, Mapping):
+            raise RuntimeError(
+                "Action type definition must be a JSON object containing an "
+                "ActionTypeCreate document"
+            )
+        api_name = definition.get("apiName")
+        if not isinstance(api_name, str) or not api_name:
+            raise RuntimeError(
+                "Action type definition requires a non-empty 'apiName'"
+            )
+        logic = definition.get("logic")
+        if not isinstance(logic, Mapping) or not isinstance(
+            logic.get("rules"), list
+        ):
+            raise RuntimeError(
+                "Action type definition requires 'logic' with a 'rules' list"
+            )
+        validations = definition.get("validations")
+        if not isinstance(validations, Mapping) or not validations:
+            raise RuntimeError(
+                "Action type definition requires at least one action-type-"
+                "level entry in 'validations' (Foundry rejects action types "
+                "without one)"
+            )
+
+        create = dict(definition)
+        normalized_validations: Dict[str, Any] = {}
+        key_map: Dict[str, str] = {}
+        for key, value in validations.items():
+            new_key = str(key) if _is_uuid(key) else str(uuid.uuid4())
+            normalized_validations[new_key] = value
+            key_map[str(key)] = new_key
+        create["validations"] = normalized_validations
+
+        ordering = definition.get("validationsOrdering")
+        if isinstance(ordering, list):
+            create["validationsOrdering"] = [
+                key_map.get(str(item), item) for item in ordering
+            ]
+        else:
+            create["validationsOrdering"] = list(normalized_validations)
+        return create
+
+    def _verify_action_type_present(
+        self, ontology_rid: str, api_name: str
+    ) -> Dict[str, Any]:
+        """Read a created action type back through the verified SDK get."""
+        try:
+            self.get_action_type(ontology_rid, api_name)
+        except Exception as e:
+            return {
+                "status": "not-verified",
+                "detail": (
+                    "read-back via SDK ontologies "
+                    f"ActionTypeFullMetadata.get failed: {e}"
+                ),
+            }
+        return {
+            "status": "verified",
+            "detail": (
+                "read back via SDK ontologies ActionTypeFullMetadata.get"
+            ),
+        }
 
     def _format_action_type_info(self, metadata: Any) -> Dict[str, Any]:
         """Format an ActionTypeFullMetadata response for consistent output."""
