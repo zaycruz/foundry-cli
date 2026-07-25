@@ -1,7 +1,7 @@
 # Dependency Analysis Commands
 
-Use `pltr dependency` for a read-only, evidence-backed assessment of one
-addressable Foundry target. One invocation resolves the target, discovers a
+Use the dependency targets below for a read-only, evidence-backed assessment
+of one addressable Foundry target. One invocation resolves the target, discovers a
 bounded graph, writes the complete graph artifact, and renders the requested
 view. Rendering never triggers a second discovery pass.
 

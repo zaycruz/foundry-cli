@@ -211,7 +211,7 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
     (
         "ontology",
         "create_or_update_foundry_link_type",
-        "ontology link-type-create",
+        "ontology link-type-upsert",
         "ObjectTypeService",
         "official-catalog",
     ),
@@ -581,6 +581,50 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "search_foundry_functions": "internal GraphQL gateway: search(title:, limit:) root field (VERIFIED) with local function matching",
     "view_foundry_link_type": "foundry-platform-sdk==1.95.0: ontologies.Ontology.ObjectType.get_outgoing_link_type",
     "view_foundry_action_type": "foundry-platform-sdk==1.95.0: ontologies.ActionTypeFullMetadata.get (contract-verified; preview flag required)",
+    "create_or_update_foundry_object_type": (
+        "internal ontology-metadata (contract-verified, "
+        "the captured contract): POST "
+        "/ontology-metadata/api/ontology/v2/modify objectTypes create "
+        "variant; dry-run-first with --apply gate and SDK read-back "
+        "verification; create-only (update of existing types not yet "
+        "supported)"
+    ),
+    "delete_foundry_object_type": (
+        "internal ontology-metadata (contract-verified, "
+        "the captured contract): POST "
+        "/ontology-metadata/api/ontology/v2/modify objectTypes delete "
+        "variant keyed by internal ObjectTypeId; dry-run preview + --apply "
+        "--yes gate; verified by post-delete dry-run NotFound read-back"
+    ),
+    "create_or_update_foundry_link_type": (
+        "internal ontology-metadata (contract-verified, "
+        "the captured contract): POST "
+        "/ontology-metadata/api/ontology/v2/modify linkTypes oneToMany "
+        "create variant; dry-run-first with --apply gate and post-create "
+        "dry-run already-exists read-back; create-only"
+    ),
+    "delete_foundry_link_type": (
+        "internal ontology-metadata (contract-verified, "
+        "the captured contract): POST "
+        "/ontology-metadata/api/ontology/v2/modify linkTypes delete "
+        "variant keyed by internal LinkTypeId; dry-run preview + --apply "
+        "--yes gate; verified by post-delete dry-run NotFound read-back"
+    ),
+    "create_or_update_foundry_action_type": (
+        "internal ontology-metadata (contract-verified dry-run 2026-07-24, "
+        "the captured contract): POST "
+        "/ontology-metadata/api/ontology/v2/modify actionTypesToCreate "
+        "with UUID map keys; dry-run-first with --apply gate and SDK "
+        "full-metadata read-back; create-only"
+    ),
+    "delete_foundry_action_type": (
+        "internal ontology-metadata (contract-verified dry-run 2026-07-24, "
+        "the captured contract): POST "
+        "/ontology-metadata/api/ontology/v2/modify actionTypesToDelete by "
+        "action type RID resolved via SDK full-metadata; dry-run preview + "
+        "--apply --yes gate; verified by post-delete dry-run NotFound "
+        "read-back"
+    ),
     "list_code_repository_pull_requests": (
         "internal stemma-pull-request (contract-verified): GET "
         "/stemma-pull-request/api/pulls returns {'values': [...]}; repository "
@@ -591,11 +635,90 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "internal stemma-pull-request (contract-verified): GET "
         "/stemma-pull-request/api/pulls/{pullRequestRid}"
     ),
+    "create_code_repository_pull_request": (
+        "internal stemma-pull-request (contract-verified on a live Foundry deployment, "
+        "the captured contract): POST /pulls with {title, "
+        "baseRepositoryRid, headRepositoryRid, baseBranchName, "
+        "headCommitish} (+ optional description); strict deserialization"
+        " (400 on unknown/missing fields, 403 semantic against a "
+        "non-existent repository RID, no speculative 200); dry-run plan "
+        "by default, real POST behind --apply; end-to-end verified with "
+        "disposable test PR ri.pull-request.main.pull-request.00000000-0000-"
+        "0000-0000-000000000030 (closed unmerged after verification via "
+        "PUT /pulls/{rid}/update {title, status: CLOSED})"
+    ),
+    "create_code_repository_pull_request_comment": (
+        "internal stemma-pull-request (contract-verified on a live Foundry deployment, "
+        "the captured contract): POST "
+        "/pulls/{pullRequestRid}/comments/global with {content}; strict "
+        "strict deserialization (400 on text/body/markdown variants, 403 "
+        "semantic against a non-existent pull-request RID); dry-run plan "
+        "by default, real POST behind --apply; verified on the "
+        "disposable test PR and read back via GET "
+        "/pulls/{rid}/comments/global"
+    ),
     "view_global_branch": (
         "internal branch-service (contract-verified): PUT "
         "/branch-service/api/branch/load/{branchRid} (empty-body load; "
         "success shape UNVERIFIED — branch-service is unused on the a live Foundry deployment "
         "stack, responses passed through raw)"
+    ),
+    "create_global_branch": (
+        "internal branch-service: POST /branch-service/api/branch/create; "
+        "plan-first command (dry-run default). 2026-07-24 contract-recovery "
+        "validation (the captured contract) validation identified "
+        "{displayName, description, ontologyRid} but the request never "
+        "progressed past 400 Default:InvalidArgument, so --apply refuses "
+        "with an unverified-write-contract error instead of guessing"
+    ),
+    "close_global_branch": (
+        "internal branch-service (contract-verified): PUT "
+        "/branch-service/api/branch/close/{branchRid} (empty-body write; "
+        "error contract contract-verified — 403 Branch:PermissionDeniedError "
+        "naming branch:edit-branch; success shape UNVERIFIED). Plan-first: "
+        "real close requires --apply --yes"
+    ),
+    "create_global_proposal": (
+        "internal branch-service: POST "
+        "/branch-service/api/branch/proposal/create; plan-first command "
+        "(dry-run default). 2026-07-24 validation identified {branchRid, "
+        "description, displayName} but the request never progressed past "
+        "400 Default:InvalidArgument, so --apply refuses with an "
+        "unverified-write-contract error instead of guessing"
+    ),
+    "close_global_proposal": (
+        "internal branch-service (contract-verified): PUT "
+        "/branch-service/api/branch/proposal/close/{proposalRid} (empty-body "
+        "write; error contract contract-verified — 403 "
+        "Branch:PermissionDeniedError naming branch:edit-proposal; success "
+        "shape UNVERIFIED). Plan-first: real close requires --apply --yes"
+    ),
+    "create_foundry_rest_api_data_source_webhook": (
+        "internal webhooks API (request contract contract-verified "
+        "up to the permission boundary): POST /webhooks/api/registry/v0 "
+        "(createWebhook) with {name, apiName, description, spec, "
+        "executionPolicy} — the full body passed server-side validation on "
+        "a live Foundry deployment, failing only with 403 Compass:InsufficientPermissions; "
+        "success shape UNVERIFIED, passed through raw. Plan-first: dry-run "
+        "default, --apply sends the verified body"
+    ),
+    "update_foundry_rest_api_data_source_webhook": (
+        "internal webhooks API: POST /webhooks/api/registry/v0/{webhookRid} "
+        "(publishWebhookVersion); plan-first command (dry-run default). "
+        "2026-07-24 validation confirmed only the 'spec' request key; "
+        "the full body is UNVERIFIED (webhook creation is "
+        "permission-blocked on a live Foundry deployment), so --apply refuses with an "
+        "unverified-write-contract error instead of guessing"
+    ),
+    "create_foundry_rest_api_data_source": (
+        "internal magritte-coordinator: POST "
+        "/magritte-coordinator/api/source-store/source/v2 (addSourceV2/V3); "
+        "plan-only command. 2026-07-24 validation could NOT recover the write "
+        "contract — the service drops unknown keys leniently (defeating the "
+        "field validation) and every candidate envelope failed 400; the printed "
+        "candidate body models the live REDACTED config shape with dummy "
+        "values and is never sent. --apply refuses. The CLI never calls "
+        "getSourceConfigWithPlaintextSecretValues"
     ),
     "view_global_proposal": (
         "internal branch-service (contract-verified): PUT "
@@ -641,6 +764,25 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "local AST introspection of installed foundry-platform-sdk==1.95.0; "
         "docstrings quoted verbatim from the package"
     ),
+    "get_repository_context": (
+        "internal stemma + compass (contract-verified): GET "
+        "/stemma/api/repos/{rid} + /head + /v2/branches + /tags + "
+        "/paths/tree/{path}, plus GET /compass/api/resources/{rid}"
+        "?decoration=path; stemma silently falls back to the default-branch "
+        "tree for unresolvable ?ref= values"
+    ),
+    "clone_code_repository_locally": (
+        "git smart-HTTP (contract-verified via git ls-remote): "
+        "https://<host>/stemma/git/<repositoryRid> with the profile bearer "
+        "token as http.extraHeader injected via GIT_CONFIG_* env; token "
+        "never printed, never persisted in the clone"
+    ),
+    "create_python_transforms_code_repository": (
+        "dry-run plan only: POST /stemma/api/repos contract UNVERIFIED "
+        "2026-07-24 (12 candidate bodies all 500 Default:Internal; "
+        "the captured contract*.jsonl); --apply fails loudly with "
+        "evidence instead of guessing"
+    ),
 }
 
 # Out of scope for a Foundry operations CLI. These MCP tools generate or
@@ -648,23 +790,10 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
 # Foundry control-plane operations. They are reported so the parity picture
 # is complete, marked unsupported (with a reason) rather than dangled as
 # "planned" work this CLI intends to build.
-_SDK_REASON = (
-    "SDK generation and inspection is a codegen / IDE-assistant function "
-    "outside the scope of a Foundry operations CLI."
-)
-_WORKSPACE_REASON = (
-    "Local workspace and dev-console actions run in an IDE, not a headless CLI."
-)
-_UNSUPPORTED: dict[str, str] = {
-    # SDK / OSDK codegen and inspection
-    "convert_to_osdk_react": _SDK_REASON,
-    "generate_new_ontology_sdk_version": _SDK_REASON,
-    # local IDE / dev console / workspace
-    "connect_to_dev_console_app": _WORKSPACE_REASON,
-    "clone_code_repository_locally": _WORKSPACE_REASON,
-    "get_repository_context": _WORKSPACE_REASON,
-    "create_python_transforms_code_repository": _WORKSPACE_REASON,
-}
+# (Empty as of the parity milestone, 2026-07-24: the workspace trio — repository
+# context, local clone, python-transforms creation — was re-scoped in and
+# implemented against the internal stemma API.)
+_UNSUPPORTED: dict[str, str] = {}
 
 _U3_TEST_REFERENCES: dict[str, str] = {
     "get_project_imports": "tests/test_services/test_project.py;tests/test_commands/test_project.py",
@@ -674,6 +803,11 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "get_dataset_stats": "tests/test_services/test_dataset.py;tests/test_commands/test_dataset.py",
     "get_resource_graph": "tests/test_services/test_lineage.py;tests/test_commands/test_lineage.py",
     "create_or_update_foundry_object_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "delete_foundry_object_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "create_or_update_foundry_link_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "delete_foundry_link_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "create_or_update_foundry_action_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "delete_foundry_action_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "view_foundry_rest_api_data_source_webhook": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
     "get_foundry_ontology_rid": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "search_foundry_functions": "tests/test_services/test_functions.py;tests/test_commands/test_functions.py",
@@ -681,8 +815,20 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "view_foundry_action_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "list_code_repository_pull_requests": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
     "get_code_repository_pull_request": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "create_code_repository_pull_request": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "create_code_repository_pull_request_comment": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "get_repository_context": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "clone_code_repository_locally": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "create_python_transforms_code_repository": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
     "view_global_branch": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_branch.py",
+    "create_global_branch": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_branch.py",
+    "close_global_branch": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_branch.py",
     "view_global_proposal": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_proposal.py",
+    "create_global_proposal": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_proposal.py",
+    "close_global_proposal": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_proposal.py",
+    "create_foundry_rest_api_data_source_webhook": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
+    "update_foundry_rest_api_data_source_webhook": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
+    "create_foundry_rest_api_data_source": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
     "get_or_create_network_egress_policy": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
     "get_python_transforms_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
     "get_typescript_v1_functions_documentation": "tests/test_services/test_documentation.py;tests/test_commands/test_docs.py",
@@ -702,13 +848,6 @@ _U3_TEST_REFERENCES: dict[str, str] = {
 }
 
 _U3_BLOCKED: dict[str, str] = {
-    "create_or_update_foundry_object_type": (
-        "foundry-platform-sdk==1.95.0 exposes read-only Ontologies object-type "
-        "schema operations, but Foundry's internal ontology-metadata API exposes "
-        "object-type creation via "
-        "POST /ontology-metadata/api/ontology/v2/modify; "
-        "the CLI uses the internal API as the authoring surface"
-    ),
     "get_compute_modules_info": (
         "the internal module-group API backing compute-module info "
         "(/module-group/api/deployed-apps/*) is NOT MOUNTED on the verified "
@@ -729,6 +868,23 @@ _U3_BLOCKED: dict[str, str] = {
         "preview API features), and the 2026-07-22 gap analysis catalogues no "
         "VERIFIED internal transform-preview endpoint; implementing one would "
         "require guessing an unverified request contract"
+    ),
+    "manage_compute_modules": (
+        "compute-module management is backed by the internal module-group API "
+        "(/module-group/api/deployed-apps/*), which is NOT MOUNTED on any "
+        "accessible stack (Route:RouteNotMounted re-verified on "
+        "a live Foundry deployment, example, and example profiles); foundry-platform-sdk==1.95.0 "
+        "exposes no compute-module surface, and shipping an unverified "
+        "mutation contract would violate the false-safety rule"
+    ),
+    "execute_compute_modules_function": (
+        "compute-module function execution is backed by the internal "
+        "module-group API (/module-group/api/deployed-apps/*), which is NOT "
+        "MOUNTED on any accessible stack (Route:RouteNotMounted re-verified "
+        "2026-07-24 on a live Foundry deployment, example, and example profiles); "
+        "foundry-platform-sdk==1.95.0 exposes no compute-module surface, and "
+        "shipping an unverified mutation contract would violate the "
+        "false-safety rule"
     ),
 }
 

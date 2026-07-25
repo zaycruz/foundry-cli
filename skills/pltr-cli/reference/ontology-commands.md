@@ -23,6 +23,38 @@ pltr ontology get ONTOLOGY_RID [--format FORMAT]
 pltr ontology get ri.ontology.main.ontology.abc123
 ```
 
+## Resolve the Ontology RID
+
+```bash
+pltr ontology rid [--format FORMAT]
+
+# Prints the ontology RID for this stack. Succeeds only when exactly one
+# ontology is visible; zero or multiple visible ontologies fail loudly
+# instead of guessing.
+
+# Example
+pltr ontology rid
+```
+
+## Required Publication Order
+
+Ontology contract changes must be published in this order:
+
+1. Modify backing dataset schemas.
+2. Implement transaction functions.
+3. `object-type-upsert` — create or change object types.
+4. `link-type-upsert` — create link types between existing object types.
+5. `action-type-upsert` — create action types referencing existing object/link types.
+6. Validate actions and re-read test objects.
+7. Regenerate OSDK.
+8. Enable the corresponding application controls.
+
+Each upsert command's help text names its step, and dry-run validation
+errors for missing dependencies (for example an action type referencing an
+object type that does not exist yet) include a hint pointing back at this
+sequence. Deletes run in reverse: `action-type-delete` (step 5), then
+`link-type-delete` (step 4), then `object-type-delete` (step 3).
+
 ## Object Type Commands
 
 ### List Object Types
@@ -43,6 +75,53 @@ pltr ontology object-type-get ONTOLOGY_RID OBJECT_TYPE
 
 # Example
 pltr ontology object-type-get ri.ontology.main.ontology.abc123 Employee
+```
+
+### Create Object Type
+
+```bash
+pltr ontology object-type-create ONTOLOGY_RID \
+    --api-name API_NAME [--display-name NAME] [--primary-key FIELD] \
+    [--backing-dataset DATASET_RID] [--description TEXT]
+
+# Example
+pltr ontology object-type-create ri.ontology.main.ontology.abc123 \
+    --api-name Employee --display-name "Employee" --primary-key employeeId \
+    --backing-dataset ri.foundry.main.dataset.abc123
+```
+
+### Upsert Object Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology object-type-upsert ONTOLOGY_RID \
+    --api-name API_NAME [--display-name NAME] [--primary-key FIELD] \
+    [--backing-dataset DATASET_RID] [--description TEXT] [--apply]
+
+# Default is a dry-run plan of the modifyOntology write; nothing is written
+# without --apply. Existing object types are NOT updated yet -- the create
+# validation reports that case explicitly instead of attempting a
+# delete-and-recreate. Step 3 of the required publication order (see
+# "Required Publication Order" above); steps 1-2 (backing dataset schema,
+# transaction functions) must be done first.
+
+# Example
+pltr ontology object-type-upsert ri.ontology.main.ontology.abc123 \
+    --api-name Employee --primary-key employeeId \
+    --backing-dataset ri.foundry.main.dataset.abc123 --apply
+```
+
+### Delete Object Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology object-type-delete ONTOLOGY_RID OBJECT_TYPE_ID [--apply] [--yes]
+
+# DESTRUCTIVE. Default is a dry-run plan; the real delete requires both
+# --apply and --yes. Deletes run in reverse publication order: remove
+# dependent action types (step 5) and link types (step 4) first.
+
+# Example
+pltr ontology object-type-delete ri.ontology.main.ontology.abc123 \
+    ri.ontology.main.object-type.abc123 --apply --yes
 ```
 
 ## Object Commands
@@ -93,6 +172,88 @@ pltr ontology object-linked ONTOLOGY_RID OBJECT_TYPE PRIMARY_KEY LINK_TYPE [--pr
 pltr ontology object-linked ri.ontology.main.ontology.abc123 Employee "john.doe" worksIn
 ```
 
+### Count Objects
+
+```bash
+pltr ontology object-count ONTOLOGY_RID OBJECT_TYPE [--branch BRANCH]
+
+# Example
+pltr ontology object-count ri.ontology.main.ontology.abc123 Employee
+```
+
+### Search Objects
+
+```bash
+pltr ontology object-search ONTOLOGY_RID OBJECT_TYPE [--query TEXT] \
+    [--properties TEXT] [--page-size N] [--branch BRANCH]
+
+# Example
+pltr ontology object-search ri.ontology.main.ontology.abc123 Employee --query "engineer"
+```
+
+## Link Type Commands
+
+### Get Link Type Details
+
+```bash
+pltr ontology link-type-get ONTOLOGY_RID OBJECT_TYPE LINK_TYPE [--format FORMAT]
+
+# OBJECT_TYPE and LINK_TYPE are API names; reads one outgoing link type of
+# the object type
+
+# Example
+pltr ontology link-type-get ri.ontology.main.ontology.abc123 Employee worksIn
+```
+
+### Create Link Type
+
+```bash
+pltr ontology link-type-create ONTOLOGY_RID \
+    --api-name API_NAME --from OBJECT_TYPE --to OBJECT_TYPE \
+    [--display-name NAME] [--description TEXT] [--reverse-api-name NAME]
+
+# Example
+pltr ontology link-type-create ri.ontology.main.ontology.abc123 \
+    --api-name worksIn --from Employee --to Department
+```
+
+### Upsert Link Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology link-type-upsert ONTOLOGY_RID \
+    --api-name API_NAME --from-object-type-id ID --to-object-type-id ID \
+    [--display-name NAME] [--reverse-api-name NAME] \
+    [--one-side-primary-key FIELD] [--many-side-property PROPERTY] \
+    [--description TEXT] [--apply]
+
+# Creates a one-to-many link type. Default is a dry-run plan; nothing is
+# written without --apply. Existing link types are NOT updated yet; the
+# create validation reports that case explicitly. Step 4 of the required
+# publication order -- both object types must already exist (step 3).
+
+# Example
+pltr ontology link-type-upsert ri.ontology.main.ontology.abc123 \
+    --api-name worksIn \
+    --from-object-type-id ri.ontology.main.object-type.aaa \
+    --to-object-type-id ri.ontology.main.object-type.bbb \
+    --many-side-property departmentId --apply
+```
+
+### Delete Link Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology link-type-delete ONTOLOGY_RID LINK_TYPE_ID [--apply] [--yes]
+
+# DESTRUCTIVE. Default is a dry-run plan; the real delete requires both
+# --apply and --yes. Deletes run in reverse publication order: link types
+# (step 4) go after dependent action types (step 5), before object types
+# (step 3).
+
+# Example
+pltr ontology link-type-delete ri.ontology.main.ontology.abc123 \
+    ri.ontology.main.link-type.abc123 --apply --yes
+```
+
 ## Action Commands
 
 ### Get Action Type Details
@@ -126,6 +287,38 @@ pltr ontology action-validate ONTOLOGY_RID ACTION_TYPE PARAMETERS
 
 # Example
 pltr ontology action-validate ri.ontology.main.ontology.abc123 promoteEmployee '{"employeeId": "john.doe", "newLevel": "senior"}'
+```
+
+### Upsert Action Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology action-type-upsert ONTOLOGY_RID --definition ACTION_TYPE_CREATE_JSON [--apply]
+
+# The definition is an ActionTypeCreate JSON document (inline or @file; see
+# the captured contract section 4). Default is a dry-run
+# plan; nothing is written without --apply. Existing action types are NOT
+# updated yet; the create validation reports that case explicitly. Step 5
+# of the required publication order -- referenced object types (step 3) and
+# link types (step 4) must already exist; steps 6-8 (validate actions,
+# regenerate OSDK, enable application controls) follow.
+
+# Example
+pltr ontology action-type-upsert ri.ontology.main.ontology.abc123 \
+    --definition @action-type.json --apply
+```
+
+### Delete Action Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology action-type-delete ONTOLOGY_RID ACTION_TYPE [--apply] [--yes]
+
+# DESTRUCTIVE. Default is a dry-run plan; the real delete requires both
+# --apply and --yes. Deletes run in reverse publication order: action types
+# (step 5) are deleted first.
+
+# Example
+pltr ontology action-type-delete ri.ontology.main.ontology.abc123 \
+    promote-employee --apply --yes
 ```
 
 ## Query Commands

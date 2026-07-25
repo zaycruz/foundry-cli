@@ -892,3 +892,148 @@ class TestEgressPolicyEnsure:
         service = ConnectivityService(profile="test")
         with pytest.raises(ValueError, match="hostname is required"):
             service.ensure_egress_policy("  ")
+
+
+from pltr.services.connectivity import WebhookShapeError  # noqa: E402
+
+SOURCE_RID = "ri.magritte..source.00000000-0000-0000-0000-000000000021"
+
+
+class TestWebhookWriteService:
+    """Test cases for webhook create (verified body) and update plan."""
+
+    def test_build_create_webhook_body_minimal(self):
+        """Test the verified create body shape with the default spec."""
+        service = ConnectivityService(profile="test")
+        body = service.build_create_webhook_body(
+            "my-webhook", "MyWebhook", "desc", SOURCE_RID
+        )
+
+        assert body["name"] == "my-webhook"
+        assert body["apiName"] == "MyWebhook"
+        assert body["description"] == "desc"
+        assert body["spec"]["config"] == {
+            "type": "magritteRestWebhook",
+            "magritteRestWebhook": {"sourceRid": SOURCE_RID, "calls": []},
+        }
+        assert body["spec"]["inputs"] == []
+        assert body["spec"]["outputs"] == []
+        assert body["spec"]["storagePolicy"] == {}
+        assert set(body["executionPolicy"]) == {
+            "timeLimitSeconds",
+            "asyncTimeLimitSeconds",
+            "maximumRetryAttemptsPermitted",
+            "rateLimits",
+            "logLevel",
+        }
+
+    def test_build_create_webhook_body_spec_override(self):
+        """Test that a caller-supplied spec replaces the default."""
+        service = ConnectivityService(profile="test")
+        override = {"config": {"type": "custom"}, "inputs": []}
+        body = service.build_create_webhook_body(
+            "my-webhook", "MyWebhook", "desc", SOURCE_RID, override
+        )
+
+        assert body["spec"] == override
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_webhook_success(self, mock_client_class):
+        """Test creating a webhook returns the raw payload."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        payload = {"metadata": {"rid": "ri.webhooks.main.webhook.abc"}}
+        mock_client.conjure.return_value = (200, payload, "{...}")
+
+        service = ConnectivityService(profile="test")
+        result = service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
+
+        assert result == payload
+        args, kwargs = mock_client.conjure.call_args
+        assert args[0] == "POST"
+        assert args[1] == "webhooks/api/registry/v0"
+        assert kwargs["json_body"]["spec"]["config"]["magritteRestWebhook"][
+            "sourceRid"
+        ] == SOURCE_RID
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_webhook_permission_denied_is_loud(self, mock_client_class):
+        """Test the verified 403 permission boundary surfaces loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            403,
+            {"errorName": "Compass:InsufficientPermissions"},
+            "{}",
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 403"):
+            service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_webhook_route_not_mounted(self, mock_client_class):
+        """Test a clear error when the webhooks API is not mounted."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            404,
+            {"errorName": "Route:RouteNotMounted"},
+            "{}",
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="not mounted"):
+            service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_webhook_empty_2xx_fails_loudly(self, mock_client_class):
+        """Test that an empty success payload is a shape error."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {}, "")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(WebhookShapeError, match="Unverified"):
+            service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_webhook_transport_error_wrapped(self, mock_client_class):
+        """Test that transport failures are wrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = Exception("connection refused")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="Failed to create webhook"):
+            service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
+
+    def test_plan_update_webhook_no_network(self):
+        """Test the update plan describes the request without a client."""
+        service = ConnectivityService(profile="test")
+        plan = service.plan_update_webhook(
+            "ri.webhooks.main.webhook.abc", {"inputs": []}
+        )
+
+        assert plan["mode"] == "plan"
+        assert plan["request"]["verb"] == "POST"
+        assert plan["request"]["path"] == (
+            "/webhooks/api/registry/v0/ri.webhooks.main.webhook.abc"
+        )
+        assert plan["request"]["body"] == {"spec": {"inputs": []}}
+        assert "UNVERIFIED" in plan["contract"]
+
+    def test_plan_create_rest_source_no_network(self):
+        """Test the rest-source plan: dummy values, candidate labeled rejected."""
+        service = ConnectivityService(profile="test")
+        plan = service.plan_create_rest_source("my-source", "example.invalid")
+
+        assert plan["mode"] == "plan"
+        assert plan["request"]["verb"] == "POST"
+        assert plan["request"]["path"].endswith("/source-store/source/v2")
+        domain = plan["request"]["body"]["source"]["config"]["domains"][0]
+        assert domain["host"] == "example.invalid"
+        assert domain["scheme"] == "HTTPS"
+        assert domain["port"] == 443
+        assert "REJECTED" in plan["request"]["body_status"]
+        assert "UNVERIFIED" in plan["contract"]

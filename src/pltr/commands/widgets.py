@@ -7,6 +7,7 @@ Note: All Widgets APIs are in Private Beta.
 
 from typing import Optional
 
+from ..utils.agent_output import require_confirmation
 import typer
 from rich.console import Console
 

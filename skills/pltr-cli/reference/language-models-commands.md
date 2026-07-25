@@ -150,6 +150,27 @@ pltr language-models openai embeddings ri.language-models.main.model.xyz789 \
     --output embeddings.json
 ```
 
+## Enrollment Commands
+
+Direct API fallback endpoints for checking which models the current
+enrollment can use.
+
+```bash
+# List language models available to the current enrollment
+pltr language-models list [--format FORMAT]
+
+# Enroll/enable a model
+pltr language-models enroll MODEL_ID [--format FORMAT]
+
+# Check enrollment status for a model
+pltr language-models status MODEL_ID [--format FORMAT]
+
+# Examples
+pltr language-models list
+pltr language-models enroll anthropic.claude-3-5-sonnet-20241022-v2:0
+pltr language-models status anthropic.claude-3-5-sonnet-20241022-v2:0
+```
+
 ## Response Format
 
 ### Anthropic Response

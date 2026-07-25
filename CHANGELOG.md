@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-07-24
+
+### Added
+
+- MCP parity cycle ("the parity milestone"): the CLI now covers 68 of the 73 tools in Palantir's official Foundry MCP catalog (was 19), with the remaining 5 marked `blocked` with live evidence in `pltr capabilities`.
+- Ontology authoring via the contract-verified internal `modifyOntology` contract: `ontology object-type-upsert`, `object-type-delete`, `link-type-upsert`, `link-type-delete`, `action-type-upsert`, `action-type-delete`. All default to a dry-run validation plan; real mutations require `--apply` (deletes also `--yes`) and are read-back verified. Upserts document the required publication order and emit pointed hints when validation errors signal an out-of-order change.
+- New command groups: `repository` (pull-request list/get/create/comment, context, clone, create-python-transforms), `global-branch` and `global-proposal` (create/get/close), `dev-console` (connect, osdk definition, sdk generate, sdk install, convert-osdk-react), `docs` (11 documentation subcommands backed by Palantir's public docs site), `osdk` (context, examples), `platform-sdk` (api list, api reference).
+- New reads: `ontology rid`, `ontology link-type-get`, `ontology action-type-get`, `functions search`, `namespace list` (real Compass namespaces, replacing the Space fallback), `project templates list`, `connectivity webhook get`, `connectivity egress ensure` (read-or-refuse; never creates policies).
+- Connectivity writes: `webhook create` (contract verified to the stack permission boundary), plus plan-only `webhook update` and `rest-source create` that refuse `--apply` until their write contracts are verified.
+- Honest no-mutation postures where contracts are unverifiable without mutating: `dev-console sdk generate` and `repository create-python-transforms` exit with probe evidence instead of guessing.
+
+### Fixed
+
+- Re-verified the palantir_expert benchmark corpus against the 0.25.0 command surface and bumped its version gate.
+
 ## [0.24.0] - 2026-07-24
 
 ### Added

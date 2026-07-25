@@ -18,6 +18,10 @@ class WebhookNotFoundError(RuntimeError):
     """Raised when the webhook registry returns no webhook for a RID."""
 
 
+class WebhookShapeError(RuntimeError):
+    """Raised when a webhook registry response is not the expected JSON object."""
+
+
 class EgressPolicyNotFoundError(RuntimeError):
     """Raised when no existing egress policy matches a requested target.
 
@@ -390,6 +394,211 @@ class ConnectivityService(BaseService):
             )
 
         return dict(payload)
+
+    CREATE_WEBHOOK_CONTRACT = (
+        "request contract contract-verified on a live Foundry deployment up to "
+        "the permission boundary: {name, apiName, description, spec, "
+        "executionPolicy} fully deserialized and passed app-level validation, "
+        "failing only with 403 Compass:InsufficientPermissions. A 2xx success "
+        "shape has never been observed; responses are passed through raw."
+    )
+    UPDATE_WEBHOOK_CONTRACT = (
+        "UNVERIFIED: publishWebhookVersion (POST /registry/v0/{webhookRid}) "
+        "validation confirmed only the 'spec' key (verified); the full "
+        "request body could not be recovered without a creatable webhook, "
+        "and webhook creation is permission-blocked on a live Foundry deployment. "
+        "Refusing to guess."
+    )
+    REST_SOURCE_CONTRACT = (
+        "UNVERIFIED: magritte-coordinator addSourceV2/V3 (POST "
+        "/source-store/source/v2|v3) drops unknown keys leniently, which "
+        "defeats the field validation (verified); every candidate "
+        "envelope failed with 400 Default:InvalidArgument. The live REDACTED "
+        "config shape (GET /source-store/source/{id}/config) is shown in "
+        "the plan for operator reference only. Refusing to guess."
+    )
+
+    @staticmethod
+    def build_webhook_spec(source_rid: str) -> Dict[str, Any]:
+        """Build the minimal derived magritteRestWebhook spec."""
+        return {
+            "config": {
+                "type": "magritteRestWebhook",
+                "magritteRestWebhook": {"sourceRid": source_rid, "calls": []},
+            },
+            "inputs": [],
+            "outputs": [],
+            "storagePolicy": {},
+        }
+
+    def build_create_webhook_body(
+        self,
+        name: str,
+        api_name: str,
+        description: str,
+        source_rid: str,
+        spec: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Assemble the contract-verified createWebhook request body."""
+        return {
+            "name": name,
+            "apiName": api_name,
+            "description": description,
+            "spec": spec if spec is not None else self.build_webhook_spec(source_rid),
+            "executionPolicy": {
+                "timeLimitSeconds": None,
+                "asyncTimeLimitSeconds": None,
+                "maximumRetryAttemptsPermitted": None,
+                "rateLimits": None,
+                "logLevel": None,
+            },
+        }
+
+    def create_webhook(
+        self,
+        name: str,
+        api_name: str,
+        description: str,
+        source_rid: str,
+        spec: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a REST API data-source webhook in the webhook registry.
+
+        Write against the internal webhooks API ``POST /registry/v0``
+        (createWebhook). The request contract is contract-verified up to the
+        Compass permission boundary (see CREATE_WEBHOOK_CONTRACT); the
+        success shape is UNVERIFIED and passed through raw with strict
+        shape-checking.
+
+        Args:
+            name: Webhook display name
+            api_name: Webhook API name (server-enforced pattern)
+            description: Webhook description
+            source_rid: Magritte source RID the webhook targets
+            spec: Optional full spec override (default: minimal
+                magritteRestWebhook spec with no calls)
+
+        Returns:
+            Raw create response dictionary
+
+        Raises:
+            WebhookShapeError: If the 2xx response is not a JSON object
+            RuntimeError: If the write fails or the API is not mounted
+        """
+        body = self.build_create_webhook_body(
+            name, api_name, description, source_rid, spec
+        )
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "POST", "webhooks/api/registry/v0", json_body=body
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to create webhook '{name}': {e}") from e
+
+        if not 200 <= status < 300:
+            error_name = (
+                payload.get("errorName") if isinstance(payload, Mapping) else None
+            )
+            if error_name == "Route:RouteNotMounted":
+                raise RuntimeError(
+                    "The webhooks registry API is not mounted on this stack "
+                    "(Route:RouteNotMounted for /registry/v0)"
+                )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"Webhook registry create failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}"
+            )
+
+        if not isinstance(payload, Mapping) or not payload:
+            raise WebhookShapeError(
+                "Unverified webhook create response shape: expected a "
+                f"non-empty JSON object, got {str(raw)[:200]!r}. Refusing to "
+                "guess at the contract."
+            )
+        return dict(payload)
+
+    def plan_update_webhook(
+        self, webhook_rid: str, spec: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Describe a webhook publish (update) without issuing it.
+
+        The publishWebhookVersion contract is UNVERIFIED (see
+        UPDATE_WEBHOOK_CONTRACT), so the CLI never sends this body; the plan
+        is the deliverable.
+
+        Args:
+            webhook_rid: Webhook Resource Identifier
+            spec: Replacement webhook spec
+
+        Returns:
+            Plan dictionary with the would-be request and contract status
+        """
+        return {
+            "mode": "plan",
+            "request": {
+                "verb": "POST",
+                "path": f"/webhooks/api/registry/v0/{webhook_rid}",
+                "body": {"spec": spec},
+            },
+            "contract": self.UPDATE_WEBHOOK_CONTRACT,
+        }
+
+    def plan_create_rest_source(
+        self, name: str, host: str, scheme: str = "HTTPS", port: int = 443
+    ) -> Dict[str, Any]:
+        """
+        Describe a REST API data-source create without issuing it.
+
+        The addSourceV2/V3 contract is UNVERIFIED (see
+        REST_SOURCE_CONTRACT), so the CLI never sends a body. The candidate
+        body below models the live REDACTED config shape read from
+        ``GET /source-store/source/{id}/config`` with dummy values only --
+        it was REJECTED by the server (400) and is shown purely for operator
+        reference. This CLI never calls the plaintext-secret config variant
+        and never accepts real credentials.
+
+        Args:
+            name: Source display name
+            host: Dummy/target hostname for the source domain
+            scheme: URL scheme (default HTTPS)
+            port: Port (default 443)
+
+        Returns:
+            Plan dictionary with the candidate request and contract status
+        """
+        domain_id = "00000000-0000-4000-8000-000000000001"
+        return {
+            "mode": "plan",
+            "request": {
+                "verb": "POST",
+                "path": "/magritte-coordinator/api/source-store/source/v2",
+                "body": {
+                    "source": {
+                        "type": "webhooks-rest",
+                        "config": {
+                            "domains": [
+                                {
+                                    "domainId": domain_id,
+                                    "host": host,
+                                    "scheme": scheme,
+                                    "port": port,
+                                }
+                            ],
+                            "additionalSecrets": {},
+                        },
+                    },
+                    "name": name,
+                },
+                "body_status": "candidate only -- REJECTED by the server "
+                "(400 Default:InvalidArgument, 2026-07-24); shown for "
+                "operator reference, never sent",
+            },
+            "contract": self.REST_SOURCE_CONTRACT,
+        }
 
     EGRESS_BATCH_SIZE = 50
     # get-all-policies took ~60s in live verification; the default 30s
