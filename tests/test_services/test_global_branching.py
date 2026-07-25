@@ -199,6 +199,21 @@ class TestGlobalBranchWriteService:
         }
         assert "contract-verified" in plan["contract"]
 
+    def test_plan_create_branch_with_resources(self):
+        """Test the plan passes resource RID strings through as entries."""
+        service = GlobalBranchService(profile="test")
+        plan = service.plan_create_branch(
+            "my-branch",
+            "desc",
+            "ri.ontology.main.ontology.abc",
+            ["ri.foundry.main.dataset.aaa", "ri.foundry.main.dataset.bbb"],
+        )
+
+        assert plan["request"]["body"]["resourcesToAdd"] == [
+            "ri.foundry.main.dataset.aaa",
+            "ri.foundry.main.dataset.bbb",
+        ]
+
     @patch("pltr.services.global_branching.FoundryInternalClient")
     def test_resolve_compass_namespace(self, mock_client_class):
         """Test namespace resolution reads ontologies[rid].compassNamespaceRid."""
@@ -283,6 +298,43 @@ class TestGlobalBranchWriteService:
                 "displayName": "my-branch",
                 "ontologyRid": ONTOLOGY_RID,
                 "resourcesToAdd": [],
+                "compassNamespaceRid": NAMESPACE_RID,
+            },
+        )
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_branch_with_resources(self, mock_client_class):
+        """Test create posts plain-string resourcesToAdd entries."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        branch_record = {
+            "branchRid": BRANCH_RID,
+            "displayName": "my-branch",
+            "branchStatus": "OPEN",
+        }
+        mock_client.conjure.side_effect = [
+            (
+                200,
+                {"ontologies": {ONTOLOGY_RID: {"compassNamespaceRid": NAMESPACE_RID}}},
+                "{...}",
+            ),
+            (200, {"branchRecord": branch_record}, "{...}"),
+        ]
+
+        service = GlobalBranchService(profile="test")
+        result = service.create_branch(
+            "my-branch", "desc", ONTOLOGY_RID, ["ri.foundry.main.dataset.aaa"]
+        )
+
+        assert result == {"branchRid": BRANCH_RID, "branchRecord": branch_record}
+        mock_client.conjure.assert_any_call(
+            "POST",
+            "branch-service/api/branch/create",
+            json_body={
+                "description": "desc",
+                "displayName": "my-branch",
+                "ontologyRid": ONTOLOGY_RID,
+                "resourcesToAdd": ["ri.foundry.main.dataset.aaa"],
                 "compassNamespaceRid": NAMESPACE_RID,
             },
         )
@@ -450,6 +502,44 @@ class TestGlobalBranchWriteService:
             service.close_branch(BRANCH_RID)
 
 
+class TestBuildMergeTo:
+    """Test cases for the ProposalMergeTo union encoding."""
+
+    TARGET_RID = "ri.branch..branch.99999999-8888-7777-6666-555555555555"
+
+    def test_main_arm(self):
+        """Test 'main' encodes as {"main": {}, "type": "main"}."""
+        assert GlobalProposalService.build_merge_to("main") == {
+            "main": {},
+            "type": "main",
+        }
+
+    def test_main_arm_returns_a_copy(self):
+        """Test the shared MERGE_TO_MAIN dict is not leaked to callers."""
+        encoded = GlobalProposalService.build_merge_to("main")
+        encoded["main"]["mutated"] = True
+        assert GlobalProposalService.MERGE_TO_MAIN == {"main": {}, "type": "main"}
+
+    def test_branch_rid_arm(self):
+        """Test a branch RID encodes as {"branchRid": rid, "type": "branchRid"}."""
+        assert GlobalProposalService.build_merge_to(self.TARGET_RID) == {
+            "branchRid": self.TARGET_RID,
+            "type": "branchRid",
+        }
+
+    def test_invalid_target_fails_loudly(self):
+        """Test anything else raises before any network request."""
+        with pytest.raises(ValueError, match="Invalid merge target"):
+            GlobalProposalService.build_merge_to("bogus")
+
+    def test_wrong_rid_prefix_fails_loudly(self):
+        """Test a non-branch RID is rejected as a merge target."""
+        with pytest.raises(ValueError, match="Invalid merge target"):
+            GlobalProposalService.build_merge_to(
+                "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000003"
+            )
+
+
 class TestGlobalProposalWriteService:
     """Test cases for Global Proposal create-plan and close."""
 
@@ -468,6 +558,27 @@ class TestGlobalProposalWriteService:
             "mergeTo": {"main": {}, "type": "main"},
         }
         assert "contract-verified" in plan["contract"]
+
+    def test_plan_create_proposal_merge_to_branch_rid(self):
+        """Test the plan encodes a branch-RID merge target as the union arm."""
+        service = GlobalProposalService(profile="test")
+        target_rid = "ri.branch..branch.99999999-8888-7777-6666-555555555555"
+        plan = service.plan_create_proposal(
+            BRANCH_RID, "my-proposal", "desc", merge_to=target_rid
+        )
+
+        assert plan["request"]["body"]["mergeTo"] == {
+            "branchRid": target_rid,
+            "type": "branchRid",
+        }
+
+    def test_plan_create_proposal_invalid_merge_to(self):
+        """Test an invalid merge target fails before any network request."""
+        service = GlobalProposalService(profile="test")
+        with pytest.raises(ValueError, match="Invalid merge target"):
+            service.plan_create_proposal(
+                BRANCH_RID, "my-proposal", "desc", merge_to="bogus"
+            )
 
     @patch("pltr.services.global_branching.FoundryInternalClient")
     def test_create_proposal_success(self, mock_client_class):
@@ -497,6 +608,40 @@ class TestGlobalProposalWriteService:
                 "displayName": "my-proposal",
                 "description": "desc",
                 "mergeTo": {"main": {}, "type": "main"},
+            },
+        )
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_proposal_merge_to_branch_rid(self, mock_client_class):
+        """Test create posts the branchRid union arm for a branch target."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        proposal_record = {
+            "proposalRid": PROPOSAL_RID,
+            "proposalBranchRid": BRANCH_RID,
+            "proposalStatus": "OPEN",
+        }
+        mock_client.conjure.return_value = (
+            200,
+            {"proposal": proposal_record},
+            "{...}",
+        )
+
+        target_rid = "ri.branch..branch.99999999-8888-7777-6666-555555555555"
+        service = GlobalProposalService(profile="test")
+        result = service.create_proposal(
+            BRANCH_RID, "my-proposal", "desc", merge_to=target_rid
+        )
+
+        assert result == {"proposalRid": PROPOSAL_RID, "proposal": proposal_record}
+        mock_client.conjure.assert_called_once_with(
+            "POST",
+            "branch-service/api/branch/proposal/create",
+            json_body={
+                "branchRid": BRANCH_RID,
+                "displayName": "my-proposal",
+                "description": "desc",
+                "mergeTo": {"branchRid": target_rid, "type": "branchRid"},
             },
         )
 

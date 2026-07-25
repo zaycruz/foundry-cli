@@ -123,3 +123,22 @@ pltr repository pull-request comment PULL_REQUEST_RID CONTENT [--apply] [--forma
 pltr repository pull-request comment ri.pull-request.main.pull-request.abc123 \
     "looks good" --apply
 ```
+
+### Close Pull Request
+
+```bash
+pltr repository pull-request close PULL_REQUEST_RID [--apply] [--yes] [--format FORMAT]
+
+# Closes the pull request via PUT /pulls/{rid}/update with
+# {"title": <current title>, "status": "CLOSED"} (both fields required;
+# contract contract-verified on a live Foundry deployment, see
+# the captured contract). The pull request is read first to
+# obtain its title. Default is a dry-run plan of the exact PUT body; the
+# real close requires --apply --yes. An already-CLOSED pull request is
+# reported as already-closed instead of being re-closed.
+
+# Examples
+pltr repository pull-request close ri.pull-request.main.pull-request.abc123
+pltr repository pull-request close ri.pull-request.main.pull-request.abc123 \
+    --apply --yes
+```

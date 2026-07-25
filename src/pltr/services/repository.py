@@ -22,6 +22,11 @@ Pull-request reads plus contract-verified writes backed by the internal
   deserialization probes that stop short of any 200 and then verified
   end-to-end on a disposable test pull request (closed unmerged
   afterward); see ``the captured contract``.
+- ``PUT /stemma-pull-request/api/pulls/{pullRequestRid}/update`` closes a
+  pull request with ``{"title": <current title>, "status": "CLOSED"}``
+  (both fields required; the title is read from the verified get first).
+  Dry-run plan by default; the real close sits behind ``--apply --yes``.
+  See ``the captured contract``.
 
 Repository context (contract-verified on a live Foundry deployment, probes retained
 under ``the captured contract``):
@@ -414,6 +419,158 @@ class RepositoryService(BaseService):
                 "/pulls/{rid}/comments/global before retrying."
             )
         return dict(payload)
+
+    # ------------------------------------------------------------------
+    # Pull-request close
+    #
+    # Contract contract-verified on a live Foundry deployment during the
+    # pr-write cleanup (the captured contract): PUT
+    # /stemma-pull-request/api/pulls/{pullRequestRid}/update with
+    # {"title": <current title>, "status": "CLOSED"} -> 200; probes with
+    # {}, {"status"} alone, and {"title"} alone all 400, so both fields
+    # are required. The title is read from the verified pull-request get
+    # (currentRecord.title) before the PUT is issued.
+    # ------------------------------------------------------------------
+
+    #: Evidence for the PUT /pulls/{rid}/update close contract.
+    PULL_REQUEST_CLOSE_CONTRACT_EVIDENCE = (
+        "PUT /stemma-pull-request/api/pulls/{pullRequestRid}/update close "
+        "contract contract-verified on a live Foundry deployment "
+        "(the captured contract): probes with {}, "
+        '{"status": "CLOSED"} alone, and {"title": ...} alone all failed '
+        "deserialization with 400 Default:InvalidArgument; "
+        '{"title": <current title>, "status": "CLOSED"} returned 200 and '
+        "the read-back confirmed currentRecord.status=CLOSED, "
+        "merged=false, closeAttribution set on disposable test PR "
+        "ri.pull-request.main.pull-request.00000000-0000-0000-0000-"
+        "000000000030 (never merged)"
+    )
+
+    @staticmethod
+    def _pull_request_title_and_status(
+        pull_request: Mapping[str, Any], raw_hint: str
+    ) -> Tuple[str, str]:
+        """Extract (title, status) from a verified pull request object."""
+        record = pull_request.get("currentRecord")
+        if not isinstance(record, Mapping) or not isinstance(record.get("title"), str):
+            raise PullRequestShapeError(
+                "Unverified pull-request response shape: expected "
+                "currentRecord.title to be a string, got "
+                f"{raw_hint!r}. Refusing to guess at the contract."
+            )
+        status = record.get("status")
+        if not isinstance(status, str):
+            raise PullRequestShapeError(
+                "Unverified pull-request response shape: expected "
+                "currentRecord.status to be a string, got "
+                f"{raw_hint!r}. Refusing to guess at the contract."
+            )
+        return record["title"], status
+
+    def close_pull_request_plan(self, pull_request_rid: str) -> Dict[str, Any]:
+        """
+        Build the dry-run plan for closing a pull request.
+
+        Reads the pull request first (verified GET /pulls/{rid}) because the
+        verified close body requires the current title; the plan shows the
+        exact body ``close_pull_request`` PUTs under ``--apply --yes``.
+        """
+        pull_request = self.get_pull_request(pull_request_rid)
+        title, status = self._pull_request_title_and_status(
+            pull_request, str(pull_request)[:200]
+        )
+        return {
+            "status": "dry-run",
+            "operation": "close_code_repository_pull_request",
+            "pull_request_rid": pull_request_rid,
+            "current_status": status,
+            "already_closed": status == "CLOSED",
+            "intended_endpoint": (
+                f"PUT /stemma-pull-request/api/pulls/{pull_request_rid}/update"
+            ),
+            "intended_body": {"title": title, "status": "CLOSED"},
+            "contract": "VERIFIED",
+            "evidence": self.PULL_REQUEST_CLOSE_CONTRACT_EVIDENCE,
+            "apply_note": "Re-run with --apply --yes to issue the PUT.",
+        }
+
+    def close_pull_request(self, pull_request_rid: str) -> Dict[str, Any]:
+        """
+        Close a pull request (real PUT /pulls/{rid}/update).
+
+        Reads the pull request first to obtain the current title (the
+        verified close body requires it). An already-CLOSED pull request is
+        reported honestly as ``already-closed`` without re-issuing the PUT.
+        Otherwise exactly the body the dry-run plan shows is PUT, and the
+        pull request is read back so the result reports the server-recorded
+        status and merged flag rather than assuming them.
+
+        Raises:
+            PullRequestNotFoundError: If no pull request exists for the RID
+            PullRequestShapeError: If a response shape drifts from verified
+            RuntimeError: If the write fails or the API is not mounted
+        """
+        plan = self.close_pull_request_plan(pull_request_rid)
+        if plan["already_closed"]:
+            return {
+                "status": "already-closed",
+                "operation": "close_code_repository_pull_request",
+                "pull_request_rid": pull_request_rid,
+                "current_status": plan["current_status"],
+                "note": ("Pull request is already CLOSED; no update was issued."),
+                "contract": "VERIFIED",
+                "evidence": self.PULL_REQUEST_CLOSE_CONTRACT_EVIDENCE,
+            }
+
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "PUT",
+                f"stemma-pull-request/api/pulls/{pull_request_rid}/update",
+                json_body=plan["intended_body"],
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to close pull request {pull_request_rid}: {e}"
+            ) from e
+        self._raise_for_status(status, payload, raw, "pull-request close")
+        if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
+            raise PullRequestShapeError(
+                "Unverified pull-request close response shape: expected an "
+                f'object with a string "rid", got {str(raw)[:200]!r}. '
+                "The PUT may still have succeeded; reconcile via "
+                "repository pull-request get before retrying."
+            )
+
+        verification: Dict[str, Any]
+        try:
+            read_back = self.get_pull_request(pull_request_rid)
+            record = read_back.get("currentRecord")
+            record = record if isinstance(record, Mapping) else {}
+            verification = {
+                "status": record.get("status"),
+                "merged": record.get("merged"),
+                "close_verified": record.get("status") == "CLOSED",
+            }
+        except Exception as e:
+            verification = {
+                "close_verified": None,
+                "verification_error": (
+                    f"read-back failed after a successful close PUT: {e}. "
+                    "The PUT returned 200; verify via `pltr repository "
+                    "pull-request get` before retrying anything."
+                ),
+            }
+
+        return {
+            "status": "closed",
+            "operation": "close_code_repository_pull_request",
+            "pull_request_rid": pull_request_rid,
+            "pull_request": dict(payload),
+            "verification": verification,
+            "contract": "VERIFIED",
+            "evidence": self.PULL_REQUEST_CLOSE_CONTRACT_EVIDENCE,
+        }
 
     # ------------------------------------------------------------------
     # Repository context (read-only, contract-verified on a live Foundry deployment)

@@ -38,7 +38,9 @@ pull_request_app = typer.Typer()
 console = Console()
 formatter = OutputFormatter(console)
 
-app.add_typer(pull_request_app, name="pull-request", help="Inspect pull requests")
+app.add_typer(
+    pull_request_app, name="pull-request", help="Inspect and manage pull requests"
+)
 
 
 @pull_request_app.command("list")
@@ -330,6 +332,92 @@ def comment_pull_request(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error commenting on pull request: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@pull_request_app.command("close")
+def close_pull_request(
+    pull_request_rid: str = typer.Argument(
+        ..., help="Pull request Resource Identifier", autocompletion=complete_rid
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real PUT /pulls/{rid}/update (default: dry-run plan only)",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="Confirm the close (required with --apply)"
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Close a code repository pull request (dry-run plan by default).
+
+    Writes the internal stemma-pull-request API (PUT
+    /pulls/{pullRequestRid}/update) whose close contract was contract-verified
+    2026-07-24 on a live Foundry deployment: the body is {"title": <current title>,
+    "status": "CLOSED"} with both fields required, so the pull request is
+    read first to obtain its title. Without --apply the command prints the
+    exact intended write and changes nothing; the real close requires both
+    --apply and --yes. An already-CLOSED pull request is reported honestly
+    instead of being re-closed.
+    """
+    try:
+        cache_rid(pull_request_rid)
+        service = RepositoryService(profile=profile)
+
+        if apply:
+            if not require_confirmation(
+                f"Close pull request {pull_request_rid}?",
+                confirmed=yes,
+                option_name="--yes",
+            ):
+                console.print("[yellow]Close cancelled[/yellow]")
+                raise typer.Exit(1)
+            with SpinnerProgressTracker().track_spinner(
+                f"Closing pull request {pull_request_rid}..."
+            ):
+                result = service.close_pull_request(pull_request_rid)
+            warnings = []
+        else:
+            with SpinnerProgressTracker().track_spinner(
+                f"Fetching pull request {pull_request_rid}..."
+            ):
+                result = service.close_pull_request_plan(pull_request_rid)
+            warnings = [result["evidence"]]
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                result,
+                meta={
+                    "operation": "close_code_repository_pull_request",
+                    "pull_request_rid": pull_request_rid,
+                    "status": result.get("status"),
+                },
+                warnings=warnings,
+            )
+        else:
+            formatter.format_output([result], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (PullRequestNotFoundError, PullRequestShapeError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error closing pull request: {e}[/red]")
         raise typer.Exit(1)
 
 

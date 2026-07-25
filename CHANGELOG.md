@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-07-25
+
+### Added
+
+- `repository pull-request close` — closes a PR via `PUT /stemma-pull-request/api/pulls/{rid}/update` (fetch-then-close, plan default, `--apply --yes`, read-back verification; already-closed short-circuits, server confirmed idempotent). contract-verified: disposable test PR created, closed, and confirmed CLOSED/merged=false on a live Foundry deployment.
+- `global-proposal create --merge-to main|<branch-rid>` — full `ProposalMergeTo` union support (both arms evidenced from recovered generated types: `main` and `branchRid`). Invalid targets fail loud with the server's typed `Branch:InvalidMergeTo`.
+- `global-branch create --add-resource <rid>` (repeatable) — non-empty `resourcesToAdd` entries (plain ResourceRid strings; live-verified shape). Unbranchable resources surface the server's typed `Branch:ResourcesUnableToBranchError`.
+- `preview_transform` remains a documented gap; the local-dev-access preview endpoint is mounted but exposes no usable grant.
+
 ## [0.27.0] - 2026-07-25
 
 ### Added

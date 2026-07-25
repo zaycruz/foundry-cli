@@ -140,7 +140,7 @@ class TestGlobalProposalCreateCommand:
 
         assert result.exit_code == 0
         mock_service.plan_create_proposal.assert_called_once_with(
-            BRANCH_RID, "my-proposal", ""
+            BRANCH_RID, "my-proposal", "", merge_to="main"
         )
 
     @patch("pltr.commands.global_proposal.GlobalProposalService")
@@ -167,7 +167,7 @@ class TestGlobalProposalCreateCommand:
 
         assert result.exit_code == 0
         mock_service.create_proposal.assert_called_once_with(
-            BRANCH_RID, "my-proposal", ""
+            BRANCH_RID, "my-proposal", "", merge_to="main"
         )
 
     @patch("pltr.commands.global_proposal.GlobalProposalService")
@@ -206,6 +206,87 @@ class TestGlobalProposalCreateCommand:
         assert envelope["meta"]["branch_rid"] == BRANCH_RID
         assert envelope["meta"]["proposal_rid"] == PROPOSAL_RID
         assert envelope["meta"]["write_verified"] is True
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_merge_to_branch_rid_plan(self, mock_service_class):
+        """Test --merge-to <branch-rid> reaches the plan unchanged."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_proposal.return_value = {"mode": "plan"}
+
+        target_rid = "ri.branch..branch.99999999-8888-7777-6666-555555555555"
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-proposal",
+                "create",
+                "my-proposal",
+                "--branch-rid",
+                BRANCH_RID,
+                "--merge-to",
+                target_rid,
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.plan_create_proposal.assert_called_once_with(
+            BRANCH_RID, "my-proposal", "", merge_to=target_rid
+        )
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_merge_to_branch_rid_apply(self, mock_service_class):
+        """Test --apply --merge-to <branch-rid> reaches the create unchanged."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_proposal.return_value = {
+            "proposalRid": PROPOSAL_RID,
+            "proposal": {"proposalRid": PROPOSAL_RID},
+        }
+
+        target_rid = "ri.branch..branch.99999999-8888-7777-6666-555555555555"
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-proposal",
+                "create",
+                "my-proposal",
+                "--branch-rid",
+                BRANCH_RID,
+                "--merge-to",
+                target_rid,
+                "--apply",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.create_proposal.assert_called_once_with(
+            BRANCH_RID, "my-proposal", "", merge_to=target_rid
+        )
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_invalid_merge_to_fails_loudly(self, mock_service_class):
+        """Test an invalid merge target surfaces the validation error."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_proposal.side_effect = ValueError(
+            "Invalid merge target 'bogus': expected 'main' or a global branch RID"
+        )
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-proposal",
+                "create",
+                "my-proposal",
+                "--branch-rid",
+                BRANCH_RID,
+                "--merge-to",
+                "bogus",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Invalid merge target" in result.stdout
 
     @patch("pltr.commands.global_proposal.GlobalProposalService")
     def test_create_apply_error(self, mock_service_class):

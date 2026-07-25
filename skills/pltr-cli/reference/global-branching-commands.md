@@ -7,6 +7,8 @@ a live Foundry deployment 2026-07-25 — request/response shapes derived from
 `@palantir/mcp` client contract (`the captured contract`)
 and confirmed by a live create→load→proposal→close→close run
 (`the captured contract`).
+The `mergeTo` union arms and `resourcesToAdd` element shape were verified
+separately (`the captured contract`).
 
 Write commands are plan-first: they print a dry-run plan by default and
 issue no network request. A real mutation requires `--apply`; destructive
@@ -36,7 +38,8 @@ pltr global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024
 
 ```bash
 pltr global-branch create DISPLAY_NAME \
-    [--ontology-rid ONTOLOGY_RID] [--description TEXT] [--apply] [--format FORMAT]
+    [--ontology-rid ONTOLOGY_RID] [--description TEXT] \
+    [--add-resource RESOURCE_RID]... [--apply] [--format FORMAT]
 
 # Backed by branch-service POST /branch/create (contract-verified).
 # The command first resolves the ontology's compassNamespaceRid via
@@ -47,6 +50,13 @@ pltr global-branch create DISPLAY_NAME \
 #  compassNamespaceRid} and returns the new branch RID
 # (branchRecord.branchRid, ri.branch..branch.<uuid>). Without --apply the
 # command prints the dry-run plan and issues no network request.
+#
+# --add-resource is repeatable; entries are sent as plain ResourceRid
+# strings in resourcesToAdd (server-evidenced: object entries
+# are rejected with 422 Conjure:UnprocessableEntity). The server rejects
+# resources it cannot branch with a typed
+# Branch:ResourcesUnableToBranchError. The default empty array is the
+# fully contract-verified path.
 
 # Example
 pltr global-branch create "My Branch" \
@@ -82,12 +92,18 @@ pltr global-proposal get ri.branch..proposal.00000000-0000-0000-0000-00000000002
 
 ```bash
 pltr global-proposal create DISPLAY_NAME \
-    [--branch-rid BRANCH_RID] [--description TEXT] [--apply] [--format FORMAT]
+    [--branch-rid BRANCH_RID] [--description TEXT] \
+    [--merge-to main|BRANCH_RID] [--apply] [--format FORMAT]
 
 # Backed by branch-service POST /branch/proposal/create (contract-verified
 # 2026-07-25). Sends {branchRid, displayName, description, mergeTo} where
-# mergeTo is the Conjure union {"main": {}, "type": "main"}, and returns the
-# new proposal RID (proposal.proposalRid, ri.branch..proposal.<uuid>).
+# mergeTo is the ProposalMergeTo Conjure union with two arms (generated
+# @palantir/branch-service-api proposalMergeTo.js evidence): the default
+# --merge-to main sends {"main": {}, "type": "main"} (contract-verified 200);
+# a global branch RID sends {"branchRid": <rid>, "type": "branchRid"}
+# (encoding server-accepted; the server validates the target semantically
+# and answers a typed Branch:InvalidMergeTo when invalid). Returns the new
+# proposal RID (proposal.proposalRid, ri.branch..proposal.<uuid>).
 # Without --apply the command prints the dry-run plan and issues no network
 # request.
 

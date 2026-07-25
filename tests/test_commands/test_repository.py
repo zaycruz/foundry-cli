@@ -697,3 +697,146 @@ class TestPullRequestCommentCommand:
 
         assert result.exit_code == 1
         assert "Error commenting on pull request" in result.stdout
+
+
+class TestPullRequestCloseCommand:
+    """Test cases for `repository pull-request close`."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    def _plan(self):
+        return {
+            "status": "dry-run",
+            "operation": "close_code_repository_pull_request",
+            "pull_request_rid": PR_RID,
+            "current_status": "OPEN",
+            "already_closed": False,
+            "intended_endpoint": (
+                f"PUT /stemma-pull-request/api/pulls/{PR_RID}/update"
+            ),
+            "intended_body": {"title": "t", "status": "CLOSED"},
+            "contract": "VERIFIED",
+            "evidence": "contract-verified",
+        }
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_default_is_dry_run_plan(self, mock_service_class):
+        """Test the default posture prints the dry-run plan, never PUTs."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_pull_request_plan.return_value = self._plan()
+
+        result = self.runner.invoke(
+            app, ["pull-request", "close", PR_RID, "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        assert "dry-run" in result.stdout
+        mock_service.close_pull_request_plan.assert_called_once_with(PR_RID)
+        mock_service.close_pull_request.assert_not_called()
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_apply_requires_yes(self, mock_service_class):
+        """Test --apply without --yes prompts and honours a refusal."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+
+        result = self.runner.invoke(
+            app, ["pull-request", "close", PR_RID, "--apply"], input="n\n"
+        )
+
+        assert result.exit_code == 1
+        assert "Close cancelled" in result.stdout
+        mock_service.close_pull_request.assert_not_called()
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_apply_yes_closes(self, mock_service_class):
+        """Test --apply --yes forwards to the real close."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_pull_request.return_value = {
+            "status": "closed",
+            "operation": "close_code_repository_pull_request",
+            "pull_request_rid": PR_RID,
+            "verification": {"status": "CLOSED", "merged": False},
+            "contract": "VERIFIED",
+            "evidence": "contract-verified",
+        }
+
+        result = self.runner.invoke(
+            app,
+            ["pull-request", "close", PR_RID, "--apply", "--yes", "--format", "json"],
+        )
+
+        assert result.exit_code == 0
+        assert "closed" in result.stdout
+        mock_service.close_pull_request.assert_called_once_with(PR_RID)
+        mock_service.close_pull_request_plan.assert_not_called()
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_already_closed_reported(self, mock_service_class):
+        """Test an already-closed pull request is reported honestly."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_pull_request.return_value = {
+            "status": "already-closed",
+            "operation": "close_code_repository_pull_request",
+            "pull_request_rid": PR_RID,
+            "note": "Pull request is already CLOSED; no update was issued.",
+            "contract": "VERIFIED",
+            "evidence": "contract-verified",
+        }
+
+        result = self.runner.invoke(
+            app,
+            ["pull-request", "close", PR_RID, "--apply", "--yes", "--format", "json"],
+        )
+
+        assert result.exit_code == 0
+        assert "already-closed" in result.stdout
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_close_not_found(self, mock_service_class):
+        """Test close when no pull request exists for the RID."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_pull_request_plan.side_effect = PullRequestNotFoundError(
+            f"No pull request found for RID {PR_RID}"
+        )
+
+        result = self.runner.invoke(app, ["pull-request", "close", PR_RID])
+
+        assert result.exit_code == 1
+        assert "No pull request found" in result.stdout
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_close_shape_error(self, mock_service_class):
+        """Test that unverified response shapes fail loudly."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_pull_request.side_effect = PullRequestShapeError(
+            "Unverified pull-request close response shape"
+        )
+
+        result = self.runner.invoke(
+            app, ["pull-request", "close", PR_RID, "--apply", "--yes"]
+        )
+
+        assert result.exit_code == 1
+        assert "Unverified" in result.stdout
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_close_error(self, mock_service_class):
+        """Test close error handling."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_pull_request.side_effect = Exception("HTTP 400")
+
+        result = self.runner.invoke(
+            app, ["pull-request", "close", PR_RID, "--apply", "--yes"]
+        )
+
+        assert result.exit_code == 1
+        assert "Error closing pull request" in result.stdout
