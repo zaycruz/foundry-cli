@@ -54,8 +54,8 @@ def get_branch(
 
     Reads the internal branch-service API (PUT /branch/load/{branchRid}, an
     empty-body load). There is no list endpoint; load-by-RID only. The
-    success response shape is UNVERIFIED on a live Foundry deployment and is passed
-    through raw.
+    success response shape (``{"branchRecord": {...}}``) was contract-verified
+    on a live Foundry deployment 2026-07-25 and is passed through raw.
     """
     try:
         cache_rid(branch_rid)
@@ -72,7 +72,7 @@ def get_branch(
                 meta={
                     "operation": "view_global_branch",
                     "branch_rid": branch_rid,
-                    "shape_verified": False,
+                    "shape_verified": True,
                 },
             )
         else:
@@ -98,9 +98,7 @@ def create_branch(
         help="Ontology RID the branch forks",
         autocompletion=complete_rid,
     ),
-    description: str = typer.Option(
-        "", "--description", help="Branch description"
-    ),
+    description: str = typer.Option("", "--description", help="Branch description"),
     apply: bool = typer.Option(
         False,
         "--apply",
@@ -120,54 +118,64 @@ def create_branch(
         None, "--output", "-o", help="Output file path"
     ),
 ):
-    """Create a Global Branch (plan-first; --apply currently blocked).
+    """Create a Global Branch (plan-first; --apply issues the real mutation).
 
-    Backed by branch-service ``POST /branch/create``. 2026-07-24
-    contract-recovery validation on a live Foundry deployment identified the request fields
-    ``{displayName, description, ontologyRid}`` but the request never
-    progressed past ``400 Default:InvalidArgument`` -- the contract is NOT
-    verified end-to-end, so ``--apply`` refuses rather than guessing.
+    Backed by branch-service ``POST /branch/create`` with the contract
+    verified end-to-end 2026-07-25 from ``@palantir/mcp`` client contracts on
+    a live Foundry deployment (``the captured contract``).
+    The create resolves the ontology's ``compassNamespaceRid`` from
+    ontology-metadata first, then sends ``{description, displayName,
+    ontologyRid, resourcesToAdd, compassNamespaceRid}`` and returns the new
+    branch RID (``ri.branch..branch.<uuid>`` — double dot).
 
     Without ``--apply`` the command prints the dry-run plan and issues no
     network request.
     """
-    service = GlobalBranchService(profile=profile)
-    plan = service.plan_create_branch(display_name, description, ontology_rid)
+    try:
+        service = GlobalBranchService(profile=profile)
 
-    if not apply:
+        if not apply:
+            plan = service.plan_create_branch(display_name, description, ontology_rid)
+            if agent_mode_enabled() or format == "agent":
+                buffer_agent_payload(
+                    plan,
+                    meta={
+                        "operation": "create_global_branch",
+                        "mode": "plan",
+                        "write_verified": True,
+                    },
+                )
+            else:
+                formatter.format_output([plan], format, output)
+            return
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Creating global branch {display_name}..."
+        ):
+            result = service.create_branch(display_name, description, ontology_rid)
+
         if agent_mode_enabled() or format == "agent":
             buffer_agent_payload(
-                plan,
+                result,
                 meta={
                     "operation": "create_global_branch",
-                    "mode": "plan",
-                    "shape_verified": False,
-                    "write_verified": False,
+                    "mode": "applied",
+                    "branch_rid": result["branchRid"],
+                    "write_verified": True,
                 },
             )
         else:
-            formatter.format_output([plan], format, output)
-        return
+            formatter.format_output([result], format, output)
 
-    message = (
-        "create_global_branch write contract UNVERIFIED: "
-        f"{GlobalBranchService.CREATE_CONTRACT} "
-        "Not issuing the mutation. Evidence: the captured contract"
-    )
-    if agent_mode_enabled() or format == "agent":
-        buffer_agent_payload(
-            plan,
-            meta={
-                "operation": "create_global_branch",
-                "mode": "blocked",
-                "shape_verified": False,
-                "write_verified": False,
-            },
-            errors=[{"type": "unverified-write-contract", "message": message}],
-        )
-    else:
-        console.print(f"[red]{message}[/red]")
-    raise typer.Exit(1)
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (GlobalBranchNotFoundError, GlobalBranchShapeError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error creating global branch: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command("close")
@@ -200,10 +208,9 @@ def close_branch(
     """Close a Global Branch (DESTRUCTIVE; plan-first).
 
     Backed by branch-service ``PUT /branch/close/{branchRid}`` (empty-body
-    write; error contract contract-verified, success shape
-    UNVERIFIED and passed through raw). Without ``--apply`` the command
-    prints the dry-run plan and issues no network request. The real close
-    requires both ``--apply`` and ``--yes``.
+    write returning ``200 {}``; contract-verified on a live Foundry deployment 2026-07-25).
+    Without ``--apply`` the command prints the dry-run plan and issues no
+    network request. The real close requires both ``--apply`` and ``--yes``.
     """
     try:
         cache_rid(branch_rid)
@@ -226,7 +233,7 @@ def close_branch(
                         "operation": "close_global_branch",
                         "branch_rid": branch_rid,
                         "mode": "plan",
-                        "shape_verified": False,
+                        "shape_verified": True,
                     },
                 )
             else:
@@ -252,7 +259,7 @@ def close_branch(
                     "operation": "close_global_branch",
                     "branch_rid": branch_rid,
                     "mode": "applied",
-                    "shape_verified": False,
+                    "shape_verified": True,
                 },
             )
         else:

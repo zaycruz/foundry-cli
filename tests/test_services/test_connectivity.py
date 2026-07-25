@@ -3,6 +3,7 @@ Tests for connectivity service wrapper.
 """
 
 import pytest
+import uuid
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
@@ -919,13 +920,8 @@ class TestWebhookWriteService:
         assert body["spec"]["inputs"] == []
         assert body["spec"]["outputs"] == []
         assert body["spec"]["storagePolicy"] == {}
-        assert set(body["executionPolicy"]) == {
-            "timeLimitSeconds",
-            "asyncTimeLimitSeconds",
-            "maximumRetryAttemptsPermitted",
-            "rateLimits",
-            "logLevel",
-        }
+        # The 2026-07-25 capture shows the MCP sending executionPolicy: {}.
+        assert body["executionPolicy"] == {}
 
     def test_build_create_webhook_body_spec_override(self):
         """Test that a caller-supplied spec replaces the default."""
@@ -952,9 +948,10 @@ class TestWebhookWriteService:
         args, kwargs = mock_client.conjure.call_args
         assert args[0] == "POST"
         assert args[1] == "webhooks/api/registry/v0"
-        assert kwargs["json_body"]["spec"]["config"]["magritteRestWebhook"][
-            "sourceRid"
-        ] == SOURCE_RID
+        assert (
+            kwargs["json_body"]["spec"]["config"]["magritteRestWebhook"]["sourceRid"]
+            == SOURCE_RID
+        )
 
     @patch("pltr.services.connectivity.FoundryInternalClient")
     def test_create_webhook_permission_denied_is_loud(self, mock_client_class):
@@ -1021,19 +1018,483 @@ class TestWebhookWriteService:
             "/webhooks/api/registry/v0/ri.webhooks.main.webhook.abc"
         )
         assert plan["request"]["body"] == {"spec": {"inputs": []}}
-        assert "UNVERIFIED" in plan["contract"]
+        assert "VERIFIED" in plan["contract"]
 
     def test_plan_create_rest_source_no_network(self):
-        """Test the rest-source plan: dummy values, candidate labeled rejected."""
+        """Test the rest-source plan matches the verified v3 envelope."""
         service = ConnectivityService(profile="test")
-        plan = service.plan_create_rest_source("my-source", "example.invalid")
+        plan = service.plan_create_rest_source(
+            "my-source",
+            "example.invalid",
+            "HTTPS",
+            443,
+            "ri.compass.main.folder.abc",
+            ["ri.resource-policy-manager.global.network-egress-policy.abc"],
+        )
 
         assert plan["mode"] == "plan"
         assert plan["request"]["verb"] == "POST"
-        assert plan["request"]["path"].endswith("/source-store/source/v2")
-        domain = plan["request"]["body"]["source"]["config"]["domains"][0]
+        assert plan["request"]["path"].endswith("/source-store/source/v3")
+        body = plan["request"]["body"]
+        domain = body["config"]["source"]["config"]["domains"][0]
         assert domain["host"] == "example.invalid"
         assert domain["scheme"] == "HTTPS"
         assert domain["port"] == 443
-        assert "REJECTED" in plan["request"]["body_status"]
-        assert "UNVERIFIED" in plan["contract"]
+        assert body["description"] == {"name": "my-source", "description": ""}
+        assert body["runtimePlatformRequest"] == {
+            "cloud": {
+                "networkEgresses": [
+                    "ri.resource-policy-manager.global.network-egress-policy.abc"
+                ]
+            },
+            "type": "cloud",
+        }
+        assert body["parentRid"] == "ri.compass.main.folder.abc"
+        assert "VERIFIED" in plan["contract"]
+
+
+EGRESS_POLICY_RID = (
+    "ri.resource-policy-manager.global.network-egress-policy."
+    "00000000-0000-0000-0000-000000000027"
+)
+PARENT_FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000006"
+WEBHOOK_RID = "ri.webhooks.main.webhook.00000000-0000-0000-0000-000000000015"
+DOMAIN_ID = "00000000-0000-0000-0000-000000000028"
+
+
+class TestWebhookSpecAssembly:
+    """Test cases for the captured MCP spec-assembly transform."""
+
+    def test_build_call_query_params_v2_extra_array_wrap(self):
+        """httpQueryParams values land in queryParamsV2 with an extra wrap."""
+        call = ConnectivityService.build_magritte_rest_call(
+            {
+                "httpMethod": "GET",
+                "httpPath": ["multipass/api/users", {"input": "userId"}],
+                "httpQueryParams": {"realm": [{"input": "realm"}]},
+            },
+            DOMAIN_ID,
+        )
+
+        basic = call["call"]["basic"]
+        # Captured quirk: the value gets an EXTRA array wrap.
+        assert basic["queryParamsV2"] == {
+            "realm": [[{"input": {"name": "realm"}, "type": "input"}]]
+        }
+        assert basic["queryParams"] == {}
+
+    def test_build_call_headers_not_wrapped(self):
+        """Headers keep a single array -- no extra wrap."""
+        call = ConnectivityService.build_magritte_rest_call(
+            {
+                "httpMethod": "GET",
+                "httpPath": [],
+                "headers": {"x-parity-probe": [{"static": "v2"}]},
+            },
+            DOMAIN_ID,
+        )
+
+        basic = call["call"]["basic"]
+        assert basic["headers"] == {
+            "x-parity-probe": [{"static": "v2", "type": "static"}]
+        }
+
+    def test_build_call_wire_shape(self):
+        """Method/path union shapes, fresh callId, safe-method flag."""
+        call = ConnectivityService.build_magritte_rest_call(
+            {
+                "httpMethod": "get",
+                "httpPath": ["multipass/api/users", {"input": "userId"}],
+            },
+            DOMAIN_ID,
+        )
+
+        uuid.UUID(call["callId"])  # raises unless a valid UUID
+        assert call["call"]["type"] == "basic"
+        basic = call["call"]["basic"]
+        assert basic["domainId"] == DOMAIN_ID
+        assert basic["method"] == {"static": "GET", "type": "static"}
+        assert basic["path"] == [
+            {"static": "multipass/api/users", "type": "static"},
+            {"input": {"name": "userId"}, "type": "input"},
+        ]
+        assert basic["isHttpMethodSafe"] is True
+
+    def test_build_call_unsafe_method_flag(self):
+        """Non-safe HTTP methods set isHttpMethodSafe to False."""
+        call = ConnectivityService.build_magritte_rest_call(
+            {"httpMethod": "POST", "httpPath": []}, DOMAIN_ID
+        )
+
+        assert call["call"]["basic"]["isHttpMethodSafe"] is False
+
+    def test_build_call_unique_call_ids(self):
+        """Each assembled call gets a fresh client-generated callId."""
+        first = ConnectivityService.build_magritte_rest_call({}, DOMAIN_ID)
+        second = ConnectivityService.build_magritte_rest_call({}, DOMAIN_ID)
+
+        assert first["callId"] != second["callId"]
+
+    def test_build_call_bad_segment_fails_loudly(self):
+        """Unrecognized segments raise a shape error instead of guessing."""
+        with pytest.raises(WebhookShapeError, match="Unrecognized webhook segment"):
+            ConnectivityService.build_magritte_rest_call(
+                {"httpPath": [{"bogus": "x"}]}, DOMAIN_ID
+            )
+
+    def test_build_webhook_spec_with_calls_and_inputs(self):
+        """Full spec assembly matches the captured update spec shape."""
+        spec = ConnectivityService.build_webhook_spec(
+            SOURCE_RID,
+            domain_id=DOMAIN_ID,
+            calls=[
+                {
+                    "httpMethod": "GET",
+                    "httpPath": ["multipass/api/users", {"input": "userId"}],
+                    "headers": {"x-parity-probe": [{"static": "v2"}]},
+                    "httpQueryParams": {"realm": [{"input": "realm"}]},
+                }
+            ],
+            inputs=[
+                {
+                    "name": "userId",
+                    "dataType": {"type": "string"},
+                    "description": "User id to look up",
+                },
+                {"name": "realm", "dataType": {"type": "string"}},
+            ],
+        )
+
+        assert spec["config"] == {
+            "type": "magritteRestWebhook",
+            "magritteRestWebhook": {
+                "sourceRid": SOURCE_RID,
+                "calls": spec["config"]["magritteRestWebhook"]["calls"],
+            },
+        }
+        calls = spec["config"]["magritteRestWebhook"]["calls"]
+        assert len(calls) == 1
+        basic = calls[0]["call"]["basic"]
+        assert basic["queryParamsV2"] == {
+            "realm": [[{"input": {"name": "realm"}, "type": "input"}]]
+        }
+        assert spec["inputs"] == [
+            {
+                "name": "userId",
+                "dataType": {"string": {}, "type": "string"},
+                "description": "User id to look up",
+            },
+            {
+                "name": "realm",
+                "dataType": {"string": {}, "type": "string"},
+                "description": "",
+            },
+        ]
+        assert spec["outputs"] == []
+        assert spec["storagePolicy"] == {}
+
+    def test_normalize_data_type_passthrough_union_shape(self):
+        """An already union-shaped dataType passes through unchanged."""
+        union = {"string": {}, "type": "string"}
+        assert ConnectivityService._normalize_data_type(union) == union
+
+    def test_normalize_data_type_missing_type_fails_loudly(self):
+        """A dataType without a type key raises a shape error."""
+        with pytest.raises(WebhookShapeError, match="dataType"):
+            ConnectivityService._normalize_data_type({"string": {}})
+
+
+class TestWebhookUpdateService:
+    """Test cases for the real publishWebhookVersion write."""
+
+    SPEC = {
+        "config": {
+            "type": "magritteRestWebhook",
+            "magritteRestWebhook": {"sourceRid": SOURCE_RID, "calls": []},
+        },
+        "inputs": [],
+        "outputs": [],
+        "storagePolicy": {},
+    }
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_update_webhook_success(self, mock_client_class):
+        """Test publish sends {spec} only and returns the raw payload."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        payload = {"webhookRid": WEBHOOK_RID, "version": 2}
+        mock_client.conjure.return_value = (200, payload, "{...}")
+
+        service = ConnectivityService(profile="test")
+        result = service.update_webhook(WEBHOOK_RID, self.SPEC)
+
+        assert result == payload
+        mock_client.conjure.assert_called_once_with(
+            "POST",
+            f"webhooks/api/registry/v0/{WEBHOOK_RID}",
+            json_body={"spec": self.SPEC},
+        )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_update_webhook_permission_denied_is_loud(self, mock_client_class):
+        """Test a resource-scoped 403 surfaces loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            403,
+            {"errorName": "Compass:InsufficientPermissions"},
+            "{}",
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 403"):
+            service.update_webhook(WEBHOOK_RID, self.SPEC)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_update_webhook_route_not_mounted(self, mock_client_class):
+        """Test a clear error when the webhooks API is not mounted."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            404,
+            {"errorName": "Route:RouteNotMounted"},
+            "{}",
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="not mounted"):
+            service.update_webhook(WEBHOOK_RID, self.SPEC)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_update_webhook_empty_2xx_fails_loudly(self, mock_client_class):
+        """Test that an empty success payload is a shape error."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {}, "")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(WebhookShapeError, match="Unexpected webhook update"):
+            service.update_webhook(WEBHOOK_RID, self.SPEC)
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_update_webhook_transport_error_wrapped(self, mock_client_class):
+        """Test that transport failures are wrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = Exception("connection refused")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="Failed to update webhook"):
+            service.update_webhook(WEBHOOK_RID, self.SPEC)
+
+
+class TestResolveSourceDomainId:
+    """Test cases for the domain host -> domainId config lookup."""
+
+    CONFIG = {
+        "config": {
+            "source": {
+                "type": "webhooks-rest",
+                "config": {
+                    "domains": [
+                        {
+                            "host": "example.invalid",
+                            "scheme": "HTTPS",
+                            "domainId": DOMAIN_ID,
+                            "port": 443,
+                        }
+                    ]
+                },
+            }
+        }
+    }
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_resolve_matches_host(self, mock_client_class):
+        """Test the full-RID config GET maps host to domainId."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, self.CONFIG, "{...}")
+
+        service = ConnectivityService(profile="test")
+        result = service.resolve_source_domain_id(SOURCE_RID, "example.invalid")
+
+        assert result == DOMAIN_ID
+        mock_client.conjure.assert_called_once_with(
+            "GET",
+            f"magritte-coordinator/api/source-store/source/{SOURCE_RID}/config",
+        )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_resolve_matches_host_case_insensitively(self, mock_client_class):
+        """Test host matching is case-insensitive."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, self.CONFIG, "{...}")
+
+        service = ConnectivityService(profile="test")
+        assert (
+            service.resolve_source_domain_id(SOURCE_RID, "Example.INVALID") == DOMAIN_ID
+        )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_resolve_no_match_lists_available_hosts(self, mock_client_class):
+        """Test a missing host fails loudly with the available hosts."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, self.CONFIG, "{...}")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="example.invalid"):
+            service.resolve_source_domain_id(SOURCE_RID, "other.invalid")
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_resolve_http_error_is_loud(self, mock_client_class):
+        """Test a non-2xx config read fails loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            400,
+            {"errorName": "Default:InvalidArgument"},
+            "{}",
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            service.resolve_source_domain_id(SOURCE_RID, "example.invalid")
+
+    def test_resolve_empty_host_rejected(self):
+        """Test that an empty host fails before any network call."""
+        service = ConnectivityService(profile="test")
+        with pytest.raises(ValueError, match="host is required"):
+            service.resolve_source_domain_id(SOURCE_RID, "  ")
+
+
+class TestRestSourceCreateService:
+    """Test cases for the real addSourceV3 create."""
+
+    def test_build_body_matches_captured_envelope(self):
+        """Test the body shape, uppercase scheme, and random domainId."""
+        service = ConnectivityService(profile="test")
+        body = service.build_create_rest_source_body(
+            "my-source",
+            "example.invalid",
+            "https",
+            443,
+            PARENT_FOLDER_RID,
+            [EGRESS_POLICY_RID],
+            "desc",
+        )
+
+        assert body["config"]["source"]["type"] == "webhooks-rest"
+        domain = body["config"]["source"]["config"]["domains"][0]
+        assert domain["host"] == "example.invalid"
+        assert domain["scheme"] == "HTTPS"
+        assert domain["port"] == 443
+        uuid.UUID(domain["domainId"])  # random UUID per call
+        assert body["description"] == {"name": "my-source", "description": "desc"}
+        assert body["runtimePlatformRequest"] == {
+            "cloud": {"networkEgresses": [EGRESS_POLICY_RID]},
+            "type": "cloud",
+        }
+        assert body["parentRid"] == PARENT_FOLDER_RID
+
+    def test_build_body_random_domain_id_per_call(self):
+        """Test domainId is a fresh random UUID, not a fixed constant."""
+        service = ConnectivityService(profile="test")
+        first = service.build_create_rest_source_body(
+            "a", "example.invalid", "HTTPS", 443, PARENT_FOLDER_RID, []
+        )
+        second = service.build_create_rest_source_body(
+            "a", "example.invalid", "HTTPS", 443, PARENT_FOLDER_RID, []
+        )
+
+        first_id = first["config"]["source"]["config"]["domains"][0]["domainId"]
+        second_id = second["config"]["source"]["config"]["domains"][0]["domainId"]
+        assert first_id != second_id
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_rest_source_bare_string_response(self, mock_client_class):
+        """Test the bare-string source RID response is unwrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        source_rid = "ri.magritte..source.00000000-0000-0000-0000-000000000023"
+        mock_client.conjure.return_value = (200, source_rid, f'"{source_rid}"')
+
+        service = ConnectivityService(profile="test")
+        result = service.create_rest_source(
+            "my-source",
+            "example.invalid",
+            "HTTPS",
+            443,
+            PARENT_FOLDER_RID,
+            [EGRESS_POLICY_RID],
+        )
+
+        assert result["source_rid"] == source_rid
+        assert result["status"] == "created"
+        assert source_rid in result["setup_path"]
+        args, kwargs = mock_client.conjure.call_args
+        assert args[0] == "POST"
+        assert args[1] == "magritte-coordinator/api/source-store/source/v3"
+        assert kwargs["json_body"]["parentRid"] == PARENT_FOLDER_RID
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_rest_source_object_response_fails_loudly(self, mock_client_class):
+        """Test that a non-bare-string 2xx payload is a shape error."""
+        from pltr.services.connectivity import RestSourceShapeError
+
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {"rid": "x"}, "{...}")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RestSourceShapeError, match="bare-string"):
+            service.create_rest_source(
+                "my-source",
+                "example.invalid",
+                "HTTPS",
+                443,
+                PARENT_FOLDER_RID,
+                [EGRESS_POLICY_RID],
+            )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_rest_source_permission_denied_is_loud(self, mock_client_class):
+        """Test a magritte:write-resource 403 surfaces loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            403,
+            {"errorName": "Default:PermissionDenied"},
+            "{}",
+        )
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="magritte:write-resource"):
+            service.create_rest_source(
+                "my-source",
+                "example.invalid",
+                "HTTPS",
+                443,
+                PARENT_FOLDER_RID,
+                [EGRESS_POLICY_RID],
+            )
+
+    @patch("pltr.services.connectivity.FoundryInternalClient")
+    def test_create_rest_source_transport_error_wrapped(self, mock_client_class):
+        """Test that transport failures are wrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = Exception("connection refused")
+
+        service = ConnectivityService(profile="test")
+        with pytest.raises(RuntimeError, match="Failed to create REST source"):
+            service.create_rest_source(
+                "my-source",
+                "example.invalid",
+                "HTTPS",
+                443,
+                PARENT_FOLDER_RID,
+                [EGRESS_POLICY_RID],
+            )

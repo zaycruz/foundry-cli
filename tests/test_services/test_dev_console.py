@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -384,60 +385,237 @@ def test_connect_fails_loud_on_missing_identity_fields():
 
 
 # ---------------------------------------------------------------------------
-# sdk generate (blocked posture, never mutates)
+# sdk generate (plan-first; createSdkV2 verified contract)
 # ---------------------------------------------------------------------------
 
 
-def _sdks_payload():
+def _application_version_payload(version: Any = 6):
     return {
-        "sdks": [
-            {
-                "repositoryRid": REPO_RID,
-                "version": "0.7.0",
-                "npm": {"npmPackageName": "@my-app/sdk"},
-            },
-            {"repositoryRid": REPO_RID, "version": "0.6.0"},
-        ]
+        "application": {"rid": APP_RID, "name": "My App"},
+        "metadata": {"applicationVersion": version},
     }
 
 
-def test_sdk_generate_reports_blocked_with_evidence_and_current_sdks():
+def _sdk_record_payload(version: str = "0.8.0", npm_status: str = "requested"):
+    return {
+        "repositoryRid": REPO_RID,
+        "version": version,
+        "inputs": {"applicationVersion": 6},
+        "npm": {
+            "npmPackageName": "@my-app/sdk",
+            "status": {"type": npm_status, npm_status: {}},
+        },
+    }
+
+
+def _sdks_page(*records):
+    return {"sdks": list(records)}
+
+
+def test_sdk_generate_plan_resolves_version_and_never_posts():
     service = _service()
-    service.client.conjure.return_value = (200, _sdks_payload(), "{}")
+    service.client.conjure.return_value = (
+        200,
+        _application_version_payload(),
+        "{}",
+    )
 
     result = service.plan_sdk_generation(APP_RID)
 
     service.client.conjure.assert_called_once_with(
         "GET",
-        f"/third-party-application-service/api/application-sdks/{APP_RID}",
+        f"/third-party-application-service/api/applications/{APP_RID}",
     )
-    assert result["status"] == "blocked"
-    assert "createSdkV2-contract-unverified" in result["reason"]
-    assert any("400" in item for item in result["evidence"])
-    assert any("422" in item for item in result["evidence"])
-    assert result["current_sdks"][0]["npmPackageName"] == "@my-app/sdk"
-    assert result["current_sdks"][1] == {
-        "repositoryRid": REPO_RID,
-        "version": "0.6.0",
+    assert result["status"] == "dry-run"
+    assert result["application_version"] == 6
+    assert result["request"] == {
+        "verb": "POST",
+        "path": "/third-party-application-service/api/application-sdks/v2/"
+        f"{APP_RID}",
+        "body": {"applicationVersion": 6, "npm": {}},
     }
+    assert "sdk-generate.md" in result["contract"]
 
 
-def test_sdk_generate_never_posts():
+def test_sdk_generate_without_apply_is_a_dry_run():
     service = _service()
-    service.client.conjure.return_value = (200, _sdks_payload(), "{}")
+    service.client.conjure.return_value = (
+        200,
+        _application_version_payload(),
+        "{}",
+    )
 
-    service.plan_sdk_generation(APP_RID)
+    result = service.generate_sdk(APP_RID)
 
+    assert result["status"] == "dry-run"
     methods = [call.args[0] for call in service.client.conjure.call_args_list]
     assert methods == ["GET"]
 
 
-def test_sdk_generate_fails_loud_on_drift():
+def test_sdk_generate_plan_fails_loud_without_application_version():
     service = _service()
-    service.client.conjure.return_value = (200, {"unexpected": []}, "{}")
+    service.client.conjure.return_value = (200, {"application": {}}, "{}")
 
-    with pytest.raises(SdkDefinitionDriftError, match="'sdks' list"):
+    with pytest.raises(SdkDefinitionDriftError, match="applicationVersion"):
         service.plan_sdk_generation(APP_RID)
+
+
+def test_sdk_generate_plan_rejects_boolean_application_version():
+    service = _service()
+    service.client.conjure.return_value = (
+        200,
+        _application_version_payload(version=True),
+        "{}",
+    )
+
+    with pytest.raises(SdkDefinitionDriftError, match="applicationVersion"):
+        service.plan_sdk_generation(APP_RID)
+
+
+def test_sdk_generate_apply_posts_exact_contract_body_and_polls_to_success():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, _sdk_record_payload(npm_status="requested"), "{}"),
+        (200, _sdks_page(_sdk_record_payload(npm_status="inProgress")), "{}"),
+        (200, _sdks_page(_sdk_record_payload(npm_status="success")), "{}"),
+    ]
+    with (
+        patch("pltr.services.dev_console.time.sleep") as sleep,
+        patch(
+            "pltr.services.dev_console.time.monotonic",
+            side_effect=[0.0, 5.0, 30.0],
+        ),
+    ):
+        result = service.generate_sdk(APP_RID, apply=True)
+
+    post_call = service.client.conjure.call_args_list[1]
+    assert post_call.args[0] == "POST"
+    assert post_call.args[1] == (
+        "/third-party-application-service/api/application-sdks/v2/" f"{APP_RID}"
+    )
+    assert post_call.kwargs["json_body"] == {"applicationVersion": 6, "npm": {}}
+    poll_call = service.client.conjure.call_args_list[2]
+    assert poll_call.args == (
+        "GET",
+        f"/third-party-application-service/api/application-sdks/{APP_RID}",
+    )
+    assert result["status"] == "success"
+    assert result["sdk_version"] == "0.8.0"
+    assert result["repository_rid"] == REPO_RID
+    assert result["npm_package_name"] == "@my-app/sdk"
+    assert result["npm_status"] == "success"
+    assert result["poll"] == {"attempts": 2, "elapsed_seconds": 30.0}
+    sleep.assert_called_once_with(5.0)
+
+
+def test_sdk_generate_apply_tolerates_minted_record_missing_from_a_poll_page():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, _sdk_record_payload(npm_status="requested"), "{}"),
+        (200, _sdks_page(_sdk_record_payload(version="0.7.0",
+                                               npm_status="success")), "{}"),
+        (200, _sdks_page(_sdk_record_payload(npm_status="success")), "{}"),
+    ]
+    with (
+        patch("pltr.services.dev_console.time.sleep"),
+        patch(
+            "pltr.services.dev_console.time.monotonic",
+            side_effect=[0.0, 5.0, 30.0],
+        ),
+    ):
+        result = service.generate_sdk(APP_RID, apply=True)
+
+    assert result["status"] == "success"
+    assert result["poll"]["attempts"] == 2
+
+
+def test_sdk_generate_apply_no_wait_returns_requested_without_polling():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, _sdk_record_payload(npm_status="requested"), "{}"),
+    ]
+
+    result = service.generate_sdk(APP_RID, apply=True, wait=False)
+
+    assert result["status"] == "requested"
+    assert result["npm_status"] == "requested"
+    assert service.client.conjure.call_count == 2
+
+
+def test_sdk_generate_apply_non_success_terminal_status_is_failed():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, _sdk_record_payload(npm_status="requested"), "{}"),
+        (200, _sdks_page(_sdk_record_payload(npm_status="failure")), "{}"),
+    ]
+    with patch(
+        "pltr.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]
+    ):
+        result = service.generate_sdk(APP_RID, apply=True)
+
+    assert result["status"] == "failed"
+    assert result["npm_status"] == "failure"
+
+
+def test_sdk_generate_apply_times_out_while_still_pending():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, _sdk_record_payload(npm_status="requested"), "{}"),
+        (200, _sdks_page(_sdk_record_payload(npm_status="inProgress")), "{}"),
+    ]
+    with (
+        patch("pltr.services.dev_console.time.sleep"),
+        patch(
+            "pltr.services.dev_console.time.monotonic",
+            side_effect=[0.0, 200.0],
+        ),
+    ):
+        result = service.generate_sdk(APP_RID, apply=True, timeout_seconds=180.0)
+
+    assert result["status"] == "timeout"
+    assert "sdk-generation-timeout" in result["reason"]
+    assert result["poll"]["attempts"] == 1
+
+
+def test_sdk_generate_apply_fails_loud_when_poll_page_drifts():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, _sdk_record_payload(npm_status="requested"), "{}"),
+        (200, {"unexpected": []}, "{}"),
+    ]
+    with patch(
+        "pltr.services.dev_console.time.monotonic", side_effect=[0.0]
+    ):
+        with pytest.raises(SdkDefinitionDriftError, match="'sdks' list"):
+            service.generate_sdk(APP_RID, apply=True)
+
+
+def test_sdk_generate_apply_http_error_raises_with_status():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (422, {"errorName": "Conjure:UnprocessableEntity"}, "{}"),
+    ]
+
+    with pytest.raises(RuntimeError, match="HTTP 422"):
+        service.generate_sdk(APP_RID, apply=True)
+
+
+def test_sdk_generate_apply_fails_loud_when_post_returns_no_version():
+    service = _service()
+    service.client.conjure.side_effect = [
+        (200, _application_version_payload(), "{}"),
+        (200, {"unexpected": True}, "{}"),
+    ]
+
+    with pytest.raises(SdkDefinitionDriftError, match="no string"):
+        service.generate_sdk(APP_RID, apply=True)
 
 
 # ---------------------------------------------------------------------------

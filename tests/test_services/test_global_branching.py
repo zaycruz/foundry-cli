@@ -12,8 +12,10 @@ from pltr.services.global_branching import (
     GlobalProposalService,
 )
 
-BRANCH_RID = "ri.global-branch.main.branch.00000000-0000-0000-0000-000000000002"
-PROPOSAL_RID = "ri.global-proposal.main.proposal.00000000-0000-0000-0000-000000000013"
+BRANCH_RID = "ri.branch..branch.00000000-0000-0000-0000-000000000002"
+PROPOSAL_RID = "ri.branch..proposal.00000000-0000-0000-0000-000000000013"
+ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000003"
+NAMESPACE_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000007"
 
 
 class TestGlobalBranchService:
@@ -189,11 +191,164 @@ class TestGlobalBranchWriteService:
         assert plan["request"]["verb"] == "POST"
         assert plan["request"]["path"] == "/branch-service/api/branch/create"
         assert plan["request"]["body"] == {
-            "displayName": "my-branch",
             "description": "desc",
+            "displayName": "my-branch",
             "ontologyRid": "ri.ontology.main.ontology.abc",
+            "resourcesToAdd": [],
+            "compassNamespaceRid": "<resolved-at-apply>",
         }
-        assert "UNVERIFIED" in plan["contract"]
+        assert "contract-verified" in plan["contract"]
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_resolve_compass_namespace(self, mock_client_class):
+        """Test namespace resolution reads ontologies[rid].compassNamespaceRid."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            200,
+            {"ontologies": {ONTOLOGY_RID: {"compassNamespaceRid": NAMESPACE_RID}}},
+            "{...}",
+        )
+
+        service = GlobalBranchService(profile="test")
+        result = service.resolve_compass_namespace(ONTOLOGY_RID)
+
+        assert result == NAMESPACE_RID
+        mock_client.conjure.assert_called_once_with(
+            "POST",
+            "ontology-metadata/api/ontology/v2/load/all",
+            json_body={"externalMappingConfigurationFilters": []},
+        )
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_resolve_compass_namespace_missing_entry(self, mock_client_class):
+        """Test a missing ontology entry fails loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {"ontologies": {}}, "{...}")
+
+        service = GlobalBranchService(profile="test")
+        with pytest.raises(GlobalBranchShapeError, match="compassNamespaceRid"):
+            service.resolve_compass_namespace(ONTOLOGY_RID)
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_resolve_compass_namespace_missing_field(self, mock_client_class):
+        """Test an entry without compassNamespaceRid fails loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            200,
+            {"ontologies": {ONTOLOGY_RID: {"displayName": "x"}}},
+            "{...}",
+        )
+
+        service = GlobalBranchService(profile="test")
+        with pytest.raises(GlobalBranchShapeError, match="compassNamespaceRid"):
+            service.resolve_compass_namespace(ONTOLOGY_RID)
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_branch_success(self, mock_client_class):
+        """Test create resolves the namespace, posts the verified body, parses the RID."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        branch_record = {
+            "branchRid": BRANCH_RID,
+            "displayName": "my-branch",
+            "branchStatus": "OPEN",
+        }
+        mock_client.conjure.side_effect = [
+            (
+                200,
+                {"ontologies": {ONTOLOGY_RID: {"compassNamespaceRid": NAMESPACE_RID}}},
+                "{...}",
+            ),
+            (200, {"branchRecord": branch_record}, "{...}"),
+        ]
+
+        service = GlobalBranchService(profile="test")
+        result = service.create_branch("my-branch", "desc", ONTOLOGY_RID)
+
+        assert result == {"branchRid": BRANCH_RID, "branchRecord": branch_record}
+        assert mock_client.conjure.call_count == 2
+        mock_client.conjure.assert_any_call(
+            "POST",
+            "ontology-metadata/api/ontology/v2/load/all",
+            json_body={"externalMappingConfigurationFilters": []},
+        )
+        mock_client.conjure.assert_any_call(
+            "POST",
+            "branch-service/api/branch/create",
+            json_body={
+                "description": "desc",
+                "displayName": "my-branch",
+                "ontologyRid": ONTOLOGY_RID,
+                "resourcesToAdd": [],
+                "compassNamespaceRid": NAMESPACE_RID,
+            },
+        )
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_branch_wrong_rid_prefix_fails_loudly(self, mock_client_class):
+        """Test a non ri.branch..branch. create RID is a shape error."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            (
+                200,
+                {"ontologies": {ONTOLOGY_RID: {"compassNamespaceRid": NAMESPACE_RID}}},
+                "{...}",
+            ),
+            (
+                200,
+                {
+                    "branchRecord": {
+                        "branchRid": "ri.global-branch.main.branch."
+                        "00000000-0000-0000-0000-000000000002"
+                    }
+                },
+                "{...}",
+            ),
+        ]
+
+        service = GlobalBranchService(profile="test")
+        with pytest.raises(GlobalBranchShapeError, match="ri.branch..branch."):
+            service.create_branch("my-branch", "desc", ONTOLOGY_RID)
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_branch_missing_record_fails_loudly(self, mock_client_class):
+        """Test a create response without branchRecord is a shape error."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            (
+                200,
+                {"ontologies": {ONTOLOGY_RID: {"compassNamespaceRid": NAMESPACE_RID}}},
+                "{...}",
+            ),
+            (200, {"unexpected": True}, "{...}"),
+        ]
+
+        service = GlobalBranchService(profile="test")
+        with pytest.raises(GlobalBranchShapeError, match="branchRecord.branchRid"):
+            service.create_branch("my-branch", "desc", ONTOLOGY_RID)
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_branch_http_error_is_loud(self, mock_client_class):
+        """Test a non-2xx create surfaces the status and error name."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            (
+                200,
+                {"ontologies": {ONTOLOGY_RID: {"compassNamespaceRid": NAMESPACE_RID}}},
+                "{...}",
+            ),
+            (400, {"errorName": "Default:InvalidArgument"}, "{...}"),
+        ]
+
+        service = GlobalBranchService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            service.create_branch("my-branch", "desc", ONTOLOGY_RID)
 
     @patch("pltr.services.global_branching.FoundryInternalClient")
     def test_close_branch_success(self, mock_client_class):
@@ -308,10 +463,83 @@ class TestGlobalProposalWriteService:
         assert plan["request"]["path"] == "/branch-service/api/branch/proposal/create"
         assert plan["request"]["body"] == {
             "branchRid": BRANCH_RID,
-            "description": "desc",
             "displayName": "my-proposal",
+            "description": "desc",
+            "mergeTo": {"main": {}, "type": "main"},
         }
-        assert "UNVERIFIED" in plan["contract"]
+        assert "contract-verified" in plan["contract"]
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_proposal_success(self, mock_client_class):
+        """Test create posts the verified union body and parses the RID."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        proposal_record = {
+            "proposalRid": PROPOSAL_RID,
+            "proposalBranchRid": BRANCH_RID,
+            "proposalStatus": "OPEN",
+        }
+        mock_client.conjure.return_value = (
+            200,
+            {"proposal": proposal_record},
+            "{...}",
+        )
+
+        service = GlobalProposalService(profile="test")
+        result = service.create_proposal(BRANCH_RID, "my-proposal", "desc")
+
+        assert result == {"proposalRid": PROPOSAL_RID, "proposal": proposal_record}
+        mock_client.conjure.assert_called_once_with(
+            "POST",
+            "branch-service/api/branch/proposal/create",
+            json_body={
+                "branchRid": BRANCH_RID,
+                "displayName": "my-proposal",
+                "description": "desc",
+                "mergeTo": {"main": {}, "type": "main"},
+            },
+        )
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_proposal_wrong_rid_prefix_fails_loudly(self, mock_client_class):
+        """Test a non ri.branch..proposal. create RID is a shape error."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            200,
+            {"proposal": {"proposalRid": "ri.global-proposal.main.proposal.abc"}},
+            "{...}",
+        )
+
+        service = GlobalProposalService(profile="test")
+        with pytest.raises(GlobalBranchShapeError, match="ri.branch..proposal."):
+            service.create_proposal(BRANCH_RID, "my-proposal", "desc")
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_proposal_missing_record_fails_loudly(self, mock_client_class):
+        """Test a create response without proposal is a shape error."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {"unexpected": True}, "{...}")
+
+        service = GlobalProposalService(profile="test")
+        with pytest.raises(GlobalBranchShapeError, match="proposal.proposalRid"):
+            service.create_proposal(BRANCH_RID, "my-proposal", "desc")
+
+    @patch("pltr.services.global_branching.FoundryInternalClient")
+    def test_create_proposal_http_error_is_loud(self, mock_client_class):
+        """Test a non-2xx create surfaces the status and error name."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (
+            400,
+            {"errorName": "Default:InvalidArgument"},
+            "{...}",
+        )
+
+        service = GlobalProposalService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            service.create_proposal(BRANCH_RID, "my-proposal", "desc")
 
     @patch("pltr.services.global_branching.FoundryInternalClient")
     def test_close_proposal_success(self, mock_client_class):

@@ -13,7 +13,7 @@ from pltr.services.global_branching import (
     GlobalBranchShapeError,
 )
 
-PROPOSAL_RID = "ri.global-proposal.main.proposal.00000000-0000-0000-0000-000000000013"
+PROPOSAL_RID = "ri.branch..proposal.00000000-0000-0000-0000-000000000013"
 
 # The module app holds a single command, which Typer collapses when the app is
 # invoked standalone; register it on a parent (as cli.py does) so the tests
@@ -48,7 +48,9 @@ class TestGlobalProposalGetCommand:
         mock_service_class.return_value = mock_service
         mock_service.get_proposal.return_value = {"rid": PROPOSAL_RID}
 
-        result = self.runner.invoke(root_app, ["global-proposal", "get", PROPOSAL_RID, "--format", "json"])
+        result = self.runner.invoke(
+            root_app, ["global-proposal", "get", PROPOSAL_RID, "--format", "json"]
+        )
 
         assert result.exit_code == 0
         assert PROPOSAL_RID in result.stdout
@@ -100,13 +102,15 @@ class TestGlobalProposalGetCommand:
         mock_service_class.return_value = mock_service
         mock_service.get_proposal.return_value = {"rid": PROPOSAL_RID}
 
-        result = self.runner.invoke(root_app, ["global-proposal", "get", PROPOSAL_RID, "--profile", "test"])
+        result = self.runner.invoke(
+            root_app, ["global-proposal", "get", PROPOSAL_RID, "--profile", "test"]
+        )
 
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
 
 
-BRANCH_RID = "ri.global-branch.main.branch.00000000-0000-0000-0000-000000000002"
+BRANCH_RID = "ri.branch..branch.00000000-0000-0000-0000-000000000002"
 
 
 class TestGlobalProposalCreateCommand:
@@ -140,22 +144,90 @@ class TestGlobalProposalCreateCommand:
         )
 
     @patch("pltr.commands.global_proposal.GlobalProposalService")
-    def test_create_apply_is_blocked(self, mock_service_class):
-        """Test that --apply refuses while the contract is unverified."""
+    def test_create_apply_sends(self, mock_service_class):
+        """Test that --apply issues the real create."""
         mock_service = Mock()
         mock_service_class.return_value = mock_service
-        mock_service.plan_create_proposal.return_value = {"mode": "plan"}
+        mock_service.create_proposal.return_value = {
+            "proposalRid": PROPOSAL_RID,
+            "proposal": {"proposalRid": PROPOSAL_RID, "proposalStatus": "OPEN"},
+        }
 
         result = self.runner.invoke(
             root_app,
             [
-                "global-proposal", "create", "my-proposal",
-                "--branch-rid", BRANCH_RID, "--apply",
+                "global-proposal",
+                "create",
+                "my-proposal",
+                "--branch-rid",
+                BRANCH_RID,
+                "--apply",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.create_proposal.assert_called_once_with(
+            BRANCH_RID, "my-proposal", ""
+        )
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_apply_agent_format(self, mock_service_class):
+        """Test the applied create records an agent payload with the new RID."""
+        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_proposal.return_value = {
+            "proposalRid": PROPOSAL_RID,
+            "proposal": {"proposalRid": PROPOSAL_RID},
+        }
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-proposal",
+                "create",
+                "my-proposal",
+                "--branch-rid",
+                BRANCH_RID,
+                "--apply",
+                "--format",
+                "agent",
+            ],
+        )
+
+        assert result.exit_code == 0
+        envelope = build_agent_output()
+        reset_agent_output()
+        assert envelope is not None
+        assert not envelope["errors"]
+        assert envelope["meta"]["operation"] == "create_global_proposal"
+        assert envelope["meta"]["mode"] == "applied"
+        assert envelope["meta"]["branch_rid"] == BRANCH_RID
+        assert envelope["meta"]["proposal_rid"] == PROPOSAL_RID
+        assert envelope["meta"]["write_verified"] is True
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_apply_error(self, mock_service_class):
+        """Test create error handling on --apply."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_proposal.side_effect = Exception("HTTP 400")
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-proposal",
+                "create",
+                "my-proposal",
+                "--branch-rid",
+                BRANCH_RID,
+                "--apply",
             ],
         )
 
         assert result.exit_code == 1
-        assert "UNVERIFIED" in result.stdout
+        assert "Error creating global proposal" in result.stdout
 
 
 class TestGlobalProposalCloseCommand:

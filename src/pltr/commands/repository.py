@@ -1,6 +1,6 @@
 """
 Code repository commands (pull-request access, repository context, local
-clone, and Python-transforms repository creation planning).
+clone, and Python-transforms repository creation).
 """
 
 import os
@@ -10,7 +10,6 @@ from typing import Optional
 from rich.console import Console
 
 from ..services.repository import (
-    CreateContractUnverifiedError,
     PullRequestNotFoundError,
     PullRequestShapeError,
     RepositoryCloneError,
@@ -505,17 +504,19 @@ def create_python_transforms(
     name: str = typer.Argument(
         ..., help="Name for the new Python transforms repository"
     ),
-    parent_rid: Optional[str] = typer.Option(
-        None,
+    parent_rid: str = typer.Option(
+        ...,
         "--parent-rid",
-        help="Compass folder RID to create the repository under",
+        help="Compass folder RID to create the repository under (resolved "
+        "to its enclosing project; the repository lands in the project "
+        "root)",
         autocompletion=complete_rid,
     ),
     apply: bool = typer.Option(
         False,
         "--apply",
-        help="Attempt the real creation (currently blocked: the stemma "
-        "createRepository contract is UNVERIFIED)",
+        help="Issue the real creation (POST /stemma/api/repos + "
+        "repository-bootstrapper bootstrap; default: dry-run plan only)",
     ),
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
@@ -533,45 +534,55 @@ def create_python_transforms(
 ):
     """Create a Python transforms code repository (dry-run plan by default).
 
-    The stemma createRepository endpoint is catalogue-only and its request
-    contract could not be verified on a live Foundry deployment (12 candidate bodies all
-    returned opaque 500s; see the captured contract*.jsonl). The CLI
-    therefore prints the intended write as a dry-run plan and refuses to
-    guess: --apply fails loudly with the verification evidence instead of
-    issuing a speculative mutation.
+    Uses the two-call chain derived from the Palantir MCP client contract
+    2026-07-25 on a live Foundry deployment
+    (the captured contract): the folder RID is
+    resolved to its enclosing project and Compass path via read-only
+    hierarchy batch endpoints, then POST /stemma/api/repos {"path":
+    "<projectPath>/<name>"} creates the repository and POST
+    /repository-bootstrapper/api/repos/{rid}/bootstrap applies the Python
+    transforms template (master branch + 0.0.1 tag). Without --apply the
+    command runs only the read-only preflight and prints the exact
+    intended writes; with --apply it posts them and reads the refs back.
     """
     try:
         service = RepositoryService(profile=profile)
 
         if apply:
-            # Always raises CreateContractUnverifiedError today; kept as a
-            # call (not an inline raise) so the verified write lands in one
-            # place once the contract is established.
-            service.create_python_transforms_repository(name, parent_rid)
-
-        plan = service.create_python_transforms_plan(name, parent_rid)
+            with SpinnerProgressTracker().track_spinner(
+                f"Creating Python transforms repository {name}..."
+            ):
+                result = service.create_python_transforms_repository(name, parent_rid)
+            warnings = []
+        else:
+            with SpinnerProgressTracker().track_spinner(
+                "Resolving repository target path..."
+            ):
+                result = service.create_python_transforms_plan(name, parent_rid)
+            warnings = [result["evidence"]]
 
         if agent_mode_enabled() or format == "agent":
             buffer_agent_payload(
-                plan,
+                result,
                 meta={
                     "operation": "create_python_transforms_code_repository",
                     "name": name,
-                    "status": plan["status"],
+                    "status": result["status"],
+                    "repository_rid": result.get("repository", {}).get("rid"),
                 },
-                warnings=[plan["evidence"]],
+                warnings=warnings,
             )
         else:
-            formatter.format_output([plan], format, output)
+            formatter.format_output([result], format, output)
 
-    except CreateContractUnverifiedError as e:
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (RepositoryNotFoundError, RepositoryShapeError) as e:
         if agent_mode_enabled() or format == "agent":
             buffer_agent_message(str(e), level="error")
         else:
             console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1)
-    except (ProfileNotFoundError, MissingCredentialsError) as e:
-        console.print(f"[red]Authentication error: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error creating Python transforms repository: {e}[/red]")

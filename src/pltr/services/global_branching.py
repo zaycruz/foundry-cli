@@ -1,41 +1,40 @@
 """
 Global Branching service wrapper.
 
-Read-only load-by-RID access backed by the internal ``branch-service`` API
-(23 endpoints, base ``/branch-service/api``), per the 2026-07-22 gap analysis.
+Load-by-RID reads and plan-first writes backed by the internal
+``branch-service`` API (base ``/branch-service/api``). There is no list
+endpoint; load-by-RID only.
 
-CAUTION carried over from the gap analysis: branch-service is enabled but
-UNUSED on a live Foundry deployment, and the success response shapes are UNVERIFIED.
-2026-07-24 live validation confirmed only the mount and the error contract:
-``PUT /branch/load/{branchRid}`` and ``PUT /branch/proposal/load/{proposalRid}``
-with an empty body return a structured ``Branch:PermissionDeniedError`` (403)
-for an inaccessible RID. No live branch or proposal RID exists on the stack,
-so a 2xx payload has never been observed.
+Write contracts, verified end-to-end against a live Foundry deployment (2026-07-25,
+``the captured contract``, derived from
+``@palantir/mcp`` 0.408.0 client contract):
 
-Write surface (2026-07-24 contract-recovery validation, logged in
-``the captured contract``):
-
-- branch-service rejects unknown JSON keys with
-  ``422 Conjure:UnprocessableEntity`` and fails missing required fields with
-  ``400 Default:InvalidArgument``, so single-key probes identify real fields.
-- ``POST /branch/create`` deserialized the oracle-derived field set
-  ``{displayName, description, ontologyRid}`` but never progressed past
-  ``400 Default:InvalidArgument`` (no field named in the error), so the
-  create contract is NOT VERIFIED end-to-end. The CLI ships it plan-first
-  and refuses ``--apply`` rather than guessing further.
-- ``POST /branch/proposal/create`` is in the same state with
-  ``{branchRid, description, displayName}``.
+- ``POST /branch/create`` takes ``{description, displayName, ontologyRid,
+  resourcesToAdd, compassNamespaceRid}``; ``compassNamespaceRid`` is resolved
+  first from ``POST /ontology-metadata/api/ontology/v2/load/all`` (body
+  ``{"externalMappingConfigurationFilters": []}``, read
+  ``ontologies[ontologyRid].compassNamespaceRid``). The success response is
+  ``{"branchRecord": {"branchRid": "ri.branch..branch.<uuid>", ...}}`` —
+  note the DOUBLE DOT in the rid (empty service segment).
+- ``POST /branch/proposal/create`` takes ``{branchRid, displayName,
+  description, mergeTo}`` where ``mergeTo`` is the Conjure union
+  ``{"main": {}, "type": "main"}``. The success response is
+  ``{"proposal": {"proposalRid": "ri.branch..proposal.<uuid>", ...}}``.
 - ``PUT /branch/close/{branchRid}`` and
   ``PUT /branch/proposal/close/{proposalRid}`` take an empty body with the
-  RID in the path; the error contract is contract-verified
-  (``Branch:PermissionDeniedError`` naming ``branch:edit-branch`` /
-  ``branch:edit-proposal``). The success shape is UNVERIFIED.
+  RID in the path and return ``200 {}``.
 
-Reads and verified writes pass responses through raw with strict
-shape-checking: anything that is not a non-empty JSON object fails loudly
-instead of rendering as a result.
+Earlier 2026-07-24 validation (``the captured contract``) never
+got the creates past ``400 Default:InvalidArgument`` because it guessed
+``namespaceRid`` instead of ``compassNamespaceRid`` and omitted
+``resourcesToAdd``/``mergeTo``; the MCP capture recovered the exact bodies.
+
+Reads and writes pass responses through raw with strict shape-checking:
+anything that is not a non-empty JSON object fails loudly instead of
+rendering as a result.
 """
 
+import re
 from typing import Any, Dict, Mapping
 
 from .base import BaseService
@@ -83,9 +82,8 @@ class _BranchServiceBase(BaseService):
                 f"{str(raw)[:200]}"
             )
 
-        # Success shape UNVERIFIED (no live branch/proposal exists on the
-        # verified stack): require a non-empty JSON object and pass it through
-        # raw rather than projecting fields that may not exist.
+        # Require a non-empty JSON object and pass it through raw rather than
+        # projecting fields that may not exist.
         if not isinstance(payload, Mapping) or not payload:
             raise GlobalBranchShapeError(
                 f"Unverified branch-service {entity} response shape: expected a "
@@ -118,9 +116,7 @@ class _BranchServiceBase(BaseService):
             "contract": contract,
         }
 
-    def _write(
-        self, verb: str, path: str, rid: str, entity: str
-    ) -> Dict[str, Any]:
+    def _write(self, verb: str, path: str, rid: str, entity: str) -> Dict[str, Any]:
         """Issue a contract-verified empty-body write, failing loud on surprises."""
         client = self._internal_client()
         try:
@@ -146,9 +142,9 @@ class _BranchServiceBase(BaseService):
                 f"{str(raw)[:200]}"
             )
 
-        # Success shape UNVERIFIED (no live branch/proposal exists on the
-        # verified stack). A 2xx with an empty body is an acknowledgment;
-        # a non-object body is a contract surprise and fails loudly.
+        # A 2xx with an empty body is an acknowledgment (the close endpoints
+        # return 200 {}); a non-object body is a contract surprise and fails
+        # loudly.
         if payload is None or payload == "" or payload == {}:
             return {"rid": rid, "acknowledged": True, "response_empty": True}
         if not isinstance(payload, Mapping):
@@ -159,20 +155,81 @@ class _BranchServiceBase(BaseService):
             )
         return dict(payload)
 
+    def _post(self, path: str, body: Mapping[str, Any], entity: str) -> Dict[str, Any]:
+        """Issue a JSON-body POST, failing loud on surprises."""
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure("POST", path, json_body=body)
+        except Exception as e:
+            raise RuntimeError(f"Failed to POST {entity}: {e}") from e
+
+        error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
+        if error_name in {
+            "Branch:BranchNotFound",
+            "Branch:ProposalNotFound",
+        } or (status == 404 and error_name != "Route:RouteNotMounted"):
+            raise GlobalBranchNotFoundError(f"No {entity} found: {error_name}")
+        if not 200 <= status < 300:
+            if error_name == "Route:RouteNotMounted":
+                raise RuntimeError(
+                    "The branch-service API is not mounted on this stack "
+                    f"(Route:RouteNotMounted for /{path})"
+                )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"branch-service {entity} POST failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}"
+            )
+
+        if not isinstance(payload, Mapping) or not payload:
+            raise GlobalBranchShapeError(
+                f"Unexpected branch-service {entity} POST response shape: expected "
+                f"a non-empty JSON object, got {str(raw)[:200]!r}. Refusing to "
+                "guess at the contract."
+            )
+        return dict(payload)
+
+    @staticmethod
+    def _extract_rid(
+        payload: Mapping[str, Any],
+        record_key: str,
+        rid_key: str,
+        rid_prefix: str,
+    ) -> str:
+        """Pull a RID out of a create response, failing loud on surprises."""
+        record = payload.get(record_key)
+        rid = record.get(rid_key) if isinstance(record, Mapping) else None
+        if (
+            not isinstance(rid, str)
+            or not rid.startswith(rid_prefix)
+            or not _RID_SUFFIX_RE.fullmatch(rid[len(rid_prefix) :])
+        ):
+            raise GlobalBranchShapeError(
+                f"Unexpected branch-service create response: expected "
+                f"{record_key}.{rid_key} to be a {rid_prefix}<uuid> RID, got "
+                f"{rid!r}. Refusing to guess at the contract."
+            )
+        return rid
+
+
+_RID_SUFFIX_RE = re.compile(r"[0-9a-fA-F-]{36}")
+
 
 class GlobalBranchService(_BranchServiceBase):
     """Service wrapper for Global Branch operations."""
 
+    BRANCH_RID_PREFIX = "ri.branch..branch."
     CREATE_CONTRACT = (
-        "UNVERIFIED: oracle-recovered fields {displayName, description, "
-        "ontologyRid} deserialize but never progress past "
-        "400 Default:InvalidArgument on a live Foundry deployment (verified; "
-        "no field named in the error). Refusing to guess further."
+        "contract-verified via @palantir/mcp client contract "
+        "(the captured contract): POST "
+        "/branch/create with {description, displayName, ontologyRid, "
+        "resourcesToAdd, compassNamespaceRid}; compassNamespaceRid resolved "
+        "from POST /ontology-metadata/api/ontology/v2/load/all. Success "
+        "response branchRecord.branchRid is ri.branch..branch.<uuid>."
     )
     CLOSE_CONTRACT = (
         "contract-verified: PUT /branch/close/{branchRid}, empty "
-        "body; error contract contract-verified (403 Branch:PermissionDeniedError "
-        "naming branch:edit-branch). Success shape UNVERIFIED."
+        "body, 200 {} (contract-verified on a live Foundry deployment)."
     )
 
     def get_branch(self, branch_rid: str) -> Dict[str, Any]:
@@ -180,8 +237,8 @@ class GlobalBranchService(_BranchServiceBase):
         Load one Global Branch by RID.
 
         Read-only against branch-service ``PUT /branch/load/{branchRid}``
-        (empty-body load; contract verified, success shape
-        UNVERIFIED — there is no list endpoint, load-by-RID only).
+        (empty-body load; contract verified — there is no list
+        endpoint, load-by-RID only).
 
         Args:
             branch_rid: Global Branch Resource Identifier
@@ -204,8 +261,8 @@ class GlobalBranchService(_BranchServiceBase):
         """
         Describe a Global Branch create without issuing it.
 
-        The create contract is UNVERIFIED (see CREATE_CONTRACT), so the CLI
-        never sends this body; the plan is the deliverable.
+        Shows the verified request body; ``compassNamespaceRid`` is resolved
+        from ontology-metadata only when the create is applied.
 
         Args:
             display_name: Branch display name
@@ -219,20 +276,100 @@ class GlobalBranchService(_BranchServiceBase):
             "POST",
             "branch-service/api/branch/create",
             {
-                "displayName": display_name,
                 "description": description,
+                "displayName": display_name,
                 "ontologyRid": ontology_rid,
+                "resourcesToAdd": [],
+                "compassNamespaceRid": "<resolved-at-apply>",
             },
             self.CREATE_CONTRACT,
         )
+
+    def resolve_compass_namespace(self, ontology_rid: str) -> str:
+        """
+        Resolve the Compass namespace RID for an ontology.
+
+        Verified: ``POST
+        /ontology-metadata/api/ontology/v2/load/all`` with
+        ``{"externalMappingConfigurationFilters": []}``, read
+        ``ontologies[ontology_rid].compassNamespaceRid``.
+
+        Args:
+            ontology_rid: Ontology RID to resolve the namespace for
+
+        Returns:
+            The ontology's compassNamespaceRid
+
+        Raises:
+            GlobalBranchShapeError: If the response lacks the namespace RID
+            RuntimeError: If the read fails
+        """
+        payload = self._post(
+            "ontology-metadata/api/ontology/v2/load/all",
+            {"externalMappingConfigurationFilters": []},
+            "ontology namespace resolution",
+        )
+        ontologies = payload.get("ontologies")
+        record = (
+            ontologies.get(ontology_rid) if isinstance(ontologies, Mapping) else None
+        )
+        namespace_rid = (
+            record.get("compassNamespaceRid") if isinstance(record, Mapping) else None
+        )
+        if not isinstance(namespace_rid, str) or not namespace_rid:
+            raise GlobalBranchShapeError(
+                "Unexpected ontology-metadata load/all response: expected "
+                f"ontologies[{ontology_rid!r}].compassNamespaceRid to be a "
+                "non-empty string. Refusing to guess at the contract."
+            )
+        return namespace_rid
+
+    def create_branch(
+        self, display_name: str, description: str, ontology_rid: str
+    ) -> Dict[str, Any]:
+        """
+        Create a Global Branch (REAL mutation).
+
+        Resolves the Compass namespace first, then issues the verified
+        ``POST /branch/create`` body. Returns the branchRecord plus the
+        parsed branch RID (``ri.branch..branch.<uuid>`` — double dot).
+
+        Args:
+            display_name: Branch display name
+            description: Branch description
+            ontology_rid: Ontology RID the branch forks
+
+        Returns:
+            Dictionary with ``branchRid`` and the raw ``branchRecord``
+
+        Raises:
+            GlobalBranchShapeError: If a response misses the expected fields
+            RuntimeError: If a request fails or the API is not mounted
+        """
+        namespace_rid = self.resolve_compass_namespace(ontology_rid)
+        payload = self._post(
+            "branch-service/api/branch/create",
+            {
+                "description": description,
+                "displayName": display_name,
+                "ontologyRid": ontology_rid,
+                "resourcesToAdd": [],
+                "compassNamespaceRid": namespace_rid,
+            },
+            "branch",
+        )
+        branch_rid = self._extract_rid(
+            payload, "branchRecord", "branchRid", self.BRANCH_RID_PREFIX
+        )
+        return {"branchRid": branch_rid, "branchRecord": payload["branchRecord"]}
 
     def close_branch(self, branch_rid: str) -> Dict[str, Any]:
         """
         Close one Global Branch (DESTRUCTIVE).
 
         Contract-verified empty-body write against branch-service
-        ``PUT /branch/close/{branchRid}``; success shape UNVERIFIED, passed
-        through raw with strict shape-checking.
+        ``PUT /branch/close/{branchRid}`` (200 {} contract-verified),
+        passed through raw with strict shape-checking.
 
         Args:
             branch_rid: Global Branch Resource Identifier
@@ -253,17 +390,19 @@ class GlobalBranchService(_BranchServiceBase):
 class GlobalProposalService(_BranchServiceBase):
     """Service wrapper for Ontology Global Proposal operations."""
 
+    PROPOSAL_RID_PREFIX = "ri.branch..proposal."
+    MERGE_TO_MAIN: Dict[str, Any] = {"main": {}, "type": "main"}
     CREATE_CONTRACT = (
-        "UNVERIFIED: oracle-recovered fields {branchRid, description, "
-        "displayName} deserialize but never progress past "
-        "400 Default:InvalidArgument on a live Foundry deployment (verified; "
-        "no live branch exists to reference). Refusing to guess further."
+        "contract-verified via @palantir/mcp client contract "
+        "(the captured contract): POST "
+        "/branch/proposal/create with {branchRid, displayName, description, "
+        'mergeTo}; mergeTo is the Conjure union {"main": {}, "type": '
+        '"main"}. Success response proposal.proposalRid is '
+        "ri.branch..proposal.<uuid>."
     )
     CLOSE_CONTRACT = (
         "contract-verified: PUT /branch/proposal/close/{proposalRid}, "
-        "empty body; error contract contract-verified (403 "
-        "Branch:PermissionDeniedError naming branch:edit-proposal). Success "
-        "shape UNVERIFIED."
+        "empty body, 200 {} (contract-verified on a live Foundry deployment)."
     )
 
     def get_proposal(self, proposal_rid: str) -> Dict[str, Any]:
@@ -272,8 +411,7 @@ class GlobalProposalService(_BranchServiceBase):
 
         Read-only against branch-service
         ``PUT /branch/proposal/load/{proposalRid}`` (empty-body load; contract
-        verified, success shape UNVERIFIED — there is no list
-        endpoint, load-by-RID only).
+        verified — there is no list endpoint, load-by-RID only).
 
         Args:
             proposal_rid: Global Proposal Resource Identifier
@@ -298,8 +436,8 @@ class GlobalProposalService(_BranchServiceBase):
         """
         Describe a Global Proposal create without issuing it.
 
-        The create contract is UNVERIFIED (see CREATE_CONTRACT), so the CLI
-        never sends this body; the plan is the deliverable.
+        Shows the verified request body, including the ``mergeTo`` Conjure
+        union (``{"main": {}, "type": "main"}``).
 
         Args:
             branch_rid: Global Branch RID the proposal belongs to
@@ -314,19 +452,58 @@ class GlobalProposalService(_BranchServiceBase):
             "branch-service/api/branch/proposal/create",
             {
                 "branchRid": branch_rid,
-                "description": description,
                 "displayName": display_name,
+                "description": description,
+                "mergeTo": dict(self.MERGE_TO_MAIN),
             },
             self.CREATE_CONTRACT,
         )
+
+    def create_proposal(
+        self, branch_rid: str, display_name: str, description: str
+    ) -> Dict[str, Any]:
+        """
+        Create an Ontology Global Proposal (REAL mutation).
+
+        Issues the verified ``POST /branch/proposal/create`` body with the
+        ``mergeTo`` Conjure union (``{"main": {}, "type": "main"}``). Returns
+        the proposal record plus the parsed proposal RID
+        (``ri.branch..proposal.<uuid>`` — double dot).
+
+        Args:
+            branch_rid: Global Branch RID the proposal belongs to
+            display_name: Proposal display name
+            description: Proposal description
+
+        Returns:
+            Dictionary with ``proposalRid`` and the raw ``proposal`` record
+
+        Raises:
+            GlobalBranchShapeError: If the response misses the expected fields
+            RuntimeError: If the request fails or the API is not mounted
+        """
+        payload = self._post(
+            "branch-service/api/branch/proposal/create",
+            {
+                "branchRid": branch_rid,
+                "displayName": display_name,
+                "description": description,
+                "mergeTo": dict(self.MERGE_TO_MAIN),
+            },
+            "proposal",
+        )
+        proposal_rid = self._extract_rid(
+            payload, "proposal", "proposalRid", self.PROPOSAL_RID_PREFIX
+        )
+        return {"proposalRid": proposal_rid, "proposal": payload["proposal"]}
 
     def close_proposal(self, proposal_rid: str) -> Dict[str, Any]:
         """
         Close one Ontology Global Proposal (DESTRUCTIVE).
 
         Contract-verified empty-body write against branch-service
-        ``PUT /branch/proposal/close/{proposalRid}``; success shape
-        UNVERIFIED, passed through raw with strict shape-checking.
+        ``PUT /branch/proposal/close/{proposalRid}`` (200 {} contract-verified
+        2026-07-25), passed through raw with strict shape-checking.
 
         Args:
             proposal_rid: Global Proposal Resource Identifier

@@ -90,7 +90,7 @@ def test_webhook_get_capability_is_implemented() -> None:
     assert "webhooks/api/registry/v0" in entry["api_evidence"]
 
 
-def test_unverifiable_read_capabilities_stay_blocked() -> None:
+def test_compute_module_capabilities_are_implemented() -> None:
     manifest = capability_manifest()
     entries = {
         item["capability_id"]: item
@@ -99,13 +99,33 @@ def test_unverifiable_read_capabilities_stay_blocked() -> None:
         in {
             "get_compute_modules_info",
             "get_compute_modules_logs",
-            "preview_transform",
+            "manage_compute_modules",
+            "execute_compute_modules_function",
         }
     }
 
-    assert len(entries) == 3
+    assert len(entries) == 4
+    for entry in entries.values():
+        assert entry["status"] == "implemented"
+        assert entry["blocked_reason"] is None
+        assert "contour-backend-multiplexer" in entry["api_evidence"] or (
+            "foundry-telemetry-service" in entry["api_evidence"]
+        )
+    assert entries["get_compute_modules_info"]["command"] == "compute info"
+    assert entries["get_compute_modules_logs"]["command"] == "compute logs"
+    assert entries["manage_compute_modules"]["command"] == "compute manage"
+    assert entries["execute_compute_modules_function"]["command"] == "compute execute"
+
+
+def test_unverifiable_read_capabilities_stay_blocked() -> None:
+    manifest = capability_manifest()
+    entries = {
+        item["capability_id"]: item
+        for item in manifest["capabilities"]
+        if item["capability_id"] in {"preview_transform"}
+    }
+
+    assert len(entries) == 1
     for entry in entries.values():
         assert entry["status"] == "blocked"
         assert entry["blocked_reason"]
-    assert "NOT MOUNTED" in entries["get_compute_modules_info"]["blocked_reason"]
-    assert "NOT MOUNTED" in entries["get_compute_modules_logs"]["blocked_reason"]

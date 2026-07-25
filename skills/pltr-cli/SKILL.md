@@ -123,6 +123,7 @@ Load these files based on the user's task:
 | Proposal review workflows | `reference/proposal-commands.md` |
 | Custom widget sets and releases | `reference/widgets-commands.md` |
 | Dependency and change-impact analysis | `reference/dependency-commands.md` |
+| Compute Modules (info, logs, plan-first manage/execute) | `reference/compute-commands.md` |
 
 ## Workflow Files
 

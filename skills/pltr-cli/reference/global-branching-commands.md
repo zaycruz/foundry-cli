@@ -2,16 +2,20 @@
 
 Ontology Global Branch and Global Proposal operations, backed by the
 internal `branch-service` API. There are no list endpoints; load-by-RID
-only. Success response shapes are UNVERIFIED on a live Foundry deployment (branch-service
-is enabled but unused there) and are passed through raw.
+only. All contracts (loads, creates, closes) were verified end-to-end on
+a live Foundry deployment 2026-07-25 — request/response shapes derived from
+`@palantir/mcp` client contract (`the captured contract`)
+and confirmed by a live create→load→proposal→close→close run
+(`the captured contract`).
 
 Write commands are plan-first: they print a dry-run plan by default and
 issue no network request. A real mutation requires `--apply`; destructive
-closes additionally require `--yes`. The create contracts could not be
-verified end-to-end (2026-07-24 validation, `the captured contract`),
-so `create --apply` refuses with an `unverified-write-contract` error instead
-of guessing a request body. The close contracts are verified (empty-body
-writes with a contract-verified error contract), so `close --apply --yes` sends.
+closes additionally require `--yes`.
+
+RID formats (note the DOUBLE DOT — empty service segment):
+
+- Global Branch: `ri.branch..branch.<uuid>`
+- Global Proposal: `ri.branch..proposal.<uuid>`
 
 ## Global Branch Commands
 
@@ -20,25 +24,33 @@ writes with a contract-verified error contract), so `close --apply --yes` sends.
 ```bash
 pltr global-branch get BRANCH_RID [--format FORMAT]
 
+# Backed by branch-service PUT /branch/load/{branchRid} (empty-body load).
+# Success response is {"branchRecord": {...}} (contract-verified),
+# passed through raw.
+
 # Example
-pltr global-branch get ri.global-branch.main.branch.abc123
+pltr global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024
 ```
 
-### Create Global Branch (plan-first; --apply currently blocked)
+### Create Global Branch (plan-first; --apply issues the real mutation)
 
 ```bash
 pltr global-branch create DISPLAY_NAME \
     [--ontology-rid ONTOLOGY_RID] [--description TEXT] [--apply] [--format FORMAT]
 
-# Backed by branch-service POST /branch/create. 2026-07-24 contract-recovery
-# validation on a live Foundry deployment identified the request fields {displayName,
-# description, ontologyRid} but the request never progressed past
-# 400 Default:InvalidArgument -- the contract is NOT verified end-to-end, so
-# --apply refuses rather than guessing. Without --apply the command prints
-# the dry-run plan and issues no network request.
+# Backed by branch-service POST /branch/create (contract-verified).
+# The command first resolves the ontology's compassNamespaceRid via
+# POST /ontology-metadata/api/ontology/v2/load/all (body
+# {"externalMappingConfigurationFilters": []}, read
+# ontologies[ontologyRid].compassNamespaceRid), then sends
+# {description, displayName, ontologyRid, resourcesToAdd: [],
+#  compassNamespaceRid} and returns the new branch RID
+# (branchRecord.branchRid, ri.branch..branch.<uuid>). Without --apply the
+# command prints the dry-run plan and issues no network request.
 
 # Example
-pltr global-branch create "My Branch" --ontology-rid ri.ontology.main.ontology.abc123
+pltr global-branch create "My Branch" \
+    --ontology-rid ri.ontology.main.ontology.abc123 --apply
 ```
 
 ### Close Global Branch (DESTRUCTIVE; plan-first)
@@ -46,14 +58,13 @@ pltr global-branch create "My Branch" --ontology-rid ri.ontology.main.ontology.a
 ```bash
 pltr global-branch close BRANCH_RID [--apply] [--yes] [--format FORMAT]
 
-# Backed by branch-service PUT /branch/close/{branchRid} (empty-body write;
-# error contract contract-verified, success shape UNVERIFIED and
-# passed through raw). Without --apply the command prints the dry-run plan
-# and issues no network request. The real close requires both --apply and
-# --yes.
+# Backed by branch-service PUT /branch/close/{branchRid} (empty-body write
+# returning 200 {}; contract-verified). Without --apply the command
+# prints the dry-run plan and issues no network request. The real close
+# requires both --apply and --yes.
 
 # Example
-pltr global-branch close ri.global-branch.main.branch.abc123 --apply --yes
+pltr global-branch close ri.branch..branch.00000000-0000-0000-0000-000000000024 --apply --yes
 ```
 
 ## Global Proposal Commands
@@ -64,24 +75,25 @@ pltr global-branch close ri.global-branch.main.branch.abc123 --apply --yes
 pltr global-proposal get PROPOSAL_RID [--format FORMAT]
 
 # Example
-pltr global-proposal get ri.global-proposal.main.proposal.abc123
+pltr global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025
 ```
 
-### Create Global Proposal (plan-first; --apply currently blocked)
+### Create Global Proposal (plan-first; --apply issues the real mutation)
 
 ```bash
 pltr global-proposal create DISPLAY_NAME \
     [--branch-rid BRANCH_RID] [--description TEXT] [--apply] [--format FORMAT]
 
-# Backed by branch-service POST /branch/proposal/create. 2026-07-24
-# contract-recovery validation identified the request fields {branchRid,
-# description, displayName} but the request never progressed past
-# 400 Default:InvalidArgument -- the contract is NOT verified end-to-end,
-# so --apply refuses rather than guessing. Without --apply the command
-# prints the dry-run plan and issues no network request.
+# Backed by branch-service POST /branch/proposal/create (contract-verified
+# 2026-07-25). Sends {branchRid, displayName, description, mergeTo} where
+# mergeTo is the Conjure union {"main": {}, "type": "main"}, and returns the
+# new proposal RID (proposal.proposalRid, ri.branch..proposal.<uuid>).
+# Without --apply the command prints the dry-run plan and issues no network
+# request.
 
 # Example
-pltr global-proposal create "My Proposal" --branch-rid ri.global-branch.main.branch.abc123
+pltr global-proposal create "My Proposal" \
+    --branch-rid ri.branch..branch.00000000-0000-0000-0000-000000000024 --apply
 ```
 
 ### Close Global Proposal (DESTRUCTIVE; plan-first)
@@ -90,11 +102,10 @@ pltr global-proposal create "My Proposal" --branch-rid ri.global-branch.main.bra
 pltr global-proposal close PROPOSAL_RID [--apply] [--yes] [--format FORMAT]
 
 # Backed by branch-service PUT /branch/proposal/close/{proposalRid}
-# (empty-body write; error contract contract-verified, success shape
-# UNVERIFIED and passed through raw). Without --apply the command prints
-# the dry-run plan and issues no network request. The real close requires
-# both --apply and --yes.
+# (empty-body write returning 200 {}; contract-verified). Without
+# --apply the command prints the dry-run plan and issues no network request.
+# The real close requires both --apply and --yes.
 
 # Example
-pltr global-proposal close ri.global-proposal.main.proposal.abc123 --apply --yes
+pltr global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 --apply --yes
 ```

@@ -1,4 +1,4 @@
-"""Developer Console commands: OSDK definition reads and SDK package installs."""
+"""Developer Console commands: OSDK reads, SDK generation, and installs."""
 
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 osdk_app = typer.Typer(help="Inspect generated OSDK definitions", no_args_is_help=True)
-sdk_app = typer.Typer(help="Install generated SDK packages", no_args_is_help=True)
+sdk_app = typer.Typer(
+    help="Generate and install SDK packages", no_args_is_help=True
+)
 app.add_typer(osdk_app, name="osdk")
 app.add_typer(sdk_app, name="sdk")
 
@@ -168,6 +170,21 @@ def sdk_generate(
         help="Third-party application Resource Identifier",
         autocompletion=complete_rid,
     ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Mint a real SDK version (default: dry-run plan only)",
+    ),
+    no_wait: bool = typer.Option(
+        False,
+        "--no-wait",
+        help="Return after the createSdkV2 POST without polling for completion",
+    ),
+    timeout: float = typer.Option(
+        180.0,
+        "--timeout",
+        help="Max seconds to poll for npm generation to finish (default: 180)",
+    ),
     profile: Optional[str] = typer.Option(
         None,
         "--profile",
@@ -183,34 +200,39 @@ def sdk_generate(
         autocompletion=complete_output_format,
     ),
 ) -> None:
-    """Report the blocked SDK-generation posture (never mutates).
+    """Mint a new OSDK version for an app (plan-first; --apply mutates).
 
-    The backing endpoint (POST /application-sdks/v2/{applicationRid},
-    createSdkV2) is catalog-only: read-safe probes show strict
-    deserialization but the required-field set is not disclosed, and a
-    valid body would create a real SDK version. Per repo rules no mutation
-    is shipped without a verified contract, so this command reads the
-    current SDK records (VERIFIED listSdks) and exits 2 with the exact
-    evidence instead of generating anything.
+    Backed by the contract-derived, contract-verified createSdkV2 contract
+    (the captured contract): the current
+    metadata.applicationVersion is read via the VERIFIED getApplication
+    endpoint, then POST /application-sdks/v2/{applicationRid} with exactly
+    {"applicationVersion": N, "npm": {}} mints the next SDK version.
+    Without --apply the command prints the dry-run plan (resolved version
+    and exact body) and sends nothing mutating. With --apply the POST is
+    issued and npm.status.type is polled from 'requested' to a terminal
+    state (~24s observed) unless --no-wait is given.
     """
 
     if format not in {"table", "json"}:
         raise typer.BadParameter("must be table or json", param_hint="--format")
     try:
-        result = DeveloperConsoleService(profile=profile).plan_sdk_generation(
-            application_rid
+        result = DeveloperConsoleService(profile=profile).generate_sdk(
+            application_rid,
+            apply=apply,
+            wait=not no_wait,
+            timeout_seconds=timeout,
         )
     except TokenExpiredError:
         typer.echo(
             "DEGRADED [token-expired]: Foundry session token expired; "
-            "re-authenticate before retrying this SDK-generation plan"
+            "re-authenticate before retrying this SDK generation"
         )
         raise typer.Exit(1)
     except (ProfileNotFoundError, MissingCredentialsError) as exc:
         typer.echo(f"Authentication Error: {exc}")
         raise typer.Exit(1)
     except SdkDefinitionDriftError as exc:
-        typer.echo(f"DRIFT [sdk-list-shape]: {exc}")
+        typer.echo(f"DRIFT [sdk-generate-shape]: {exc}")
         raise typer.Exit(1)
     except Exception as exc:
         typer.echo(f"Error: {exc}")
@@ -220,7 +242,10 @@ def sdk_generate(
     if rendered:
         typer.echo(rendered, nl=False)
 
-    if result.get("status") == "blocked":
+    status = result.get("status")
+    if status == "failed":
+        raise typer.Exit(1)
+    if status == "timeout":
         raise typer.Exit(2)
 
 
@@ -486,11 +511,19 @@ def _render_connect(result: Mapping[str, Any], format_type: str) -> str:
 def _render_generate(result: Mapping[str, Any], format_type: str) -> str:
     status = result.get("status")
     if resolve_output_format(format_type) == "agent":
-        errors = (
-            [{"type": "blocked", "message": str(result.get("reason"))}]
-            if status == "blocked"
-            else None
-        )
+        errors = None
+        if status == "failed":
+            errors = [
+                {
+                    "type": "generation-failed",
+                    "message": (
+                        "npm.status.type reached a terminal state other "
+                        f"than success: {result.get('npm_status')}"
+                    ),
+                }
+            ]
+        elif status == "timeout":
+            errors = [{"type": "timeout", "message": str(result.get("reason"))}]
         buffer_agent_payload(
             result,
             meta={"result_type": "sdk-generate", "status": status},
@@ -501,20 +534,37 @@ def _render_generate(result: Mapping[str, Any], format_type: str) -> str:
     if format_type == "json":
         return json.dumps(result, indent=2, sort_keys=True) + "\n"
 
+    request = result.get("request") or {}
+    application_version = result.get("application_version")
     lines = [
         f"SDK GENERATE [{status}]",
         f"Application: {result.get('application_rid') or 'unknown'}",
-        f"BLOCKED: {result.get('reason')}",
-        "Evidence:",
+        "Application version: "
+        + (str(application_version) if application_version is not None else "unknown"),
+        f"Request: {request.get('verb') or 'POST'} {request.get('path') or ''}",
+        f"Body: {json.dumps(request.get('body') or {}, sort_keys=True)}",
     ]
-    for item in result.get("evidence") or []:
-        lines.append(f"  - {item}")
-    current = result.get("current_sdks") or []
-    lines.append(f"Current SDK records: {len(current)}")
-    for record in current:
+    if status == "dry-run":
         lines.append(
-            f"  - {record.get('version') or '?'} "
-            f"({record.get('npmPackageName') or 'no npm package'})"
+            "Dry-run: nothing was sent. Re-run with --apply to mint the SDK version."
+        )
+        return "\n".join(lines) + "\n"
+
+    lines.append(f"SDK version: {result.get('sdk_version') or 'unknown'}")
+    lines.append(f"npm package: {result.get('npm_package_name') or 'unknown'}")
+    lines.append(f"npm status: {result.get('npm_status') or 'unknown'}")
+    poll = result.get("poll")
+    if isinstance(poll, Mapping):
+        lines.append(
+            f"Polled {poll.get('attempts')} time(s) over "
+            f"{poll.get('elapsed_seconds')}s"
+        )
+    if status == "timeout":
+        lines.append(f"TIMEOUT: {result.get('reason')}")
+    if status == "failed":
+        lines.append(
+            "Generation failed server-side "
+            f"(npm.status.type = {result.get('npm_status')})."
         )
     return "\n".join(lines) + "\n"
 

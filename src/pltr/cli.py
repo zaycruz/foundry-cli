@@ -56,6 +56,7 @@ from pltr.commands import (
     agent_manifest,
     notepad,
     dev_console,
+    compute,
     docs,
     osdk,
     platform_sdk,
@@ -179,6 +180,11 @@ app.add_typer(
     dev_console.app,
     name="dev-console",
     help="Developer Console operations for generated OSDK packages",
+)
+app.add_typer(
+    compute.app,
+    name="compute",
+    help="Inspect and manage Foundry Compute Modules",
 )
 app.add_typer(
     docs.app,

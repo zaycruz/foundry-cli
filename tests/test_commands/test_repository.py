@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 from pltr.commands.repository import app
 from pltr.services.repository import (
-    CreateContractUnverifiedError,
     PullRequestNotFoundError,
     PullRequestShapeError,
     RepositoryCloneError,
@@ -17,6 +16,7 @@ from pltr.services.repository import (
 
 REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000014"
 PR_RID = "ri.pull-request.main.pull-request.00000000-0000-0000-0000-000000000012"
+FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000011"
 
 
 def _sample_pr():
@@ -365,49 +365,112 @@ class TestCreatePythonTransformsCommand:
 
     @patch("pltr.commands.repository.RepositoryService")
     def test_default_is_dry_run_plan(self, mock_service_class):
-        """Test the default posture prints the dry-run plan."""
+        """Test the default posture prints the dry-run plan, never posts."""
         mock_service = Mock()
         mock_service_class.return_value = mock_service
         mock_service.create_python_transforms_plan.return_value = {
             "status": "dry-run",
             "name": "test-pull-request-1",
-            "intended_endpoint": "POST /stemma/api/repos",
-            "contract": "UNVERIFIED",
-            "evidence": "12 candidate bodies all returned 500",
+            "intended_calls": [
+                {"endpoint": "POST /stemma/api/repos", "body": {"path": "/p/x"}}
+            ],
+            "contract": "VERIFIED",
+            "evidence": "derived from the client contract 2026-07-25",
         }
 
         result = self.runner.invoke(
             app,
-            ["create-python-transforms", "test-pull-request-1",
-             "--format", "json"],
+            [
+                "create-python-transforms",
+                "test-pull-request-1",
+                "--parent-rid",
+                FOLDER_RID,
+                "--format",
+                "json",
+            ],
         )
 
         assert result.exit_code == 0
         assert "dry-run" in result.stdout
         mock_service.create_python_transforms_plan.assert_called_once_with(
-            "test-pull-request-1", None
+            "test-pull-request-1", FOLDER_RID
         )
         mock_service.create_python_transforms_repository.assert_not_called()
 
     @patch("pltr.commands.repository.RepositoryService")
-    def test_apply_fails_loudly_with_evidence(self, mock_service_class):
-        """Test --apply refuses to guess the unverified contract."""
+    def test_apply_creates_and_reports_repository(self, mock_service_class):
+        """Test --apply forwards to the real create and reports the rid."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_python_transforms_repository.return_value = {
+            "status": "created",
+            "name": "test-pull-request-1",
+            "repository": {"rid": REPO_RID, "sourceRid": None},
+            "verification": {"bootstrap_verified": True},
+            "contract": "VERIFIED",
+            "evidence": "derived from the client contract 2026-07-25",
+        }
+
+        result = self.runner.invoke(
+            app,
+            [
+                "create-python-transforms",
+                "test-pull-request-1",
+                "--parent-rid",
+                FOLDER_RID,
+                "--apply",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert REPO_RID in result.stdout
+        mock_service.create_python_transforms_repository.assert_called_once_with(
+            "test-pull-request-1", FOLDER_RID
+        )
+        mock_service.create_python_transforms_plan.assert_not_called()
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_shape_error_fails_loudly(self, mock_service_class):
+        """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
         mock_service_class.return_value = mock_service
         mock_service.create_python_transforms_repository.side_effect = (
-            CreateContractUnverifiedError(
-                "Refusing to create Python transforms repository 'x': "
-                "POST /stemma/api/repos contract UNVERIFIED"
-            )
+            RepositoryShapeError("Unverified repository create response shape")
         )
 
         result = self.runner.invoke(
-            app, ["create-python-transforms", "x", "--apply"]
+            app,
+            ["create-python-transforms", "x", "--parent-rid", FOLDER_RID, "--apply"],
         )
 
         assert result.exit_code == 1
-        assert "Refusing to create" in result.stdout
-        assert "UNVERIFIED" in result.stdout
+        assert "Unverified" in result.stdout
+
+    @patch("pltr.commands.repository.RepositoryService")
+    def test_create_error(self, mock_service_class):
+        """Test create error handling."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_python_transforms_repository.side_effect = Exception(
+            "HTTP 403"
+        )
+
+        result = self.runner.invoke(
+            app,
+            ["create-python-transforms", "x", "--parent-rid", FOLDER_RID, "--apply"],
+        )
+
+        assert result.exit_code == 1
+        assert "Error creating Python transforms repository" in result.stdout
+
+    def test_parent_rid_is_required(self):
+        """Test the command refuses to run without a parent folder RID."""
+        result = self.runner.invoke(app, ["create-python-transforms", "x"])
+
+        assert result.exit_code == 2
+        assert "--parent-rid" in result.output
 
 
 class TestPullRequestCreateCommand:

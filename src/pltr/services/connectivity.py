@@ -5,8 +5,9 @@ Connectivity service wrapper for Foundry SDK.
 import json
 import logging
 import os
+import uuid
 from collections import deque
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .base import BaseService
 from .foundry_internal_client import FoundryInternalClient
@@ -33,6 +34,10 @@ class EgressPolicyNotFoundError(RuntimeError):
 
 class EgressPolicyShapeError(RuntimeError):
     """Raised when an egress policy read does not match the verified shape."""
+
+
+class RestSourceShapeError(RuntimeError):
+    """Raised when a magritte source-store response is not the verified shape."""
 
 
 class ConnectivityService(BaseService):
@@ -396,40 +401,227 @@ class ConnectivityService(BaseService):
         return dict(payload)
 
     CREATE_WEBHOOK_CONTRACT = (
-        "request contract contract-verified on a live Foundry deployment up to "
-        "the permission boundary: {name, apiName, description, spec, "
-        "executionPolicy} fully deserialized and passed app-level validation, "
-        "failing only with 403 Compass:InsufficientPermissions. A 2xx success "
-        "shape has never been observed; responses are passed through raw."
+        "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
+        "0.408.0 client contract (the captured contract): "
+        "POST /webhooks/api/registry/v0 with {name, apiName, description, "
+        "spec, executionPolicy} returned 200 {webhookRid, version}. "
+        "Permission failures are resource-scoped (edit rights on the target "
+        "source's project), not token-scoped."
     )
     UPDATE_WEBHOOK_CONTRACT = (
-        "UNVERIFIED: publishWebhookVersion (POST /registry/v0/{webhookRid}) "
-        "validation confirmed only the 'spec' key (verified); the full "
-        "request body could not be recovered without a creatable webhook, "
-        "and webhook creation is permission-blocked on a live Foundry deployment. "
-        "Refusing to guess."
+        "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
+        "0.408.0 client contract (the captured contract): "
+        "publishWebhookVersion is POST /webhooks/api/registry/v0/{webhookRid} "
+        'with body {"spec": <same spec shape as create>} and nothing else; '
+        "it returned 200 {webhookRid, version: 2}. Quirk: httpQueryParams "
+        "map values land in queryParamsV2 with an extra array wrap "
+        '({"realm": [[{...}]]}); headers are not wrapped.'
     )
     REST_SOURCE_CONTRACT = (
-        "UNVERIFIED: magritte-coordinator addSourceV2/V3 (POST "
-        "/source-store/source/v2|v3) drops unknown keys leniently, which "
-        "defeats the field validation (verified); every candidate "
-        "envelope failed with 400 Default:InvalidArgument. The live REDACTED "
-        "config shape (GET /source-store/source/{id}/config) is shown in "
-        "the plan for operator reference only. Refusing to guess."
+        "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
+        "0.408.0 client contract "
+        "(the captured contract): POST "
+        "/magritte-coordinator/api/source-store/source/v3 with {config, "
+        "description, runtimePlatformRequest, parentRid} returned 200 with a "
+        "bare-string body (the new source RID). domains[].domainId is a "
+        "client-generated random UUID per call. Requires "
+        "magritte:write-resource on parentRid and at least one egress "
+        "policy RID. Credentials are configured post-create in the Data "
+        "Connection UI, never in the create envelope."
     )
 
+    SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
     @staticmethod
-    def build_webhook_spec(source_rid: str) -> Dict[str, Any]:
-        """Build the minimal derived magritteRestWebhook spec."""
+    def _normalize_wire_segment(segment: Any) -> Dict[str, Any]:
+        """Normalize one path/header/query segment to the wire union shape.
+
+        Accepts a bare string (static), ``{"static": value}``, or
+        ``{"input": name}`` / ``{"input": {"name": name}}`` and returns the
+        ``{"static"|"input": ..., "type": ...}`` shape the registry expects.
+        """
+        if isinstance(segment, str):
+            return {"static": segment, "type": "static"}
+        if isinstance(segment, Mapping):
+            if "input" in segment:
+                raw_input = segment["input"]
+                name = (
+                    raw_input.get("name")
+                    if isinstance(raw_input, Mapping)
+                    else raw_input
+                )
+                return {"input": {"name": name}, "type": "input"}
+            if "static" in segment:
+                return {"static": segment["static"], "type": "static"}
+        raise WebhookShapeError(
+            f"Unrecognized webhook segment {segment!r}; expected a string, "
+            '{"static": value}, or {"input": name}'
+        )
+
+    @staticmethod
+    def _normalize_data_type(data_type: Any) -> Dict[str, Any]:
+        """Normalize ``{"type": "string"}`` to the union ``{"string": {}, "type": "string"}``."""
+        if not isinstance(data_type, Mapping):
+            raise WebhookShapeError(
+                f"Unrecognized webhook input dataType {data_type!r}; expected "
+                'an object like {"type": "string"}'
+            )
+        type_key = data_type.get("type")
+        if not isinstance(type_key, str) or not type_key:
+            raise WebhookShapeError(
+                f"Unrecognized webhook input dataType {data_type!r}; missing "
+                "a 'type' key"
+            )
+        if isinstance(data_type.get(type_key), Mapping):
+            # Already union-shaped (e.g. {"string": {}, "type": "string"}).
+            return dict(data_type)
+        return {type_key: {}, "type": type_key}
+
+    @classmethod
+    def build_magritte_rest_call(
+        cls, call: Mapping[str, Any], domain_id: str
+    ) -> Dict[str, Any]:
+        """Assemble one wire-shaped magritteRestWebhook call.
+
+        Mirrors the MCP tool transform captured: each call gets a
+        fresh client-generated ``callId`` UUID; ``httpQueryParams`` map values
+        land in ``queryParamsV2`` with an EXTRA ARRAY WRAP; ``headers`` are
+        NOT wrapped; legacy ``queryParams`` stays empty.
+        """
+        method = str(call.get("httpMethod", "GET")).upper()
+        basic = {
+            "domainId": domain_id,
+            "method": {"static": method, "type": "static"},
+            "path": [
+                cls._normalize_wire_segment(segment)
+                for segment in call.get("httpPath", []) or []
+            ],
+            "headers": {
+                str(name): [
+                    cls._normalize_wire_segment(segment) for segment in segments or []
+                ]
+                for name, segments in (call.get("headers") or {}).items()
+            },
+            "queryParams": {},
+            "queryParamsV2": {
+                str(name): [
+                    [cls._normalize_wire_segment(segment) for segment in segments or []]
+                ]
+                for name, segments in (call.get("httpQueryParams") or {}).items()
+            },
+            "isHttpMethodSafe": method in cls.SAFE_HTTP_METHODS,
+        }
+        return {
+            "callId": str(uuid.uuid4()),
+            "call": {"basic": basic, "type": "basic"},
+        }
+
+    @classmethod
+    def build_webhook_spec(
+        cls,
+        source_rid: str,
+        domain_id: Optional[str] = None,
+        calls: Optional[Sequence[Mapping[str, Any]]] = None,
+        inputs: Optional[Sequence[Mapping[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Build the derived magritteRestWebhook spec.
+
+        With no calls this is the minimal verified spec (empty calls/inputs).
+        When ``calls`` are given (in the MCP tool-arg shape: ``httpMethod``,
+        ``httpPath``, ``headers``, ``httpQueryParams``), ``domain_id`` is
+        required and each call is assembled via :meth:`build_magritte_rest_call`.
+        """
+        wire_calls = [
+            cls.build_magritte_rest_call(call, domain_id or "")
+            for call in (calls or [])
+        ]
+        wire_inputs = [
+            {
+                "name": str(input_spec["name"]),
+                "dataType": cls._normalize_data_type(
+                    input_spec.get("dataType", {"type": "string"})
+                ),
+                "description": str(input_spec.get("description", "")),
+            }
+            for input_spec in (inputs or [])
+        ]
         return {
             "config": {
                 "type": "magritteRestWebhook",
-                "magritteRestWebhook": {"sourceRid": source_rid, "calls": []},
+                "magritteRestWebhook": {"sourceRid": source_rid, "calls": wire_calls},
             },
-            "inputs": [],
+            "inputs": wire_inputs,
             "outputs": [],
             "storagePolicy": {},
         }
+
+    def resolve_source_domain_id(self, source_rid: str, host: str) -> str:
+        """Resolve a domain host string to its domainId on a magritte source.
+
+        Read-only against ``GET /magritte-coordinator/api/source-store/
+        source/{fullSourceRid}/config`` (verified: the full RID
+        must be in the path; the bare-UUID variant 400s).
+
+        Args:
+            source_rid: Full magritte source RID
+            host: Domain host string to match (case-insensitive)
+
+        Returns:
+            The matching domain's domainId
+
+        Raises:
+            RuntimeError: If the read fails or no domain matches the host
+        """
+        if not host or not host.strip():
+            raise ValueError("host is required")
+        wanted = host.strip().lower()
+
+        client = self._internal_client()
+        path = f"magritte-coordinator/api/source-store/source/{source_rid}/config"
+        try:
+            status, payload, raw = client.conjure("GET", path)
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to read source config for {source_rid}: {e}"
+            ) from e
+
+        if not 200 <= status < 300:
+            error_name = (
+                payload.get("errorName") if isinstance(payload, Mapping) else None
+            )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"Source config read failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}"
+            )
+
+        domains = self._find_domain_entries(payload)
+        for domain in domains:
+            if str(domain.get("host", "")).lower() == wanted:
+                domain_id = domain.get("domainId")
+                if isinstance(domain_id, str) and domain_id:
+                    return domain_id
+        available = sorted(
+            {str(domain.get("host")) for domain in domains if domain.get("host")}
+        )
+        raise RuntimeError(
+            f"No domain with host '{host}' found on source {source_rid}. "
+            f"Available domain hosts: {available or 'none'}"
+        )
+
+    @staticmethod
+    def _find_domain_entries(node: Any) -> List[Mapping[str, Any]]:
+        """Recursively collect dicts that look like domain entries (host + domainId)."""
+        found: List[Mapping[str, Any]] = []
+        if isinstance(node, Mapping):
+            if "host" in node and "domainId" in node:
+                found.append(node)
+            for value in node.values():
+                found.extend(ConnectivityService._find_domain_entries(value))
+        elif isinstance(node, list):
+            for item in node:
+                found.extend(ConnectivityService._find_domain_entries(item))
+        return found
 
     def build_create_webhook_body(
         self,
@@ -445,13 +637,9 @@ class ConnectivityService(BaseService):
             "apiName": api_name,
             "description": description,
             "spec": spec if spec is not None else self.build_webhook_spec(source_rid),
-            "executionPolicy": {
-                "timeLimitSeconds": None,
-                "asyncTimeLimitSeconds": None,
-                "maximumRetryAttemptsPermitted": None,
-                "rateLimits": None,
-                "logLevel": None,
-            },
+            # The 2026-07-25 capture shows the MCP sending executionPolicy: {}
+            # and the server accepting it with 200.
+            "executionPolicy": {},
         }
 
     def create_webhook(
@@ -466,10 +654,11 @@ class ConnectivityService(BaseService):
         Create a REST API data-source webhook in the webhook registry.
 
         Write against the internal webhooks API ``POST /registry/v0``
-        (createWebhook). The request contract is contract-verified up to the
-        Compass permission boundary (see CREATE_WEBHOOK_CONTRACT); the
-        success shape is UNVERIFIED and passed through raw with strict
-        shape-checking.
+        (createWebhook). The request contract and the 2xx success shape
+        (``{"webhookRid": ..., "version": 1}``) are VERIFIED end-to-end via
+        the 2026-07-25 MCP client contract (see CREATE_WEBHOOK_CONTRACT).
+        Permission failures are resource-scoped: the caller needs edit
+        rights on the target source (or its parent project).
 
         Args:
             name: Webhook display name
@@ -526,9 +715,9 @@ class ConnectivityService(BaseService):
         """
         Describe a webhook publish (update) without issuing it.
 
-        The publishWebhookVersion contract is UNVERIFIED (see
-        UPDATE_WEBHOOK_CONTRACT), so the CLI never sends this body; the plan
-        is the deliverable.
+        The publishWebhookVersion contract is VERIFIED (see
+        UPDATE_WEBHOOK_CONTRACT); the plan shows the exact request
+        ``--apply`` would send.
 
         Args:
             webhook_rid: Webhook Resource Identifier
@@ -547,57 +736,226 @@ class ConnectivityService(BaseService):
             "contract": self.UPDATE_WEBHOOK_CONTRACT,
         }
 
+    def update_webhook(self, webhook_rid: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Publish a new version of a data-source webhook.
+
+        Write against the internal webhooks API
+        ``POST /registry/v0/{webhookRid}`` (publishWebhookVersion) with body
+        ``{"spec": spec}`` and nothing else -- metadata is not changed by
+        publish. VERIFIED end-to-end via the 2026-07-25 MCP client contract;
+        the 2xx response is ``{"webhookRid": ..., "version": N}``.
+
+        Args:
+            webhook_rid: Webhook Resource Identifier
+            spec: Replacement webhook spec (same shape as create)
+
+        Returns:
+            Raw publish response dictionary
+
+        Raises:
+            WebhookShapeError: If the 2xx response is not a JSON object
+            RuntimeError: If the write fails or the API is not mounted
+        """
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "POST",
+                f"webhooks/api/registry/v0/{webhook_rid}",
+                json_body={"spec": spec},
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to update webhook {webhook_rid}: {e}") from e
+
+        if not 200 <= status < 300:
+            error_name = (
+                payload.get("errorName") if isinstance(payload, Mapping) else None
+            )
+            if error_name == "Route:RouteNotMounted":
+                raise RuntimeError(
+                    "The webhooks registry API is not mounted on this stack "
+                    "(Route:RouteNotMounted for /registry/v0/{webhookRid})"
+                )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"Webhook registry update failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}"
+            )
+
+        if not isinstance(payload, Mapping) or not payload:
+            raise WebhookShapeError(
+                "Unexpected webhook update response shape: expected a "
+                f"non-empty JSON object, got {str(raw)[:200]!r}."
+            )
+        return dict(payload)
+
+    def build_create_rest_source_body(
+        self,
+        name: str,
+        host: str,
+        scheme: str,
+        port: int,
+        parent_rid: str,
+        egress_policy_rids: Sequence[str],
+        description: str = "",
+    ) -> Dict[str, Any]:
+        """Assemble the VERIFIED addSourceV3 request body.
+
+        Mirrors the 2026-07-25 MCP capture exactly: ``domains[].domainId``
+        is a client-generated random UUID per call, name/description live in
+        a ``description`` object, egress policy RIDs are wrapped in the
+        ``runtimePlatformRequest`` cloud union, and the target folder is
+        ``parentRid``. No credentials are ever part of this envelope.
+        """
+        return {
+            "config": {
+                "source": {
+                    "type": "webhooks-rest",
+                    "config": {
+                        "domains": [
+                            {
+                                "host": host,
+                                "scheme": scheme.upper(),
+                                "domainId": str(uuid.uuid4()),
+                                "port": port,
+                            }
+                        ]
+                    },
+                }
+            },
+            "description": {"name": name, "description": description},
+            "runtimePlatformRequest": {
+                "cloud": {"networkEgresses": list(egress_policy_rids)},
+                "type": "cloud",
+            },
+            "parentRid": parent_rid,
+        }
+
     def plan_create_rest_source(
-        self, name: str, host: str, scheme: str = "HTTPS", port: int = 443
+        self,
+        name: str,
+        host: str,
+        scheme: str,
+        port: int,
+        parent_rid: str,
+        egress_policy_rids: Sequence[str],
+        description: str = "",
     ) -> Dict[str, Any]:
         """
         Describe a REST API data-source create without issuing it.
 
-        The addSourceV2/V3 contract is UNVERIFIED (see
-        REST_SOURCE_CONTRACT), so the CLI never sends a body. The candidate
-        body below models the live REDACTED config shape read from
-        ``GET /source-store/source/{id}/config`` with dummy values only --
-        it was REJECTED by the server (400) and is shown purely for operator
-        reference. This CLI never calls the plaintext-secret config variant
-        and never accepts real credentials.
+        The addSourceV3 contract is VERIFIED (see REST_SOURCE_CONTRACT);
+        the plan shows the exact request ``--apply`` would send. This CLI
+        never calls the plaintext-secret config endpoint and never accepts
+        real credentials.
 
         Args:
             name: Source display name
-            host: Dummy/target hostname for the source domain
+            host: Target hostname for the source domain
             scheme: URL scheme (default HTTPS)
             port: Port (default 443)
+            parent_rid: Compass folder/project RID (needs
+                magritte:write-resource)
+            egress_policy_rids: Network egress policy RIDs covering host:port
+            description: Optional source description
 
         Returns:
-            Plan dictionary with the candidate request and contract status
+            Plan dictionary with the request and contract status
         """
-        domain_id = "00000000-0000-4000-8000-000000000001"
         return {
             "mode": "plan",
             "request": {
                 "verb": "POST",
-                "path": "/magritte-coordinator/api/source-store/source/v2",
-                "body": {
-                    "source": {
-                        "type": "webhooks-rest",
-                        "config": {
-                            "domains": [
-                                {
-                                    "domainId": domain_id,
-                                    "host": host,
-                                    "scheme": scheme,
-                                    "port": port,
-                                }
-                            ],
-                            "additionalSecrets": {},
-                        },
-                    },
-                    "name": name,
-                },
-                "body_status": "candidate only -- REJECTED by the server "
-                "(400 Default:InvalidArgument, 2026-07-24); shown for "
-                "operator reference, never sent",
+                "path": "/magritte-coordinator/api/source-store/source/v3",
+                "body": self.build_create_rest_source_body(
+                    name,
+                    host,
+                    scheme,
+                    port,
+                    parent_rid,
+                    egress_policy_rids,
+                    description,
+                ),
             },
             "contract": self.REST_SOURCE_CONTRACT,
+        }
+
+    def create_rest_source(
+        self,
+        name: str,
+        host: str,
+        scheme: str,
+        port: int,
+        parent_rid: str,
+        egress_policy_rids: Sequence[str],
+        description: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Create a REST API data source via magritte-coordinator addSourceV3.
+
+        Write against ``POST /magritte-coordinator/api/source-store/source/v3``
+        with the VERIFIED envelope (see REST_SOURCE_CONTRACT). The 2xx
+        response is a BARE JSON STRING -- the new source RID, not an object.
+        Credentials are out of scope: they are configured post-create in the
+        Data Connection UI.
+
+        Args:
+            name: Source display name
+            host: Target hostname for the source domain
+            scheme: URL scheme (default HTTPS)
+            port: Port (default 443)
+            parent_rid: Compass folder/project RID (needs
+                magritte:write-resource)
+            egress_policy_rids: Network egress policy RIDs covering host:port
+            description: Optional source description
+
+        Returns:
+            Dictionary with the new ``source_rid`` and the post-create
+            connection-details UI path
+
+        Raises:
+            RestSourceShapeError: If the 2xx response is not the verified
+                bare-string source RID
+            RuntimeError: If the write fails
+        """
+        body = self.build_create_rest_source_body(
+            name, host, scheme, port, parent_rid, egress_policy_rids, description
+        )
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "POST",
+                "magritte-coordinator/api/source-store/source/v3",
+                json_body=body,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to create REST source '{name}': {e}") from e
+
+        if not 200 <= status < 300:
+            error_name = (
+                payload.get("errorName") if isinstance(payload, Mapping) else None
+            )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"REST source create failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}. Requires magritte:write-resource on "
+                f"parentRid {parent_rid}."
+            )
+
+        if not isinstance(payload, str) or not payload.startswith(
+            "ri.magritte..source."
+        ):
+            raise RestSourceShapeError(
+                "Unexpected REST source create response shape: expected a "
+                "bare-string ri.magritte..source.* RID, got "
+                f"{str(raw)[:200]!r}."
+            )
+        return {
+            "source_rid": payload,
+            "status": "created",
+            "credentials": "not set -- configure post-create in the Data Connection UI",
+            "setup_path": f"/workspace/data-ingestion-app/sources/{payload}"
+            "/setup/connection-details",
         }
 
     EGRESS_BATCH_SIZE = 50

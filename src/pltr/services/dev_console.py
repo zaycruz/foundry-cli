@@ -9,6 +9,12 @@ endpoints, VERIFIED in
 - ``GET /third-party-application-service/api/application-sdks/{applicationRid}/{sdkVersion}``
 - ``GET /third-party-application-service/api/application-sdks/{applicationRid}/repository``
 
+SDK generation uses the contract-derived, contract-verified createSdkV2 contract
+(``the captured contract``, 2026-07-25):
+``POST /third-party-application-service/api/application-sdks/v2/{applicationRid}``
+with exactly ``{"applicationVersion": <int>, "npm": {}}``, after reading
+``metadata.applicationVersion`` from the getApplication endpoint.
+
 The exact SDK definition payload shape is not contract-pinned anywhere in the
 repo, so the service validates only the fields it actually relies on and fails
 loudly (``SdkDefinitionDriftError``) when those drift, instead of silently
@@ -20,6 +26,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Mapping, Optional
 from urllib.parse import quote
@@ -32,27 +39,31 @@ from .foundry_internal_client import FoundryInternalClient
 APPLICATION_SDKS_BASE = "/third-party-application-service/api/application-sdks"
 APPLICATIONS_BASE = "/third-party-application-service/api/applications"
 
-# Evidence captured by read-safe probes against a live stack (2026-07-24,
-# the verification a live Foundry deployment): POST /application-sdks/v2/{applicationRid} rejects an empty body
-# with 400 Default:InvalidArgument and unknown body fields with 422
-# Conjure:UnprocessableEntity. Conjure does not disclose the required-field
-# set, and any body that passes validation would create a real SDK version, so
-# the valid-request contract stays UNVERIFIED and no mutation is ever sent.
-SDK_GENERATE_CONTRACT_UNVERIFIED_REASON = (
-    "createSdkV2-contract-unverified: POST "
+# SDK generation contract, derived from the vendor MCP 0.408.0 client contract and verified
+# end-to-end 2026-07-25 on a live Foundry deployment (the captured contract):
+# POST /application-sdks/v2/{applicationRid} with exactly
+# {"applicationVersion": <int>, "npm": {}} mints a new SDK version from that
+# app version (verified: 0.8.0 minted from applicationVersion 6). Unknown
+# top-level keys are rejected with 422 Conjure:UnprocessableEntity, so the
+# allowed field set is exactly {applicationVersion, npm}. Generation is async
+# server-side; npm.status.type flips requested -> success (~24s observed).
+SDK_GENERATE_CONTRACT = (
+    "contract-verified on a live Foundry deployment "
+    "(the captured contract): POST "
     "/third-party-application-service/api/application-sdks/v2/{applicationRid} "
-    "is catalog-only (gap analysis 2026-07-22). Read-safe probes show strict "
-    "deserialization (empty body -> 400 Default:InvalidArgument; unknown field "
-    "-> 422 Conjure:UnprocessableEntity) but the required fields are not "
-    "disclosed, and a valid body would generate a real SDK version. Refusing "
-    "to mutate without a verified contract."
+    'with exactly {"applicationVersion": <int>, "npm": {}}; unknown top-level '
+    "keys -> 422 Conjure:UnprocessableEntity. The MCP's scope-patch PUT is "
+    "not needed for a pure regenerate from the current app version."
 )
-SDK_GENERATE_PROBE_EVIDENCE = [
-    "POST {} (empty body) -> 400 Default:InvalidArgument",
-    'POST {"zzzUnknownField": 0} -> 422 Conjure:UnprocessableEntity',
-    "required-field names are not disclosed by the error channel",
-    "probes recorded in the captured contract",
-]
+SDK_GENERATE_TIMEOUT_REASON = (
+    "sdk-generation-timeout: npm.status.type stayed non-terminal past the "
+    "polling deadline; the SDK version was minted server-side but generation "
+    "did not finish in time."
+)
+# Observed live 2026-07-25: npm.status.type walks requested -> inProgress ->
+# success; the /latest?sdkStatus=REQUESTED confirmation read 204s as soon as
+# the record leaves "requested", so polling tracks listSdks instead.
+_SDK_GENERATION_PENDING_STATUSES = frozenset({"requested", "inProgress"})
 
 CONNECT_READ_ONLY_DIVERGENCE = (
     "headless read-only form: the vendor MCP connect_to_dev_console_app is an "
@@ -93,7 +104,7 @@ class SdkDefinitionDriftError(RuntimeError):
 
 
 class DeveloperConsoleService:
-    """Read OSDK definitions and install generated SDK packages."""
+    """Read OSDK definitions, generate SDK versions, and install packages."""
 
     def __init__(
         self,
@@ -273,50 +284,241 @@ class DeveloperConsoleService:
         }
 
     # ------------------------------------------------------------------
-    # SDK generation (blocked: createSdkV2 contract is unverified)
+    # SDK generation (createSdkV2, contract-derived verified contract)
     # ------------------------------------------------------------------
 
-    def plan_sdk_generation(self, application_rid: str) -> dict[str, Any]:
-        """Report the blocked SDK-generation posture with probe evidence.
+    def get_current_application_version(self, application_rid: str) -> int:
+        """Read ``metadata.applicationVersion`` via VERIFIED getApplication.
 
-        Never mutates: the createSdkV2 request contract is unverified, so
-        this only reads the current SDK records (VERIFIED ``listSdks``) and
-        returns a ``blocked`` plan the operator can act on manually.
+        Fails loud on drift: the metadata object must carry an integer
+        ``applicationVersion`` (bools are rejected explicitly).
         """
 
         payload = self._conjure_get(
-            f"{APPLICATION_SDKS_BASE}/{application_rid}", "listSdks"
+            f"{APPLICATIONS_BASE}/{application_rid}", "getApplication"
         )
-        if not isinstance(payload, Mapping) or not isinstance(
-            payload.get("sdks"), list
-        ):
+        metadata = (
+            payload.get("metadata") if isinstance(payload, Mapping) else None
+        )
+        version = (
+            metadata.get("applicationVersion")
+            if isinstance(metadata, Mapping)
+            else None
+        )
+        if not isinstance(version, int) or isinstance(version, bool):
             raise SdkDefinitionDriftError(
-                f"listSdks for {application_rid} returned a payload without "
-                f"a 'sdks' list: {str(payload)[:200]}"
+                f"getApplication for {application_rid} returned no integer "
+                f"metadata.applicationVersion; metadata: {str(metadata)[:200]}"
             )
-        current_sdks = []
-        for entry in payload["sdks"]:
-            if not isinstance(entry, Mapping):
-                continue
-            record: dict[str, Any] = {}
-            for key in ("version", "repositoryRid"):
-                value = entry.get(key)
-                if isinstance(value, str) and value:
-                    record[key] = value
-            npm = entry.get("npm")
-            if isinstance(npm, Mapping):
-                package_name = npm.get("npmPackageName")
-                if isinstance(package_name, str) and package_name:
-                    record["npmPackageName"] = package_name
-            current_sdks.append(record)
+        return version
+
+    @staticmethod
+    def _sdk_generate_request(
+        application_rid: str, application_version: int
+    ) -> dict[str, Any]:
+        """The exact createSdkV2 request; the body key set is contract-fixed."""
+
+        return {
+            "verb": "POST",
+            "path": f"{APPLICATION_SDKS_BASE}/v2/{application_rid}",
+            "body": {"applicationVersion": application_version, "npm": {}},
+        }
+
+    def plan_sdk_generation(self, application_rid: str) -> dict[str, Any]:
+        """Dry-run plan: resolve the app version and show the exact body.
+
+        Never mutates; ``generate_sdk(apply=True)`` sends this request.
+        """
+
+        application_version = self.get_current_application_version(
+            application_rid
+        )
         return {
             "application_rid": application_rid,
-            "status": "blocked",
-            "reason": SDK_GENERATE_CONTRACT_UNVERIFIED_REASON,
-            "evidence": list(SDK_GENERATE_PROBE_EVIDENCE),
-            "current_sdks": current_sdks,
+            "status": "dry-run",
+            "application_version": application_version,
+            "request": self._sdk_generate_request(
+                application_rid, application_version
+            ),
+            "contract": SDK_GENERATE_CONTRACT,
             "warnings": [],
         }
+
+    def generate_sdk(
+        self,
+        application_rid: str,
+        *,
+        apply: bool = False,
+        wait: bool = True,
+        timeout_seconds: float = 180.0,
+        poll_interval_seconds: float = 5.0,
+    ) -> dict[str, Any]:
+        """Mint a new SDK version from the current app version (plan-first).
+
+        Without ``apply`` this returns the dry-run plan and sends nothing
+        mutating. With ``apply`` the contract-verified createSdkV2 POST is
+        issued; when ``wait`` is set listSdks is then polled until the
+        minted record's ``npm.status.type`` turns terminal (``success``,
+        or anything else outside requested/inProgress, which is reported
+        as ``failed``) or the timeout lapses (reported as ``timeout``).
+        """
+
+        if not apply:
+            return self.plan_sdk_generation(application_rid)
+
+        application_version = self.get_current_application_version(
+            application_rid
+        )
+        request = self._sdk_generate_request(application_rid, application_version)
+        payload = self._conjure_write(
+            str(request["verb"]),
+            str(request["path"]),
+            "createSdkV2",
+            json_body=request["body"],
+        )
+        record = self._expect_sdk_record(payload, "createSdkV2", application_rid)
+        result: dict[str, Any] = {
+            "application_rid": application_rid,
+            "application_version": application_version,
+            "request": request,
+            "contract": SDK_GENERATE_CONTRACT,
+            "warnings": [],
+            **record,
+        }
+        if not wait:
+            return {**result, "status": "requested"}
+        return self._poll_sdk_generation(
+            application_rid,
+            result,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+
+    def _poll_sdk_generation(
+        self,
+        application_rid: str,
+        result: dict[str, Any],
+        *,
+        timeout_seconds: float,
+        poll_interval_seconds: float,
+    ) -> dict[str, Any]:
+        """Poll listSdks until the minted record's npm status is terminal.
+
+        The ``/latest?sdkType=NPM&sdkStatus=REQUESTED`` confirmation read
+        from the MCP capture cannot be used as the completion poll: it
+        returns 204 No Content the moment the record leaves ``requested``
+        (observed live 2026-07-25; the status union includes an
+        ``inProgress`` intermediate state). So this polls the VERIFIED
+        listSdks endpoint and tracks the minted ``sdk_version`` instead.
+        Non-terminal statuses are ``requested`` and ``inProgress``; any
+        other terminal status but ``success`` is reported as ``failed``.
+        A minted version missing from a poll page is treated as transient
+        (the POST already returned the record) and retried until the
+        deadline.
+        """
+
+        started = time.monotonic()
+        deadline = started + timeout_seconds
+        attempts = 0
+        minted_version = result["sdk_version"]
+        while True:
+            attempts += 1
+            payload = self._conjure_get(
+                f"{APPLICATION_SDKS_BASE}/{application_rid}", "listSdks"
+            )
+            if not isinstance(payload, Mapping) or not isinstance(
+                payload.get("sdks"), list
+            ):
+                raise SdkDefinitionDriftError(
+                    f"listSdks for {application_rid} returned a payload "
+                    f"without a 'sdks' list while polling SDK generation: "
+                    f"{str(payload)[:200]}"
+                )
+            record = self._find_sdk_record(
+                payload["sdks"], minted_version, application_rid
+            )
+            if record is not None:
+                npm_status = record["npm_status"]
+                if npm_status is None:
+                    raise SdkDefinitionDriftError(
+                        f"listSdks for {application_rid} returned the minted "
+                        f"record {minted_version} without npm.status.type"
+                    )
+                result.update(record)
+                if npm_status not in _SDK_GENERATION_PENDING_STATUSES:
+                    return {
+                        **result,
+                        "status": "success" if npm_status == "success" else "failed",
+                        "poll": {
+                            "attempts": attempts,
+                            "elapsed_seconds": round(
+                                time.monotonic() - started, 3
+                            ),
+                        },
+                    }
+            now = time.monotonic()
+            if now >= deadline:
+                return {
+                    **result,
+                    "status": "timeout",
+                    "reason": SDK_GENERATE_TIMEOUT_REASON,
+                    "poll": {
+                        "attempts": attempts,
+                        "elapsed_seconds": round(now - started, 3),
+                    },
+                }
+            time.sleep(poll_interval_seconds)
+
+    def _find_sdk_record(
+        self, sdks: list[Any], minted_version: str, application_rid: str
+    ) -> Optional[dict[str, Any]]:
+        """Locate the minted version in a listSdks page; None when absent."""
+
+        for entry in sdks:
+            if not isinstance(entry, Mapping):
+                continue
+            if entry.get("version") == minted_version:
+                return self._expect_sdk_record(entry, "listSdks", application_rid)
+        return None
+
+    @staticmethod
+    def _expect_sdk_record(
+        payload: Any, operation: str, application_rid: str
+    ) -> dict[str, Any]:
+        """Shape-check one SDK record; fail loud when ``version`` drifts."""
+
+        if not isinstance(payload, Mapping):
+            raise SdkDefinitionDriftError(
+                f"{operation} for {application_rid} returned a non-object "
+                f"payload: {str(payload)[:200]}"
+            )
+        version = payload.get("version")
+        if not isinstance(version, str) or not version:
+            raise SdkDefinitionDriftError(
+                f"{operation} for {application_rid} returned no string "
+                f"'version'; payload keys: "
+                f"{sorted(str(key) for key in payload)}"
+            )
+        record: dict[str, Any] = {
+            "sdk_version": version,
+            "repository_rid": None,
+            "npm_package_name": None,
+            "npm_status": None,
+        }
+        repository_rid = payload.get("repositoryRid")
+        if isinstance(repository_rid, str) and repository_rid:
+            record["repository_rid"] = repository_rid
+        npm = payload.get("npm")
+        if isinstance(npm, Mapping):
+            package_name = npm.get("npmPackageName")
+            if isinstance(package_name, str) and package_name:
+                record["npm_package_name"] = package_name
+            status = npm.get("status")
+            if isinstance(status, Mapping):
+                status_type = status.get("type")
+                if isinstance(status_type, str) and status_type:
+                    record["npm_status"] = status_type
+        return record
 
     # ------------------------------------------------------------------
     # OSDK -> React scaffold (local codegen, never network-mutating)
@@ -521,7 +723,32 @@ class DeveloperConsoleService:
     # ------------------------------------------------------------------
 
     def _conjure_get(self, path: str, operation: str) -> Any:
-        status, payload, raw = self.client.conjure("GET", path)
+        return self._conjure_call("GET", path, operation)
+
+    def _conjure_write(
+        self,
+        verb: str,
+        path: str,
+        operation: str,
+        *,
+        json_body: Optional[Mapping[str, Any]] = None,
+    ) -> Any:
+        return self._conjure_call(verb, path, operation, json_body=json_body)
+
+    def _conjure_call(
+        self,
+        verb: str,
+        path: str,
+        operation: str,
+        *,
+        json_body: Optional[Mapping[str, Any]] = None,
+    ) -> Any:
+        if json_body is None:
+            status, payload, raw = self.client.conjure(verb, path)
+        else:
+            status, payload, raw = self.client.conjure(
+                verb, path, json_body=json_body
+            )
         if not 200 <= status < 300:
             error_name = (
                 payload.get("errorName") if isinstance(payload, Mapping) else None

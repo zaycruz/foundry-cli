@@ -734,6 +734,46 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "read-only ensure — the CLI never creates a policy and fails loudly "
         "with a 'would create' message when no policy matches"
     ),
+    "get_compute_modules_info": (
+        "internal contour-backend-multiplexer (routes contract-verified "
+        "on a live Foundry deployment, the captured contract): GET "
+        "/contour-backend-multiplexer/api/deployed-apps/{rid}/{branch}/status "
+        "+ GET /contour-backend-multiplexer/api/deployed-apps/{rid}/v2; "
+        "mounts proved by 403 Contour:InsufficientPermission (not "
+        "RouteNotMounted) with an inert RID; success shapes UNVERIFIED, "
+        "passed through raw"
+    ),
+    "get_compute_modules_logs": (
+        "internal foundry-telemetry-service (the captured contract"
+        "compute.md): POST /foundry-telemetry-service/api/info/sessions/"
+        "by-run-rids/get-batch (contract-verified 200 on a live Foundry deployment) then POST "
+        "/foundry-telemetry-service/api/containers/{containerRid}/sessions/"
+        "{sessionId}/logs/read/v3 with microsecond timestamps; step 2 shape "
+        "is bundle-derived and NOT contract-verified (shape_verified: false), "
+        "response passed through raw"
+    ),
+    "manage_compute_modules": (
+        "internal build2 + contour-backend-multiplexer (routes contract-verified "
+        "2026-07-25 on a live Foundry deployment, the captured contract): start "
+        "= POST /build2/api/manager/submitBuild with the deployed-app RID as "
+        "a datasets jobSpecSelection (isRequired: true) — 400 "
+        "Build2:JobSpecsForDatasetsNotFoundInGraph proves the contract; stop "
+        "= DELETE /build2/api/manager/builds/{buildRid} — 400 "
+        "Build2:BuildNotFound proves the route; dev-mode = PUT "
+        "/contour-backend-multiplexer/api/deployed-apps/{rid}/{branch}/"
+        "dev-mode — 403 Contour:InsufficientPermission proves the mount. "
+        "Plan-first: dry-run default, mutations behind --apply (stop also "
+        "--yes); success shapes UNVERIFIED, passed through raw"
+    ),
+    "execute_compute_modules_function": (
+        "internal contour-backend-multiplexer (route contract-verified "
+        "on a live Foundry deployment, the captured contract): POST "
+        "/contour-backend-multiplexer/api/module-group-multiplexer/"
+        "compute-modules/jobs/execute — 403 Contour:InsufficientPermission "
+        "(deployed-apps:submit) proves the mount; response is a raw "
+        "octet-stream, success shape UNVERIFIED and passed through raw. "
+        "Plan-first: dry-run default, execution behind --apply"
+    ),
     # Documentation: verbatim Palantir-authored content proxied from the
     # public docs site (stack-side /documentation API is NOT VERIFIED, so it
     # is not guessed). Pages embed raw markdown in __NEXT_DATA__; the corpus
@@ -753,6 +793,23 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "foundry-platform-sdk==1.95.0: ontologies.Ontology.list + "
         "Ontology.get_full_metadata + vendored @osdk/foundry.ontologies@2.69.0 "
         "type declarations (the captured contract)"
+    ),
+    "generate_new_ontology_sdk_version": (
+        "internal third-party-application-service ("
+        "contract-verified end-to-end 2026-07-25 on a live Foundry deployment, "
+        "the captured contract): GET "
+        "/third-party-application-service/api/applications/{applicationRid} "
+        "for metadata.applicationVersion, then POST "
+        "/third-party-application-service/api/application-sdks/v2/"
+        '{applicationRid} with exactly {"applicationVersion": N, "npm": {}} '
+        "(unknown top-level keys -> 422 Conjure:UnprocessableEntity); "
+        "npm.status.type polled requested -> inProgress -> success (~24s "
+        "observed) via listSdks GET /application-sdks/{rid} — the "
+        "/latest?sdkStatus=REQUESTED confirmation read 204s once the record "
+        "leaves requested. Dry-run plan by default, real generation behind "
+        "--apply; verified on a disposable test application "
+        "tutorial app (0.8.0 minted by the MCP capture, 0.9.0 by this CLI) "
+        "from applicationVersion 6"
     ),
     "get_ontology_sdk_examples": (
         "verbatim code blocks from palantir.com/docs OSDK pages + bindings "
@@ -780,10 +837,14 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "never printed, never persisted in the clone"
     ),
     "create_python_transforms_code_repository": (
-        "dry-run plan only: POST /stemma/api/repos contract UNVERIFIED "
-        "2026-07-24 (12 candidate bodies all 500 Default:Internal; "
-        "the captured contract*.jsonl); --apply fails loudly with "
-        "evidence instead of guessing"
+        "internal stemma + repository-bootstrapper (contract derived from "
+        "@palantir/mcp 0.408.0 traffic 2026-07-25 on a live Foundry deployment, "
+        "the captured contract; pltr contract-verified "
+        "the same day, repo-create-live-verification.md): folder -> project "
+        "-> Compass path via compass hierarchy batch reads, POST "
+        "/stemma/api/repos {path}, then POST /repository-bootstrapper/api/"
+        "repos/{rid}/bootstrap (transforms + transforms-python). Plan-first: "
+        "dry-run default, creation behind --apply"
     ),
 }
 
@@ -847,46 +908,19 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "get_ontology_sdk_examples": "tests/test_services/test_osdk.py;tests/test_commands/test_osdk.py",
     "list_platform_sdk_apis": "tests/test_services/test_platform_sdk.py;tests/test_commands/test_platform_sdk.py",
     "get_platform_sdk_api_reference": "tests/test_services/test_platform_sdk.py;tests/test_commands/test_platform_sdk.py",
+    "get_compute_modules_info": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
+    "get_compute_modules_logs": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
+    "manage_compute_modules": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
+    "execute_compute_modules_function": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
 }
 
 _U3_BLOCKED: dict[str, str] = {
-    "get_compute_modules_info": (
-        "the internal module-group API backing compute-module info "
-        "(/module-group/api/deployed-apps/*) is NOT MOUNTED on the verified "
-        "stack (Route:RouteNotMounted on every verified prefix; re-verified "
-        "2026-07-24 on the default profile), and foundry-platform-sdk==1.95.0 "
-        "exposes no compute-module surface"
-    ),
-    "get_compute_modules_logs": (
-        "the internal module-group API backing compute-module logs/diagnostics "
-        "(/module-group/api/deployed-apps/*) is NOT MOUNTED on the verified "
-        "stack (Route:RouteNotMounted on every verified prefix; re-verified "
-        "2026-07-24 on the default profile), and foundry-platform-sdk==1.95.0 "
-        "exposes no compute-module surface"
-    ),
     "preview_transform": (
         "foundry-platform-sdk==1.95.0 exposes no transform preview or dry-run "
         "operation in its orchestration module (its 'preview' flag only gates "
         "preview API features), and the 2026-07-22 gap analysis catalogues no "
         "VERIFIED internal transform-preview endpoint; implementing one would "
         "require guessing an unverified request contract"
-    ),
-    "manage_compute_modules": (
-        "compute-module management is backed by the internal module-group API "
-        "(/module-group/api/deployed-apps/*), which is NOT MOUNTED on any "
-        "accessible stack (Route:RouteNotMounted re-verified on "
-        "a live Foundry deployment, example, and example profiles); foundry-platform-sdk==1.95.0 "
-        "exposes no compute-module surface, and shipping an unverified "
-        "mutation contract would violate the false-safety rule"
-    ),
-    "execute_compute_modules_function": (
-        "compute-module function execution is backed by the internal "
-        "module-group API (/module-group/api/deployed-apps/*), which is NOT "
-        "MOUNTED on any accessible stack (Route:RouteNotMounted re-verified "
-        "2026-07-24 on a live Foundry deployment, example, and example profiles); "
-        "foundry-platform-sdk==1.95.0 exposes no compute-module surface, and "
-        "shipping an unverified mutation contract would violate the "
-        "false-safety rule"
     ),
 }
 
@@ -960,7 +994,9 @@ def _build_specs(
         *_WORKFLOW_ROWS,
     ):
         mutation_risk = "read"
-        if capability_id.startswith(("create_", "update_", "manage_", "execute_")):
+        if capability_id.startswith(
+            ("create_", "update_", "manage_", "execute_", "generate_")
+        ):
             mutation_risk = "write"
         if capability_id.startswith(("delete_", "close_")):
             mutation_risk = "destructive"

@@ -6,7 +6,6 @@ import pytest
 from unittest.mock import Mock, patch
 
 from pltr.services.repository import (
-    CreateContractUnverifiedError,
     PullRequestNotFoundError,
     PullRequestShapeError,
     RepositoryCloneError,
@@ -574,33 +573,255 @@ class TestCloneRepository:
                 service.clone_repository(REPO_RID, str(tmp_path / "t"))
 
 
-class TestCreatePythonTransforms:
-    """Test cases for the unverified create contract posture."""
+FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000011"
+PROJECT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000009"
+PROJECT_PATH = "/example-111111/Shared Ontology"
+NEW_REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000010"
 
-    def test_plan_is_dry_run_with_evidence(self):
-        """Test the plan describes the intended write without guessing."""
+RESOLVE_PROJECT = (200, {FOLDER_RID: PROJECT_RID}, "{}")
+PROJECT_V3 = (
+    200,
+    {
+        PROJECT_RID: {
+            "resource": {
+                "rid": PROJECT_RID,
+                "name": "Shared Ontology",
+                "path": PROJECT_PATH,
+            }
+        }
+    },
+    "{}",
+)
+STEMMA_CREATE = (200, {"rid": NEW_REPO_RID, "sourceRid": None}, "{}")
+BOOTSTRAP_DONE = (204, "", "")
+NEW_HEAD = (
+    200,
+    {
+        "commitish": "refs/heads/master",
+        "peeledCommitHash": "9e376f7a08f35451e88079ac3e82ca5c76412397",
+    },
+    "{}",
+)
+NEW_BRANCHES = (
+    200,
+    {
+        "values": [
+            {
+                "name": "refs/heads/master",
+                "commitHash": "9e376f7a08f35451e88079ac3e82ca5c76412397",
+                "globalBranch": None,
+            }
+        ]
+    },
+    "{}",
+)
+NEW_TAGS = (
+    200,
+    [
+        {
+            "name": "refs/tags/0.0.1",
+            "commitHash": "9e376f7a08f35451e88079ac3e82ca5c76412397",
+        }
+    ],
+    "[]",
+)
+
+
+class TestCreatePythonTransforms:
+    """Test cases for Python transforms repository creation (verified)."""
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_plan_runs_read_only_preflight(self, mock_client_class):
+        """Test the dry-run plan resolves the exact verified write."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [RESOLVE_PROJECT, PROJECT_V3]
+
         service = RepositoryService(profile="test")
         plan = service.create_python_transforms_plan(
-            "test-pull-request-1", "ri.compass.main.folder.abc"
+            "test-pull-request-1", FOLDER_RID
         )
 
         assert plan["status"] == "dry-run"
-        assert plan["intended_endpoint"] == "POST /stemma/api/repos"
-        assert plan["intended_body"]["templateId"] == "python-transforms"
-        assert plan["intended_body"]["parentRid"] == "ri.compass.main.folder.abc"
-        assert plan["contract"] == "UNVERIFIED"
-        assert "500" in plan["evidence"]
-        assert "DELETE /stemma/api/repos/" in plan["cleanup_policy"]
+        assert plan["project_rid"] == PROJECT_RID
+        stemma_call, bootstrap_call = plan["intended_calls"]
+        assert stemma_call == {
+            "endpoint": "POST /stemma/api/repos",
+            "body": {"path": f"{PROJECT_PATH}/test-pull-request-1"},
+        }
+        assert bootstrap_call["body"] == {
+            "parentTemplateId": "transforms",
+            "childTemplateIdsByPath": {"transforms-python": "python"},
+            "templateTokens": {},
+        }
+        assert plan["contract"] == "VERIFIED"
+        assert "repo-create.md" in plan["evidence"]
+        resolve_call, path_call = mock_client.conjure.call_args_list
+        assert resolve_call.args[0] == "PUT"
+        assert resolve_call.args[1] == (
+            "compass/api/hierarchy/v2/batch/resources/projects"
+        )
+        assert resolve_call.kwargs["json_body"] == [FOLDER_RID]
+        assert path_call.args[1] == "compass/api/hierarchy/v2/batch/projects-v3"
+        assert path_call.kwargs["json_body"] == {
+            "decorations": ["path"],
+            "includeOperations": False,
+            "rids": [PROJECT_RID],
+        }
 
-    def test_apply_refuses_to_guess(self):
-        """Test the write half fails loudly with the evidence."""
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_create_posts_verified_chain_and_verifies_refs(self, mock_client_class):
+        """Test --apply posts stemma + bootstrap, then reads the refs back."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            RESOLVE_PROJECT,
+            PROJECT_V3,
+            STEMMA_CREATE,
+            BOOTSTRAP_DONE,
+            NEW_HEAD,
+            NEW_BRANCHES,
+            NEW_TAGS,
+        ]
+
         service = RepositoryService(profile="test")
-        with pytest.raises(
-            CreateContractUnverifiedError, match="Refusing to create"
-        ) as exc_info:
-            service.create_python_transforms_repository("test-pull-request-1")
+        result = service.create_python_transforms_repository(
+            "test-pull-request-1", FOLDER_RID
+        )
 
-        assert "UNVERIFIED" in str(exc_info.value)
+        assert result["status"] == "created"
+        assert result["repository"] == {"rid": NEW_REPO_RID, "sourceRid": None}
+        assert result["compass_path"] == f"{PROJECT_PATH}/test-pull-request-1"
+        assert result["bootstrap"]["status"] == "applied"
+        assert result["verification"]["bootstrap_verified"] is True
+        assert result["verification"]["default_branch"]["commitish"] == (
+            "refs/heads/master"
+        )
+
+        calls = mock_client.conjure.call_args_list
+        stemma_call = calls[2]
+        assert stemma_call.args[:2] == ("POST", "stemma/api/repos")
+        assert stemma_call.kwargs["json_body"] == {
+            "path": f"{PROJECT_PATH}/test-pull-request-1"
+        }
+        bootstrap_call = calls[3]
+        assert bootstrap_call.args[0] == "POST"
+        assert bootstrap_call.args[1] == (
+            f"repository-bootstrapper/api/repos/{NEW_REPO_RID}/bootstrap"
+        )
+        assert bootstrap_call.kwargs["json_body"] == (
+            RepositoryService.PYTHON_TRANSFORMS_BOOTSTRAP_BODY
+        )
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_folder_without_enclosing_project_fails_loudly(self, mock_client_class):
+        """Test a folder with no project mapping fails before any write."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {}, "{}")
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RuntimeError, match="No enclosing project"):
+            service.create_python_transforms_plan("x", FOLDER_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_resolve_non_mapping_fails_loudly(self, mock_client_class):
+        """Test a non-object resolve response fails as unverified shape."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, [PROJECT_RID], "[]")
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RepositoryShapeError, match="Unverified"):
+            service.resolve_enclosing_project(FOLDER_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_project_v3_without_path_fails_loudly(self, mock_client_class):
+        """Test a projects-v3 entry without resource.path fails loudly."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            RESOLVE_PROJECT,
+            (200, {PROJECT_RID: {"resource": {"rid": PROJECT_RID}}}, "{}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RepositoryShapeError, match="Unverified"):
+            service.create_python_transforms_plan("x", FOLDER_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_stemma_create_http_error_fails_loudly(self, mock_client_class):
+        """Test a non-2xx stemma create surfaces the HTTP status."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            RESOLVE_PROJECT,
+            PROJECT_V3,
+            (403, {"errorName": "Compass:InsufficientPermissions"}, "{}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 403"):
+            service.create_python_transforms_repository("x", FOLDER_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_stemma_create_bad_shape_fails_loudly(self, mock_client_class):
+        """Test a create response without a rid fails with reconcile guidance."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            RESOLVE_PROJECT,
+            PROJECT_V3,
+            (200, {"unexpected": True}, "{}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RepositoryShapeError, match="reconcile"):
+            service.create_python_transforms_repository("x", FOLDER_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_bootstrap_failure_reports_created_repo(self, mock_client_class):
+        """Test a bootstrap failure names the already-created repository."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            RESOLVE_PROJECT,
+            PROJECT_V3,
+            STEMMA_CREATE,
+            (500, {"errorName": "Default:Internal"}, "{}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RuntimeError, match="bootstrapper call failed") as exc_info:
+            service.create_python_transforms_repository("x", FOLDER_RID)
+
+        assert NEW_REPO_RID in str(exc_info.value)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_verification_read_failure_does_not_hide_created_repo(
+        self, mock_client_class
+    ):
+        """Test a failed read-back still returns the created repository."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            RESOLVE_PROJECT,
+            PROJECT_V3,
+            STEMMA_CREATE,
+            BOOTSTRAP_DONE,
+            NEW_HEAD,
+            NEW_BRANCHES,
+            Exception("read timed out"),
+        ]
+
+        service = RepositoryService(profile="test")
+        result = service.create_python_transforms_repository("x", FOLDER_RID)
+
+        assert result["status"] == "created"
+        assert result["repository"]["rid"] == NEW_REPO_RID
+        verification = result["verification"]
+        assert verification["bootstrap_verified"] is None
+        assert "read timed out" in verification["verification_error"]
 
 
 class TestCreatePullRequest:
