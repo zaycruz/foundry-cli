@@ -3,7 +3,8 @@
 Code repository pull-request inspection and contract-verified pull-request
 writes, backed by the internal `stemma-pull-request` API. Also covers
 headless repository context reads and git clones via the internal `stemma`
-API, plus a plan-only repository creation command.
+API, plus Python transforms repository creation (dry-run plan by default,
+real creation behind `--apply`).
 
 ## Repository Inspection
 
@@ -38,20 +39,30 @@ pltr repository clone ri.stemma.main.repository.abc123 ./my-repo
 
 ## Repository Creation
 
-### Create Python Transforms Repository (plan-only; --apply blocked)
+### Create Python Transforms Repository (dry-run default; --apply creates)
 
 ```bash
-pltr repository create-python-transforms NAME [--parent-rid FOLDER_RID] [--apply]
+pltr repository create-python-transforms NAME --parent-rid FOLDER_RID [--apply]
 
-# Deliberate no-mutation posture: the stemma createRepository endpoint is
-# catalogue-only and its request contract could not be verified on the a live Foundry deployment
-# stack (12 candidate bodies all returned opaque 500s; see
-# the captured contract*.jsonl). The CLI prints the intended write
-# as a dry-run plan and refuses to guess: --apply fails loudly with the
-# verification evidence instead of issuing a speculative mutation.
+# Uses the two-call chain derived from the Palantir MCP client contract
+# 2026-07-25 on a live Foundry deployment (the captured contract
+# repo-create.md), verified live on a live Foundry deployment the same day
+# (repo-create-live-verification.md):
+#   1. Read-only preflight: FOLDER_RID -> enclosing project -> full Compass
+#      path via the compass hierarchy batch endpoints. The repository
+#      always lands in the project ROOT.
+#   2. POST /stemma/api/repos {"path": "<projectPath>/<name>"} -> {rid}.
+#   3. POST /repository-bootstrapper/api/repos/<rid>/bootstrap applies the
+#      Python transforms template (master branch + 0.0.1 tag), then the
+#      refs are read back for verification.
+# Without --apply only the read-only preflight runs and the exact intended
+# writes are printed as a dry-run plan; --parent-rid is required.
+# Cleanup: pltr resource delete RID --force (trash) + pltr resource
+# permanently-delete RID --force.
 
-# Example
+# Examples
 pltr repository create-python-transforms my-transforms --parent-rid ri.compass.main.folder.abc123
+pltr repository create-python-transforms my-transforms --parent-rid ri.compass.main.folder.abc123 --apply
 ```
 
 ## Pull Request Commands

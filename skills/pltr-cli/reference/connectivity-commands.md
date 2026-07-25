@@ -162,74 +162,14 @@ pltr connectivity egress ensure api.example.com
 
 ## REST Data-Source Webhook Commands
 
-Backed by the internal webhooks API (`/registry/v0`). The create contract is
-contract-verified up to the Compass permission boundary (2026-07-24, a live Foundry deployment);
-the 2xx success shape is UNVERIFIED and passed through raw.
-
-### Get Webhook (read-only)
-
-```bash
-pltr connectivity webhook get WEBHOOK_RID [--version N] [--format FORMAT]
-
-# Example
-pltr connectivity webhook get ri.magritte..source.abc123
-```
-
-### Create Webhook (plan-first)
-
-```bash
-pltr connectivity webhook create NAME \
-    --source-rid SOURCE_RID [--api-name NAME] [--description TEXT] \
-    [--spec JSON | --spec-file FILE] [--apply] [--format FORMAT]
-
-# Without --apply: prints the dry-run plan (the exact request body) and
-# issues no network request. --apply sends the verified body; a permission
-# failure surfaces as a loud error.
-
-# Example
-pltr connectivity webhook create my-webhook \
-    --source-rid ri.magritte..source.abc123 --spec-file webhook-spec.json --apply
-```
-
-### Update Webhook (plan-first; --apply currently blocked)
-
-```bash
-pltr connectivity webhook update WEBHOOK_RID SPEC_JSON [--spec-file FILE] [--apply]
-
-# Publishes a new webhook version. Only the `spec` request key is verified;
-# the full body could not be recovered (creation is permission-blocked on
-# a live Foundry deployment), so --apply refuses rather than guessing. Without --apply
-# the command prints the dry-run plan and issues no network request.
-
-# Example
-pltr connectivity webhook update ri.magritte..source.abc123 '{"url": "https://api.example.com/hook"}'
-```
-
-## REST Source Commands
-
-### Create REST API Source (plan-only; --apply currently blocked)
-
-```bash
-pltr connectivity rest-source create NAME \
-    --host HOST [--scheme https] [--port 443] [--apply] [--format FORMAT]
-
-# Backed by magritte-coordinator POST /source-store/source/v2 (or /v3).
-# The write contract could NOT be recovered -- the service drops unknown
-# JSON keys leniently and every candidate envelope was rejected with
-# 400 Default:InvalidArgument (2026-07-24, a live Foundry deployment). The command is
-# plan-only: the printed candidate body models the live REDACTED config
-# shape with dummy values, is labeled as server-rejected, and is never
-# sent. --apply refuses rather than guessing. The CLI never calls the
-# plaintext-secret config endpoint and never accepts real credentials.
-
-# Example
-pltr connectivity rest-source create my-rest-source --host api.example.com
-```
-
-## Data-Source Webhook Commands
-
-Backed by the internal webhooks registry API. Write commands are plan-first:
-they print a dry-run plan by default and issue no network request.
+Backed by the internal webhooks registry API (`/webhooks/api/registry/v0`).
+Create and update are VERIFIED end-to-end via an `@palantir/mcp` 0.408.0
+client contract (2026-07-25, a live Foundry deployment; evidence:
+`the captured contract`). Write commands are plan-first:
+they print the exact request body by default and only mutate with `--apply`.
+Permission failures are resource-scoped -- the caller needs edit rights on
+the target source (or its parent project); a 403 means the target is not
+editable by this token, not that the endpoint is blocked.
 
 ### Get Webhook (read-only)
 
@@ -242,55 +182,91 @@ pltr connectivity webhook get ri.webhooks.main.webhook.abc123
 
 ### Create Webhook (plan-first)
 
-`create --apply` sends the contract-verified request body
-(`{name, apiName, description, spec, executionPolicy}`, verified
-up to the Compass permission boundary on a live Foundry deployment). The 2xx success
-shape is UNVERIFIED and passed through raw. The API name must match a
+`create --apply` sends the verified body
+(`{name, apiName, description, spec, executionPolicy}`) and returns
+`{"webhookRid": ..., "version": 1}`. The API name must match a
 server-enforced pattern (a letters-only PascalCase name is accepted;
 trailing digits were rejected in validation).
 
 ```bash
 pltr connectivity webhook create NAME --source-rid SOURCE_RID \
-  [--api-name NAME] [--description TEXT] [--spec-file PATH] \
+  [--api-name NAME] [--description TEXT] [--spec JSON | --spec-file PATH] \
   [--apply] [--format FORMAT]
 
-# Dry-run plan (default)
+# Dry-run plan (default, no network request)
 pltr connectivity webhook create my-webhook \
   --source-rid ri.magritte..source.abc123
 
-# Real create (fails loudly on 403 Compass:InsufficientPermissions)
+# Real create (fails loudly on a resource-scoped 403)
 pltr connectivity webhook create my-webhook \
   --source-rid ri.magritte..source.abc123 --api-name MyWebhook --apply
 ```
 
-### Update Webhook (plan-first; --apply blocked)
+### Update Webhook (plan-first)
 
-Publishes a new webhook version. The publish contract is UNVERIFIED
-(2026-07-24 validation confirmed only the `spec` request key), so `--apply`
-refuses with an `unverified-write-contract` error instead of guessing.
+Publishes a new webhook version: `POST /registry/v0/{webhookRid}` with body
+`{"spec": <same spec shape as create>}` and nothing else (metadata is not
+changed by publish). Verified response: `{"webhookRid": ..., "version": N}`.
+
+The replacement spec can be supplied verbatim (`SPEC` / `--spec-file`), or
+assembled from MCP tool-arg shaped pieces (`--source-rid` + `--domain` +
+`--calls` / `--inputs`). Assembly mirrors the captured MCP transform:
+
+- each call gets a fresh client-generated `callId` UUID,
+- `httpQueryParams` map values land in `queryParamsV2` with an EXTRA array
+  wrap (`{"realm": [[{...}]]}`); `headers` are NOT wrapped,
+- the `--domain` host is resolved to a `domainId` via a read-only
+  `GET /magritte-coordinator/api/source-store/source/{sourceRid}/config`
+  (the full RID must be in the path; the bare-UUID variant 400s).
 
 ```bash
-pltr connectivity webhook update WEBHOOK_RID SPEC_JSON [--apply] [--format FORMAT]
+pltr connectivity webhook update WEBHOOK_RID [SPEC_JSON] [--spec-file PATH] \
+  [--source-rid RID --domain HOST [--calls JSON | --calls-file PATH] \
+   [--inputs JSON | --inputs-file PATH]] [--apply] [--format FORMAT]
 
-# Dry-run plan (default)
+# Dry-run plan (default, no mutation)
 pltr connectivity webhook update ri.webhooks.main.webhook.abc123 '{"inputs": []}'
+
+# Real publish with an assembled spec
+pltr connectivity webhook update ri.webhooks.main.webhook.abc123 \
+  --source-rid ri.magritte..source.abc123 --domain api.example.com \
+  --calls '[{"httpMethod": "GET", "httpPath": ["users", {"input": "userId"}]}]' \
+  --inputs '[{"name": "userId", "dataType": {"type": "string"}}]' --apply
 ```
 
 ## REST API Data Source Commands
 
-### Create REST API Data Source (plan-only; --apply blocked)
+Backed by magritte-coordinator `POST /source-store/source/v3` (addSourceV3),
+VERIFIED end-to-end via an `@palantir/mcp` 0.408.0 client contract
+(2026-07-25, a live Foundry deployment; evidence:
+`the captured contract`). The command is plan-first:
+it prints the exact request body by default and only mutates with `--apply`.
 
-The magritte-coordinator `addSourceV2/V3` write contract could NOT be
-recovered (2026-07-24: the service drops unknown keys leniently, defeating
-field validation, and every candidate envelope was rejected). The command
-ships plan-only; the printed candidate body models the live REDACTED config
-shape with dummy values and is never sent. This CLI never calls the
+### Create REST API Data Source (plan-first)
+
+`create --apply` sends the verified envelope `{config, description,
+runtimePlatformRequest, parentRid}`; `domains[].domainId` is a
+client-generated random UUID per call. The 2xx response is a BARE JSON
+STRING -- the new source RID, not an object. Prerequisites:
+`magritte:write-resource` on `--parent-rid` (your home folder works; shared
+projects may 403) and at least one `--egress-policy-rid` covering
+`host:port`. Credentials are NOT part of the create envelope -- configure
+them post-create in the Data Connection UI. This CLI never calls the
 plaintext-secret config endpoint and never accepts real credentials.
 
 ```bash
 pltr connectivity rest-source create NAME --host HOST \
-  [--scheme HTTPS] [--port 443] [--apply] [--format FORMAT]
+  --parent-rid FOLDER_RID --egress-policy-rid POLICY_RID \
+  [--description TEXT] [--scheme HTTPS] [--port 443] [--apply] [--format FORMAT]
 
-# Dry-run plan (default, and the only mode)
-pltr connectivity rest-source create my-source --host example.invalid
+# Dry-run plan (default, no network request)
+pltr connectivity rest-source create my-source --host example.invalid \
+  --parent-rid ri.compass.main.folder.abc123 \
+  --egress-policy-rid ri.resource-policy-manager.global.network-egress-policy.abc123
+
+# Real create (returns the new source RID)
+pltr connectivity rest-source create my-source --host example.invalid \
+  --parent-rid ri.compass.main.folder.abc123 \
+  --egress-policy-rid ri.resource-policy-manager.global.network-egress-policy.abc123 \
+  --apply
 ```

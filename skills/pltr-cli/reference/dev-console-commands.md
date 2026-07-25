@@ -46,21 +46,36 @@ pltr dev-console osdk definition APPLICATION_RID [--version VERSION] [--format F
 pltr dev-console osdk definition ri.foundry.third-party-application.main.application.abc123
 ```
 
-### SDK Generate (never mutates)
+### SDK Generate (dry-run by default; --apply mutates)
 
 ```bash
-pltr dev-console sdk generate APPLICATION_RID [--format FORMAT]
+pltr dev-console sdk generate APPLICATION_RID [--apply] [--no-wait] [--timeout SECONDS] [--format FORMAT]
 
-# Deliberate no-mutation posture: the backing endpoint
-# (POST /application-sdks/v2/{applicationRid}, createSdkV2) is catalog-only
-# -- read-safe probes show strict deserialization but the required-field set
-# is not disclosed, and a valid body would create a real SDK version. Per
-# repo rules no mutation ships without a verified contract, so this command
-# reads the current SDK records (VERIFIED listSdks) and exits 2 with the
-# exact evidence instead of generating anything.
+# Mints a new OSDK version from the app's current applicationVersion, backed
+# by the contract-derived, contract-verified createSdkV2 contract
+# (the captured contract, 2026-07-25 on a live Foundry deployment):
+#   1. GET  /third-party-application-service/api/applications/{applicationRid}
+#      -> read metadata.applicationVersion
+#   2. POST /third-party-application-service/api/application-sdks/v2/{applicationRid}
+#      body {"applicationVersion": N, "npm": {}} (exactly these two keys;
+#      unknown top-level keys are rejected with 422)
+#   3. Poll GET /third-party-application-service/api/application-sdks/{rid}
+#      (listSdks) until the minted record's npm.status.type turns terminal
+#      (requested -> inProgress -> success; ~24s observed). The MCP's
+#      /latest?sdkType=NPM&sdkStatus=REQUESTED confirmation read is NOT
+#      usable as the completion poll: it returns 204 No Content as soon as
+#      the record leaves "requested" (verified live 2026-07-25).
+#
+# Without --apply the command prints the dry-run plan (resolved version and
+# exact request body) and sends nothing mutating. --apply issues the POST and
+# polls to a terminal status unless --no-wait is given. Exit codes: 0 plan /
+# requested / success, 1 generation failed, 2 polling timeout (the version
+# was still minted server-side). The MCP's scope-patch PUT is NOT needed for
+# a pure regenerate from the current app version.
 
-# Example
+# Examples
 pltr dev-console sdk generate ri.foundry.third-party-application.main.application.abc123
+pltr dev-console sdk generate ri.foundry.third-party-application.main.application.abc123 --apply
 ```
 
 ### SDK Install (dry-run by default)

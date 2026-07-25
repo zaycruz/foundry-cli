@@ -2,6 +2,7 @@
 Tests for connectivity commands.
 """
 
+import json
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
@@ -926,9 +927,13 @@ class TestWebhookCreateCommand:
         result = self.runner.invoke(
             app,
             [
-                "webhook", "create", "wh",
-                "--source-rid", self.SOURCE_RID,
-                "--spec-file", str(spec_path),
+                "webhook",
+                "create",
+                "wh",
+                "--source-rid",
+                self.SOURCE_RID,
+                "--spec-file",
+                str(spec_path),
             ],
         )
 
@@ -940,9 +945,10 @@ class TestWebhookCreateCommand:
 
 
 class TestWebhookUpdateCommand:
-    """Test cases for `connectivity webhook update` (plan-first, blocked)."""
+    """Test cases for `connectivity webhook update` (plan-first)."""
 
     WEBHOOK_RID = "ri.webhooks.main.webhook.12345678-1234-1234-1234-123456789abc"
+    SOURCE_RID = "ri.magritte..source.00000000-0000-0000-0000-000000000022"
 
     def setup_method(self):
         """Set up test fixtures."""
@@ -963,13 +969,37 @@ class TestWebhookUpdateCommand:
         mock_service.plan_update_webhook.assert_called_once_with(
             self.WEBHOOK_RID, {"inputs": []}
         )
+        mock_service.update_webhook.assert_not_called()
 
     @patch("pltr.commands.connectivity.ConnectivityService")
-    def test_update_apply_is_blocked(self, mock_service_class):
-        """Test that --apply refuses while the contract is unverified."""
+    def test_update_apply_sends(self, mock_service_class):
+        """Test that --apply publishes the new webhook version."""
         mock_service = Mock()
         mock_service_class.return_value = mock_service
-        mock_service.plan_update_webhook.return_value = {"mode": "plan"}
+        mock_service.update_webhook.return_value = {
+            "webhookRid": self.WEBHOOK_RID,
+            "version": 2,
+        }
+
+        result = self.runner.invoke(
+            app,
+            ["webhook", "update", self.WEBHOOK_RID, '{"inputs": []}', "--apply"],
+        )
+
+        assert result.exit_code == 0
+        mock_service.update_webhook.assert_called_once_with(
+            self.WEBHOOK_RID, {"inputs": []}
+        )
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_apply_permission_error(self, mock_service_class):
+        """Test that a resource-scoped 403 surfaces as a loud failure."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.update_webhook.side_effect = RuntimeError(
+            "Webhook registry update failed with HTTP 403 "
+            "(Compass:InsufficientPermissions)"
+        )
 
         result = self.runner.invoke(
             app,
@@ -977,7 +1007,7 @@ class TestWebhookUpdateCommand:
         )
 
         assert result.exit_code == 1
-        assert "UNVERIFIED" in result.stdout
+        assert "Error updating webhook" in result.stdout
 
     @patch("pltr.commands.connectivity.ConnectivityService")
     def test_update_requires_spec(self, mock_service_class):
@@ -987,13 +1017,122 @@ class TestWebhookUpdateCommand:
         assert result.exit_code == 1
         assert "Must specify either spec or --spec-file" in result.stdout
 
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_assembly_mode_builds_spec(self, mock_service_class):
+        """Test --source-rid/--domain/--calls assembles the spec via the service."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.resolve_source_domain_id.return_value = (
+            "00000000-0000-0000-0000-000000000028"
+        )
+        mock_service.build_webhook_spec.return_value = {"config": {}}
+        mock_service.plan_update_webhook.return_value = {"mode": "plan"}
+
+        calls = json.dumps(
+            [
+                {
+                    "httpMethod": "GET",
+                    "httpPath": ["multipass/api/users", {"input": "userId"}],
+                    "httpQueryParams": {"realm": [{"input": "realm"}]},
+                }
+            ]
+        )
+        result = self.runner.invoke(
+            app,
+            [
+                "webhook",
+                "update",
+                self.WEBHOOK_RID,
+                "--source-rid",
+                self.SOURCE_RID,
+                "--domain",
+                "example.invalid",
+                "--calls",
+                calls,
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.resolve_source_domain_id.assert_called_once_with(
+            self.SOURCE_RID, "example.invalid"
+        )
+        mock_service.build_webhook_spec.assert_called_once_with(
+            self.SOURCE_RID,
+            domain_id="00000000-0000-0000-0000-000000000028",
+            calls=[
+                {
+                    "httpMethod": "GET",
+                    "httpPath": ["multipass/api/users", {"input": "userId"}],
+                    "httpQueryParams": {"realm": [{"input": "realm"}]},
+                }
+            ],
+            inputs=[],
+        )
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_assembly_requires_source_rid_and_domain(self, mock_service_class):
+        """Test assembly mode without --domain fails before any lookup."""
+        result = self.runner.invoke(
+            app,
+            [
+                "webhook",
+                "update",
+                self.WEBHOOK_RID,
+                "--source-rid",
+                self.SOURCE_RID,
+                "--calls",
+                "[]",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "requires both --source-rid and --domain" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_spec_and_assembly_conflict(self, mock_service_class):
+        """Test that a verbatim spec cannot be combined with assembly options."""
+        result = self.runner.invoke(
+            app,
+            [
+                "webhook",
+                "update",
+                self.WEBHOOK_RID,
+                '{"inputs": []}',
+                "--source-rid",
+                self.SOURCE_RID,
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Cannot combine" in result.stdout
+
 
 class TestRestSourceCreateCommand:
-    """Test cases for `connectivity rest-source create` (plan-only)."""
+    """Test cases for `connectivity rest-source create` (plan-first)."""
+
+    PARENT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000006"
+    EGRESS_RID = (
+        "ri.resource-policy-manager.global.network-egress-policy."
+        "00000000-0000-0000-0000-000000000027"
+    )
 
     def setup_method(self):
         """Set up test fixtures."""
         self.runner = CliRunner()
+
+    def _args(self, *extra):
+        return [
+            "rest-source",
+            "create",
+            "src",
+            "--host",
+            "example.invalid",
+            "--parent-rid",
+            self.PARENT_RID,
+            "--egress-policy-rid",
+            self.EGRESS_RID,
+            *extra,
+        ]
 
     @patch("pltr.commands.connectivity.ConnectivityService")
     def test_create_defaults_to_plan(self, mock_service_class):
@@ -1002,26 +1141,89 @@ class TestRestSourceCreateCommand:
         mock_service_class.return_value = mock_service
         mock_service.plan_create_rest_source.return_value = {"mode": "plan"}
 
-        result = self.runner.invoke(
-            app, ["rest-source", "create", "src", "--host", "example.invalid"]
-        )
+        result = self.runner.invoke(app, self._args())
 
         assert result.exit_code == 0
         mock_service.plan_create_rest_source.assert_called_once_with(
-            "src", "example.invalid", "HTTPS", 443
+            "src",
+            "example.invalid",
+            "HTTPS",
+            443,
+            self.PARENT_RID,
+            [self.EGRESS_RID],
+            "",
+        )
+        mock_service.create_rest_source.assert_not_called()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_apply_sends(self, mock_service_class):
+        """Test that --apply issues the verified addSourceV3 create."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_rest_source.return_value = {
+            "source_rid": "ri.magritte..source.abc",
+            "status": "created",
+        }
+
+        result = self.runner.invoke(app, self._args("--apply"))
+
+        assert result.exit_code == 0
+        mock_service.create_rest_source.assert_called_once_with(
+            "src",
+            "example.invalid",
+            "HTTPS",
+            443,
+            self.PARENT_RID,
+            [self.EGRESS_RID],
+            "",
         )
 
     @patch("pltr.commands.connectivity.ConnectivityService")
-    def test_create_apply_is_blocked(self, mock_service_class):
-        """Test that --apply refuses while the contract is unverified."""
+    def test_create_apply_permission_error(self, mock_service_class):
+        """Test that a magritte:write-resource 403 surfaces loudly."""
         mock_service = Mock()
         mock_service_class.return_value = mock_service
-        mock_service.plan_create_rest_source.return_value = {"mode": "plan"}
-
-        result = self.runner.invoke(
-            app,
-            ["rest-source", "create", "src", "--host", "example.invalid", "--apply"],
+        mock_service.create_rest_source.side_effect = RuntimeError(
+            "REST source create failed with HTTP 403 (Default:PermissionDenied)"
         )
 
+        result = self.runner.invoke(app, self._args("--apply"))
+
         assert result.exit_code == 1
-        assert "UNVERIFIED" in result.stdout
+        assert "Error creating REST API data source" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_requires_parent_rid(self, mock_service_class):
+        """Test that --parent-rid is mandatory."""
+        result = self.runner.invoke(
+            app,
+            [
+                "rest-source",
+                "create",
+                "src",
+                "--host",
+                "example.invalid",
+                "--egress-policy-rid",
+                self.EGRESS_RID,
+            ],
+        )
+
+        assert result.exit_code != 0
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_requires_egress_policy_rid(self, mock_service_class):
+        """Test that at least one --egress-policy-rid is mandatory."""
+        result = self.runner.invoke(
+            app,
+            [
+                "rest-source",
+                "create",
+                "src",
+                "--host",
+                "example.invalid",
+                "--parent-rid",
+                self.PARENT_RID,
+            ],
+        )
+
+        assert result.exit_code != 0

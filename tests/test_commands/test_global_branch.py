@@ -13,7 +13,7 @@ from pltr.services.global_branching import (
     GlobalBranchShapeError,
 )
 
-BRANCH_RID = "ri.global-branch.main.branch.00000000-0000-0000-0000-000000000002"
+BRANCH_RID = "ri.branch..branch.00000000-0000-0000-0000-000000000002"
 
 # The module app holds a single command, which Typer collapses when the app is
 # invoked standalone; register it on a parent (as cli.py does) so the tests
@@ -48,7 +48,9 @@ class TestGlobalBranchGetCommand:
         mock_service_class.return_value = mock_service
         mock_service.get_branch.return_value = {"rid": BRANCH_RID}
 
-        result = self.runner.invoke(root_app, ["global-branch", "get", BRANCH_RID, "--format", "json"])
+        result = self.runner.invoke(
+            root_app, ["global-branch", "get", BRANCH_RID, "--format", "json"]
+        )
 
         assert result.exit_code == 0
         assert BRANCH_RID in result.stdout
@@ -100,7 +102,9 @@ class TestGlobalBranchGetCommand:
         mock_service_class.return_value = mock_service
         mock_service.get_branch.return_value = {"rid": BRANCH_RID}
 
-        result = self.runner.invoke(root_app, ["global-branch", "get", BRANCH_RID, "--profile", "test"])
+        result = self.runner.invoke(
+            root_app, ["global-branch", "get", BRANCH_RID, "--profile", "test"]
+        )
 
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
@@ -127,7 +131,13 @@ class TestGlobalBranchCreateCommand:
 
         result = self.runner.invoke(
             root_app,
-            ["global-branch", "create", "my-branch", "--ontology-rid", self.ONTOLOGY_RID],
+            [
+                "global-branch",
+                "create",
+                "my-branch",
+                "--ontology-rid",
+                self.ONTOLOGY_RID,
+            ],
         )
 
         assert result.exit_code == 0
@@ -136,47 +146,89 @@ class TestGlobalBranchCreateCommand:
         )
 
     @patch("pltr.commands.global_branch.GlobalBranchService")
-    def test_create_apply_is_blocked(self, mock_service_class):
-        """Test that --apply refuses while the contract is unverified."""
+    def test_create_apply_sends(self, mock_service_class):
+        """Test that --apply issues the real create."""
         mock_service = Mock()
         mock_service_class.return_value = mock_service
-        mock_service.plan_create_branch.return_value = {"mode": "plan"}
+        mock_service.create_branch.return_value = {
+            "branchRid": BRANCH_RID,
+            "branchRecord": {"branchRid": BRANCH_RID, "branchStatus": "OPEN"},
+        }
 
         result = self.runner.invoke(
             root_app,
             [
-                "global-branch", "create", "my-branch",
-                "--ontology-rid", self.ONTOLOGY_RID, "--apply",
+                "global-branch",
+                "create",
+                "my-branch",
+                "--ontology-rid",
+                self.ONTOLOGY_RID,
+                "--apply",
             ],
         )
 
-        assert result.exit_code == 1
-        assert "UNVERIFIED" in result.stdout
+        assert result.exit_code == 0
+        mock_service.create_branch.assert_called_once_with(
+            "my-branch", "", self.ONTOLOGY_RID
+        )
 
     @patch("pltr.commands.global_branch.GlobalBranchService")
-    def test_create_apply_agent_format_buffers_error(self, mock_service_class):
-        """Test the blocked --apply records an agent error payload."""
+    def test_create_apply_agent_format(self, mock_service_class):
+        """Test the applied create records an agent payload with the new RID."""
         from pltr.utils.agent_output import build_agent_output, reset_agent_output
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
-        mock_service.plan_create_branch.return_value = {"mode": "plan"}
+        mock_service.create_branch.return_value = {
+            "branchRid": BRANCH_RID,
+            "branchRecord": {"branchRid": BRANCH_RID},
+        }
 
         result = self.runner.invoke(
             root_app,
             [
-                "global-branch", "create", "my-branch",
-                "--ontology-rid", self.ONTOLOGY_RID, "--apply", "--format", "agent",
+                "global-branch",
+                "create",
+                "my-branch",
+                "--ontology-rid",
+                self.ONTOLOGY_RID,
+                "--apply",
+                "--format",
+                "agent",
+            ],
+        )
+
+        assert result.exit_code == 0
+        envelope = build_agent_output()
+        reset_agent_output()
+        assert envelope is not None
+        assert not envelope["errors"]
+        assert envelope["meta"]["operation"] == "create_global_branch"
+        assert envelope["meta"]["mode"] == "applied"
+        assert envelope["meta"]["branch_rid"] == BRANCH_RID
+        assert envelope["meta"]["write_verified"] is True
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_create_apply_error(self, mock_service_class):
+        """Test create error handling on --apply."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_branch.side_effect = Exception("HTTP 400")
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-branch",
+                "create",
+                "my-branch",
+                "--ontology-rid",
+                self.ONTOLOGY_RID,
+                "--apply",
             ],
         )
 
         assert result.exit_code == 1
-        envelope = build_agent_output()
-        reset_agent_output()
-        assert envelope is not None
-        assert envelope["errors"][0]["type"] == "unverified-write-contract"
-        assert envelope["meta"]["operation"] == "create_global_branch"
-        assert envelope["meta"]["mode"] == "blocked"
+        assert "Error creating global branch" in result.stdout
 
 
 class TestGlobalBranchCloseCommand:

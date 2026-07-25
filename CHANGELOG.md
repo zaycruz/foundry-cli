@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0] - 2026-07-25
+
+### Added
+
+- MCP gap-closure cycle: all six areas unblocked by the `@palantir/mcp` client-contract investigation are now real, contract-verified implementations. Scorecard: **72 implemented / 1 blocked** (only `preview_transform`, which does not exist in any published MCP version).
+- New `compute` command group: `compute info`, `compute logs`, `compute manage` (start/stop/dev-mode), `compute execute`. Compute calls route through the mounted `contour-backend-multiplexer` + `build2` + `foundry-telemetry-service` surfaces (the old `/module-group/api/*` path was the wrong prefix). Mutations are plan-first with `--apply`; success shapes our token cannot reach are passed through raw with `shape_verified: false`.
+- `dev-console sdk generate` is now real (was blocked-with-evidence): reads `applicationVersion`, POSTs `{"applicationVersion": N, "npm": {}}` to `application-sdks/v2/{rid}`, polls to terminal status. contract-verified end-to-end (real SDK versions minted on the designated disposable tutorial app).
+- `repository create-python-transforms` is now real (was blocked-with-evidence): the captured two-call chain (`POST /stemma/api/repos {"path"}` + `POST /repository-bootstrapper/api/repos/{rid}/bootstrap`). contract-verified create → content check → permanent delete.
+- `connectivity webhook update` now really publishes (`{"spec": ...}` body, `queryParamsV2` array-wrap quirk, domain→domainId resolution), and `connectivity rest-source create` now really creates (the magritte `/v3` envelope). Both contract-verified with disposable entities, cleaned up.
+- `global-branch create` and `global-proposal create` upgraded from plan-only to real (`resourcesToAdd` + auto-resolved `compassNamespaceRid`; `mergeTo` union). contract-verified create → load → close cycles; everything closed.
+
+### Fixed
+
+- Re-pinned the palantir_expert benchmark corpus to 0.27.0.
+
 ## [0.26.0] - 2026-07-24
 
 ### Added

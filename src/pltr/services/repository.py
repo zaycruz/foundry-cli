@@ -47,11 +47,20 @@ rc 128). Bearer-token auth via ``http.extraHeader`` passed through
 ``GIT_CONFIG_*`` environment variables — never on the command line, never
 written into the clone's config, never printed.
 
-Repository creation is NOT VERIFIED: 12 candidate ``POST /stemma/api/repos``
-bodies (name/template/parent variants) all returned ``500 Default:Internal``
-with no schema hints on 2026-07-24 (the captured contract*.jsonl).
-``create_python_transforms_repository`` therefore refuses to guess and only
-ever produces a dry-run plan.
+Python transforms repository creation (contract derived from Palantir MCP
+the client contract 2026-07-25 on a live Foundry deployment, see
+``the captured contract`` and the pltr live
+verification in ``repo-create-live-verification.md``): the folder RID is
+resolved to its enclosing project and the project's Compass path via the
+read-PUT batch endpoints ``PUT /compass/api/hierarchy/v2/batch/resources/
+projects`` and ``PUT /compass/api/hierarchy/v2/batch/projects-v3``
+(decorations ``["path"]``); the repository is then created with
+``POST /stemma/api/repos`` ``{"path": "<projectPath>/<name>"}`` and the
+Python transforms template is applied by a second call,
+``POST /repository-bootstrapper/api/repos/{rid}/bootstrap`` with
+``{"parentTemplateId": "transforms", "childTemplateIdsByPath":
+{"transforms-python": "python"}, "templateTokens": {}}`` (204). Dry-run
+plan by default; the real write sits behind ``--apply``.
 
 Responses are passed through raw (never fabricated); unexpected shapes fail
 loudly instead of rendering as a result.
@@ -84,10 +93,6 @@ class RepositoryShapeError(RuntimeError):
 
 class RepositoryCloneError(RuntimeError):
     """Raised when a local clone cannot be completed honestly."""
-
-
-class CreateContractUnverifiedError(RuntimeError):
-    """Raised when a repository create is attempted against an unverified contract."""
 
 
 class RepositoryService(BaseService):
@@ -807,67 +812,324 @@ class RepositoryService(BaseService):
         return base_url, token
 
     # ------------------------------------------------------------------
-    # Python transforms repository creation (contract UNVERIFIED)
+    # Python transforms repository creation
+    #
+    # Contract derived from the Palantir MCP client contract
+    # (@palantir/mcp 0.408.0) traffic on a live Foundry deployment
+    # (the captured contract): the MCP resolves
+    # the folder RID to its enclosing project, reads the project's Compass
+    # path, creates the repository with a single {"path": ...} stemma
+    # body, and applies the Python transforms template with a second
+    # repository-bootstrapper call. contract-verified end-to-end by pltr the
+    # same day (the captured contract
+    # repo-create-live-verification.md). Both stemma and
+    # repository-bootstrapper are internal APIs catalogued from observed
+    # traffic, not public-v2 contracts.
     # ------------------------------------------------------------------
 
-    #: Evidence that POST /stemma/api/repos could not be contract-verified.
+    #: Bootstrapper body that materializes the Python transforms template.
+    PYTHON_TRANSFORMS_BOOTSTRAP_BODY: Dict[str, Any] = {
+        "parentTemplateId": "transforms",
+        "childTemplateIdsByPath": {"transforms-python": "python"},
+        "templateTokens": {},
+    }
+
+    #: Evidence for the repository creation contract.
     CREATE_CONTRACT_EVIDENCE = (
-        "POST /stemma/api/repos contract UNVERIFIED on the a live Foundry deployment "
-        "stack: 12 candidate bodies (name/templateId/parent variants, "
-        "including the compass-verified parent folder and the "
-        "'python-transforms' template id family) all returned 500 "
-        "Default:Internal with no schema hints; see "
-        "the captured contract, "
-        "the captured contract, "
-        "the captured contract"
+        "Repository creation contract derived from the Palantir MCP client contract "
+        "(@palantir/mcp 0.408.0) traffic 2026-07-25 on a live Foundry deployment "
+        "(the captured contract): folder RID -> "
+        "enclosing project via PUT /compass/api/hierarchy/v2/batch/"
+        "resources/projects; project Compass path via PUT /compass/api/"
+        'hierarchy/v2/batch/projects-v3 (decorations ["path"]); '
+        'POST /stemma/api/repos {"path": "<projectPath>/<name>"} -> '
+        '{"rid", "sourceRid"}; POST /repository-bootstrapper/api/'
+        'repos/<rid>/bootstrap {"parentTemplateId": "transforms", '
+        '"childTemplateIdsByPath": {"transforms-python": "python"}, '
+        '"templateTokens": {}} -> 204. contract-verified end-to-end by pltr '
+        "the same day on a disposable repository (master branch + 0.0.1 "
+        "tag materialized, then compass trash + permanent delete); see "
+        "the captured contract "
+        "The repository always lands in the project ROOT regardless of "
+        "how deep the passed folder RID sits."
     )
 
+    #: Verified cleanup path for created repositories.
+    CREATE_CLEANUP_POLICY = (
+        "created repositories are trashed with `pltr resource delete "
+        "--force` and permanently removed with `pltr resource "
+        "permanently-delete --force` (both verified on a live Foundry deployment "
+        "against ri.stemma.main.repository RIDs); disposable test "
+        "repositories are always deleted after verification"
+    )
+
+    def resolve_enclosing_project(self, folder_rid: str) -> str:
+        """
+        Resolve a Compass folder RID to its enclosing project RID.
+
+        Read-only against PUT /compass/api/hierarchy/v2/batch/resources/
+        projects, a read-PUT batch get whose body is a bare JSON array of
+        RIDs and whose response maps each RID to its project RID
+        (contract captured; the repository create always lands
+        in the project root).
+
+        Raises:
+            RepositoryShapeError: If the response shape drifts from verified
+            RuntimeError: If the folder has no enclosing project in the
+                response, or the read fails
+        """
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "PUT",
+                "compass/api/hierarchy/v2/batch/resources/projects",
+                json_body=[folder_rid],
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to resolve enclosing project for {folder_rid}: {e}"
+            ) from e
+        self._raise_for_status(status, payload, raw, "folder-to-project resolve")
+        if not isinstance(payload, Mapping):
+            raise RepositoryShapeError(
+                "Unverified folder-to-project response shape: expected an "
+                f"object mapping folder RIDs to project RIDs, got "
+                f"{str(raw)[:200]!r}. Refusing to guess at the contract."
+            )
+        project_rid = payload.get(folder_rid)
+        if project_rid is None:
+            raise RuntimeError(
+                f"No enclosing project found for folder {folder_rid}: the "
+                "hierarchy batch response carried no entry for it (the "
+                "folder may not exist or may not be readable)"
+            )
+        if not isinstance(project_rid, str):
+            raise RepositoryShapeError(
+                "Unverified folder-to-project entry shape: expected a "
+                f"string project RID for {folder_rid}, got "
+                f"{str(project_rid)[:200]!r}. Refusing to guess at the contract."
+            )
+        return project_rid
+
+    def get_project_path(self, project_rid: str) -> str:
+        """
+        Read the full Compass path of one project.
+
+        Read-only against PUT /compass/api/hierarchy/v2/batch/projects-v3
+        with ``{"decorations": ["path"], "includeOperations": false,
+        "rids": [...]}``; the response maps each project RID to an entry
+        whose ``resource.path`` carries the full Compass path (contract
+        captured).
+
+        Raises:
+            RepositoryShapeError: If the response shape drifts from verified
+            RuntimeError: If the project is absent from the response or the
+                read fails
+        """
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "PUT",
+                "compass/api/hierarchy/v2/batch/projects-v3",
+                json_body={
+                    "decorations": ["path"],
+                    "includeOperations": False,
+                    "rids": [project_rid],
+                },
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to read Compass path for project {project_rid}: {e}"
+            ) from e
+        self._raise_for_status(status, payload, raw, "project path read")
+        if not isinstance(payload, Mapping):
+            raise RepositoryShapeError(
+                "Unverified projects-v3 response shape: expected an object "
+                f"mapping project RIDs to entries, got {str(raw)[:200]!r}. "
+                "Refusing to guess at the contract."
+            )
+        entry = payload.get(project_rid)
+        if entry is None:
+            raise RuntimeError(
+                f"No entry for project {project_rid} in the projects-v3 "
+                "response (the project may not exist or may not be readable)"
+            )
+        resource = entry.get("resource") if isinstance(entry, Mapping) else None
+        path = resource.get("path") if isinstance(resource, Mapping) else None
+        if not isinstance(path, str) or not path:
+            raise RepositoryShapeError(
+                "Unverified projects-v3 entry shape: expected "
+                f"{project_rid}.resource.path to be a non-empty string, got "
+                f"{str(entry)[:200]!r}. Refusing to guess at the contract."
+            )
+        return path
+
+    def resolve_repository_target_path(
+        self, name: str, parent_rid: str
+    ) -> Dict[str, Any]:
+        """
+        Resolve the full Compass path a new repository will be created at.
+
+        Read-only preflight: folder RID -> enclosing project RID ->
+        project Compass path; the repository always lands in the project
+        ROOT, so the target path is ``<projectPath>/<name>``.
+        """
+        project_rid = self.resolve_enclosing_project(parent_rid)
+        project_path = self.get_project_path(project_rid)
+        return {
+            "project_rid": project_rid,
+            "project_path": project_path,
+            "path": f"{project_path.rstrip('/')}/{name}",
+        }
+
     def create_python_transforms_plan(
-        self, name: str, parent_rid: Optional[str] = None
+        self, name: str, parent_rid: str
     ) -> Dict[str, Any]:
         """
         Build the dry-run plan for creating a Python transforms repository.
 
-        This is the only honest posture today: the create contract is
-        UNVERIFIED (see CREATE_CONTRACT_EVIDENCE), so the CLI describes the
-        intended write instead of guessing a request body.
+        Runs the read-only preflight (folder -> project -> Compass path) so
+        the plan shows the exact stemma body ``create_python_transforms_
+        repository`` posts under ``--apply``, followed by the bootstrapper
+        call that materializes the template.
         """
+        target = self.resolve_repository_target_path(name, parent_rid)
         return {
             "status": "dry-run",
             "operation": "create_python_transforms_code_repository",
             "name": name,
             "parent_rid": parent_rid,
-            "intended_endpoint": "POST /stemma/api/repos",
-            "intended_body": {
-                "name": name,
-                "parentRid": parent_rid,
-                "templateId": "python-transforms",
-            },
-            "contract": "UNVERIFIED",
+            "project_rid": target["project_rid"],
+            "intended_calls": [
+                {
+                    "endpoint": "POST /stemma/api/repos",
+                    "body": {"path": target["path"]},
+                },
+                {
+                    "endpoint": (
+                        "POST /repository-bootstrapper/api/repos/"
+                        "<repositoryRid>/bootstrap"
+                    ),
+                    "body": dict(self.PYTHON_TRANSFORMS_BOOTSTRAP_BODY),
+                },
+            ],
+            "contract": "VERIFIED",
             "evidence": self.CREATE_CONTRACT_EVIDENCE,
-            "cleanup_policy": (
-                "stemma deleteRepository is catalogued at DELETE "
-                "/stemma/api/repos/{repositoryRid}; a verified create would "
-                "be read back via GET /stemma/api/repos/{rid} and deleted "
-                "after verification"
-            ),
+            "apply_note": "Re-run with --apply to create the repository.",
+            "cleanup_policy": self.CREATE_CLEANUP_POLICY,
         }
 
     def create_python_transforms_repository(
-        self, name: str, parent_rid: Optional[str] = None
+        self, name: str, parent_rid: str
     ) -> Dict[str, Any]:
         """
-        Refuse to create a repository against an unverified contract.
+        Create a Python transforms repository (real writes).
 
-        The stemma createRepository endpoint is catalogue-only and every
-        verified body failed with an opaque 500 (see
-        CREATE_CONTRACT_EVIDENCE). Guessing a body risks creating a
-        malformed resource on a shared stack, so this always raises.
+        Posts exactly the stemma body the dry-run plan shows, then applies
+        the Python transforms template via the repository-bootstrapper
+        (without it the result is a bare empty repo, not a transforms
+        repository). After the 204 bootstrap response the master branch and
+        initial ``0.0.1`` tag are read back via the verified stemma reads;
+        a read-back failure is reported in ``verification_error`` rather
+        than raised, because the repository itself already exists by then.
+
+        Raises:
+            RepositoryShapeError: If a response shape drifts from verified
+            RuntimeError: If any write fails or an API is not mounted
         """
-        raise CreateContractUnverifiedError(
-            f"Refusing to create Python transforms repository {name!r}: "
-            f"{self.CREATE_CONTRACT_EVIDENCE}"
+        plan = self.create_python_transforms_plan(name, parent_rid)
+        stemma_body = plan["intended_calls"][0]["body"]
+        client = self._internal_client()
+        try:
+            status, payload, raw = client.conjure(
+                "POST", "stemma/api/repos", json_body=stemma_body
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to create repository {name!r}: {e}") from e
+        self._raise_for_status(status, payload, raw, "repository create")
+        if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
+            raise RepositoryShapeError(
+                "Unverified repository create response shape: expected an "
+                f'object with a string "rid", got {str(raw)[:200]!r}. '
+                "The POST may still have succeeded; reconcile via compass "
+                "search for the repository name before retrying."
+            )
+        repository_rid = payload["rid"]
+        source_rid = payload.get("sourceRid")
+
+        bootstrap_endpoint = (
+            f"repository-bootstrapper/api/repos/{repository_rid}/bootstrap"
         )
+        try:
+            status, payload, raw = client.conjure(
+                "POST",
+                bootstrap_endpoint,
+                json_body=self.PYTHON_TRANSFORMS_BOOTSTRAP_BODY,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Repository {repository_rid} was created but the "
+                f"bootstrapper call failed: {e}. The repository is a bare "
+                "empty repo without the transforms template; reconcile or "
+                f"delete it ({self.CREATE_CLEANUP_POLICY})."
+            ) from e
+        if not 200 <= status < 300:
+            error_name = (
+                payload.get("errorName") if isinstance(payload, Mapping) else None
+            )
+            detail = f" ({error_name})" if error_name else ""
+            raise RuntimeError(
+                f"Repository {repository_rid} was created but the "
+                f"bootstrapper call failed with HTTP {status}{detail}: "
+                f"{str(raw)[:200]}. The repository is a bare empty repo "
+                "without the transforms template; reconcile or delete it."
+            )
+
+        verification: Dict[str, Any]
+        try:
+            head = self.get_head(repository_rid)
+            branches = self.list_branches(repository_rid)
+            tags = self.list_tags(repository_rid)
+            verification = {
+                "default_branch": head,
+                "branches": branches,
+                "tags": tags,
+                "bootstrap_verified": (
+                    any(b["name"] == "refs/heads/master" for b in branches)
+                    and any(t["name"] == "refs/tags/0.0.1" for t in tags)
+                ),
+            }
+        except Exception as e:
+            verification = {
+                "bootstrap_verified": None,
+                "verification_error": (
+                    f"read-back failed after a successful bootstrap: {e}. "
+                    "The repository exists; verify via `pltr repository "
+                    "context` before retrying anything."
+                ),
+            }
+
+        return {
+            "status": "created",
+            "operation": "create_python_transforms_code_repository",
+            "name": name,
+            "parent_rid": parent_rid,
+            "project_rid": plan["project_rid"],
+            "repository": {
+                "rid": repository_rid,
+                "sourceRid": source_rid,
+            },
+            "compass_path": stemma_body["path"],
+            "bootstrap": {
+                "status": "applied",
+                "endpoint": f"POST /{bootstrap_endpoint}",
+                "body": dict(self.PYTHON_TRANSFORMS_BOOTSTRAP_BODY),
+            },
+            "verification": verification,
+            "contract": "VERIFIED",
+            "evidence": self.CREATE_CONTRACT_EVIDENCE,
+            "cleanup_policy": self.CREATE_CLEANUP_POLICY,
+        }
 
     @staticmethod
     def _raise_for_status(status: int, payload: Any, raw: Any, operation: str) -> None:

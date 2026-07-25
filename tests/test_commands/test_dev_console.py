@@ -295,49 +295,184 @@ def test_connect_token_expired_exits_nonzero():
 
 
 # ---------------------------------------------------------------------------
-# sdk generate (blocked posture)
+# sdk generate (plan-first; --apply mutates)
 # ---------------------------------------------------------------------------
 
 
-def _generate_result():
+def _generate_plan_result():
     return {
         "application_rid": APP_RID,
-        "status": "blocked",
-        "reason": "createSdkV2-contract-unverified: ...",
-        "evidence": ["POST {} (empty body) -> 400 Default:InvalidArgument"],
-        "current_sdks": [{"version": "0.7.0", "npmPackageName": "@my-app/sdk"}],
+        "status": "dry-run",
+        "application_version": 6,
+        "request": {
+            "verb": "POST",
+            "path": "/third-party-application-service/api/application-sdks/v2/"
+            f"{APP_RID}",
+            "body": {"applicationVersion": 6, "npm": {}},
+        },
+        "contract": "contract-verified on a live Foundry deployment",
         "warnings": [],
     }
 
 
-def test_sdk_generate_reports_blocked_with_exit_2():
+def _generate_success_result():
+    return {
+        **_generate_plan_result(),
+        "status": "success",
+        "sdk_version": "0.9.0",
+        "repository_rid": REPO_RID,
+        "npm_package_name": "@my-app/sdk",
+        "npm_status": "success",
+        "poll": {"attempts": 5, "elapsed_seconds": 24.1},
+    }
+
+
+def test_sdk_generate_defaults_to_dry_run_plan():
     with patch(SERVICE) as service:
-        service.return_value.plan_sdk_generation.return_value = (
-            _generate_result()
-        )
+        service.return_value.generate_sdk.return_value = _generate_plan_result()
         result = runner.invoke(app, ["dev-console", "sdk", "generate", APP_RID])
 
-    assert result.exit_code == 2
-    assert "SDK GENERATE [blocked]" in result.output
-    assert "BLOCKED" in result.output
-    assert "createSdkV2-contract-unverified" in result.output
-    service.return_value.plan_sdk_generation.assert_called_once_with(APP_RID)
+    assert result.exit_code == 0, result.output
+    assert "SDK GENERATE [dry-run]" in result.output
+    assert "Application version: 6" in result.output
+    assert '"applicationVersion": 6' in result.output
+    assert "nothing was sent" in result.output
+    service.return_value.generate_sdk.assert_called_once_with(
+        APP_RID, apply=False, wait=True, timeout_seconds=180.0
+    )
 
 
-def test_sdk_generate_agent_mode_carries_blocked_error():
+def test_sdk_generate_passes_apply_no_wait_and_timeout_through():
     with patch(SERVICE) as service:
-        service.return_value.plan_sdk_generation.return_value = (
-            _generate_result()
+        service.return_value.generate_sdk.return_value = {
+            **_generate_plan_result(),
+            "status": "requested",
+            "sdk_version": "0.9.0",
+            "npm_status": "requested",
+        }
+        result = runner.invoke(
+            app,
+            [
+                "dev-console",
+                "sdk",
+                "generate",
+                APP_RID,
+                "--apply",
+                "--no-wait",
+                "--timeout",
+                "60",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "SDK GENERATE [requested]" in result.output
+    kwargs = service.return_value.generate_sdk.call_args.kwargs
+    assert kwargs["apply"] is True
+    assert kwargs["wait"] is False
+    assert kwargs["timeout_seconds"] == 60.0
+
+
+def test_sdk_generate_success_renders_version_and_poll():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.return_value = (
+            _generate_success_result()
         )
         result = runner.invoke(
-            app, ["--agent", "dev-console", "sdk", "generate", APP_RID]
+            app, ["dev-console", "sdk", "generate", APP_RID, "--apply"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "SDK GENERATE [success]" in result.output
+    assert "SDK version: 0.9.0" in result.output
+    assert "npm status: success" in result.output
+    assert "Polled 5 time(s) over 24.1s" in result.output
+
+
+def test_sdk_generate_failed_exits_nonzero():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.return_value = {
+            **_generate_success_result(),
+            "status": "failed",
+            "npm_status": "failure",
+        }
+        result = runner.invoke(
+            app, ["dev-console", "sdk", "generate", APP_RID, "--apply"]
+        )
+
+    assert result.exit_code == 1
+    assert "SDK GENERATE [failed]" in result.output
+
+
+def test_sdk_generate_timeout_exits_2():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.return_value = {
+            **_generate_success_result(),
+            "status": "timeout",
+            "npm_status": "requested",
+            "reason": "sdk-generation-timeout: ...",
+        }
+        result = runner.invoke(
+            app, ["dev-console", "sdk", "generate", APP_RID, "--apply"]
+        )
+
+    assert result.exit_code == 2
+    assert "TIMEOUT" in result.output
+
+
+def test_sdk_generate_agent_mode_carries_status_and_errors():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.return_value = {
+            **_generate_success_result(),
+            "status": "timeout",
+            "npm_status": "requested",
+            "reason": "sdk-generation-timeout: ...",
+        }
+        result = runner.invoke(
+            app, ["--agent", "dev-console", "sdk", "generate", APP_RID, "--apply"]
         )
 
     assert result.exit_code == 2, result.output
     envelope = json.loads(result.stdout)
+    assert envelope["schema_version"] == "pltr-agent-v1"
     assert envelope["meta"]["result_type"] == "sdk-generate"
-    assert envelope["meta"]["status"] == "blocked"
-    assert envelope["errors"][0]["type"] == "blocked"
+    assert envelope["meta"]["status"] == "timeout"
+    assert envelope["errors"][0]["type"] == "timeout"
+
+
+def test_sdk_generate_agent_mode_success_has_no_errors():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.return_value = (
+            _generate_success_result()
+        )
+        result = runner.invoke(
+            app, ["--agent", "dev-console", "sdk", "generate", APP_RID, "--apply"]
+        )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.stdout)
+    assert envelope["meta"]["status"] == "success"
+    assert envelope["data"]["sdk_version"] == "0.9.0"
+    assert not envelope["errors"]
+
+
+def test_sdk_generate_drift_exits_nonzero_and_fails_loud():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.side_effect = SdkDefinitionDriftError(
+            "no integer metadata.applicationVersion"
+        )
+        result = runner.invoke(app, ["dev-console", "sdk", "generate", APP_RID])
+
+    assert result.exit_code == 1
+    assert "DRIFT [sdk-generate-shape]" in result.output
+
+
+def test_sdk_generate_token_expired_exits_nonzero():
+    with patch(SERVICE) as service:
+        service.return_value.generate_sdk.side_effect = TokenExpiredError()
+        result = runner.invoke(app, ["dev-console", "sdk", "generate", APP_RID])
+
+    assert result.exit_code == 1
+    assert "token-expired" in result.output
 
 
 # ---------------------------------------------------------------------------
