@@ -265,31 +265,50 @@ def test_upsert_object_type_command_apply_flag(mock_services):
     assert mock_instance.upsert_object_type.call_args.kwargs["apply"] is True
 
 
-def test_upsert_object_type_command_surfaces_existing_type(mock_services):
-    """A dry-run plan with a validation error exits non-zero with detail."""
+def test_upsert_object_type_command_surfaces_update_plan(mock_services):
+    """An existing type yields an update plan with changed fields, exit 0."""
     mock_instance = Mock()
     mock_instance.upsert_object_type.return_value = {
         "mode": "dry-run",
+        "upsertMode": "update",
+        "changedFields": ["displayName"],
         "apiName": "ExampleObject",
         "objectTypeId": "ns0abcde.example-object",
         "ontologyRid": "ri.ontology.main.ontology.test",
-        "validation": {
-            "status": "error",
-            "errors": [
-                "object type already exists; update path not yet implemented "
-                "(OntologyMetadata:ObjectTypesAlreadyExistError)"
-            ],
-        },
+        "update": {"objectType": {"id": "ns0abcde.example-object"}},
+        "validation": {"status": "success", "errors": []},
     }
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(app, _object_type_upsert_args())
 
-    assert result.exit_code == 1
+    assert result.exit_code == 0
     normalized_output = " ".join(result.output.split())
-    assert "object type already exists; update path not yet implemented" in (
-        normalized_output
-    )
+    assert "update" in normalized_output
+    assert "displayName" in normalized_output
+
+
+def test_upsert_object_type_command_noop_update_does_not_warn(mock_services):
+    """A no-op applied update reports skipped verification without warning."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.return_value = {
+        "mode": "applied",
+        "upsertMode": "update",
+        "changed": False,
+        "changedFields": [],
+        "apiName": "ExampleObject",
+        "objectTypeId": "ns0abcde.example-object",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "rid": "ri.ontology.main.object-type.example-object",
+        "validation": {"status": "success", "errors": []},
+        "verification": {"status": "skipped", "detail": "no field changes"},
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(app, _object_type_upsert_args("--apply"))
+
+    assert result.exit_code == 0
+    assert "not verified" not in result.output
 
 
 def test_upsert_object_type_command_surfaces_missing_dataset_schema(mock_services):

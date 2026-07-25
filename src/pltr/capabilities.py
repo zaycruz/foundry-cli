@@ -586,8 +586,10 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "the captured contract): POST "
         "/ontology-metadata/api/ontology/v2/modify objectTypes create "
         "variant; dry-run-first with --apply gate and SDK read-back "
-        "verification; create-only (update of existing types not yet "
-        "supported)"
+        "verification; existing types take the update path: current state "
+        "loaded via POST /ontology-metadata/api/ontology/ontology/"
+        "bulkLoadEntities, caller delta (display name, description) merged, "
+        "update modification dry-run-validated then issued"
     ),
     "delete_foundry_object_type": (
         "internal ontology-metadata (contract-verified, "

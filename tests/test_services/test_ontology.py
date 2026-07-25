@@ -529,14 +529,221 @@ def _validation_error_response(error_name: str) -> tuple[int, dict, str]:
     )
 
 
-def test_upsert_object_type_dry_run_reports_existing_type(mock_object_type_service):
-    """A dry-run plan carries the explicit no-update-yet validation error."""
+def _bulk_load_response(
+    display_name: str = "Example Object",
+    description: str | None = None,
+    primary_key: str = "id",
+    dataset_rid: str = "ri.foundry.main.dataset.example",
+) -> tuple[int, dict, str]:
+    """Loaded-state response mirroring bulkLoadEntities on a live Foundry deployment."""
+    property_rid = "ri.ontology.main.property.id"
+    display_metadata: dict = {
+        "displayName": display_name,
+        "pluralDisplayName": display_name,
+        "icon": {
+            "type": "blueprint",
+            "blueprint": {"color": "#4C90F0", "locator": "cube"},
+        },
+        "visibility": "NORMAL",
+    }
+    if description is not None:
+        display_metadata["description"] = description
+    entry = {
+        "objectType": {
+            "id": "ns0abcde.example-object",
+            "apiName": "ExampleObject",
+            "rid": "ri.ontology.main.object-type.example-object",
+            "displayMetadata": display_metadata,
+            "implementsInterfaces": [],
+            "implementsInterfaces2": [],
+            "primaryKeys": [property_rid],
+            "propertyTypes": {
+                property_rid: {
+                    "rid": property_rid,
+                    "id": primary_key,
+                    "apiName": primary_key,
+                    "displayMetadata": {
+                        "displayName": primary_key,
+                        "visibility": "NORMAL",
+                    },
+                    "indexedForSearch": True,
+                    "typeClasses": [],
+                    "type": {
+                        "type": "string",
+                        "string": {
+                            "isLongText": False,
+                            "supportsExactMatching": False,
+                        },
+                    },
+                    "status": {"type": "active", "active": {}},
+                }
+            },
+            "titlePropertyTypeRid": property_rid,
+            "traits": {"workflowObjectTypeTraits": {}},
+            "typeGroups": [],
+            "status": {"type": "active", "active": {}},
+        },
+        "datasources": [
+            {
+                "rid": "ri.ontology.main.datasource.tm",
+                "datasource": {
+                    "type": "dataset",
+                    "dataset": {
+                        "branchId": "master",
+                        "datasetRid": dataset_rid,
+                        "propertyMapping": {property_rid: primary_key},
+                    },
+                },
+            }
+        ],
+        "entityMetadata": None,
+    }
+    return (200, {"objectTypes": [entry]}, "[]")
+
+
+def test_upsert_object_type_dry_run_plans_update_for_existing_type(
+    mock_object_type_service,
+):
+    """An existing type produces a validated update plan, not a refusal."""
     service, _ = mock_object_type_service
     service.profile = "test-profile"
     mock_client = Mock()
     mock_client.conjure.side_effect = [
         _namespace_probe_response(),
         _validation_error_response("ObjectTypesAlreadyExistError"),
+        _bulk_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object v2",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+            description="updated description",
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["upsertMode"] == "update"
+    assert result["changedFields"] == ["displayName", "description"]
+    merged = result["update"]["objectType"]
+    assert merged["id"] == "ns0abcde.example-object"
+    assert merged["displayMetadata"]["displayName"] == "Example Object v2"
+    assert merged["displayMetadata"]["pluralDisplayName"] == "Example Object v2"
+    assert merged["displayMetadata"]["description"] == "updated description"
+    # Loaded state carried over: rids became PropertyTypeIds, type kept.
+    assert merged["primaryKeys"] == ["id"]
+    assert merged["titlePropertyTypeId"] == "id"
+    assert merged["propertyTypes"]["id"]["type"]["string"] == {
+        "isLongText": False,
+        "supportsExactMatching": False,
+    }
+    assert merged["traits"] == {"workflowObjectTypeTraits": {}}
+    assert result["validation"] == {"status": "success", "errors": []}
+    # Probe + create dry-run + load + update dry-run; never real modify.
+    assert mock_client.conjure.call_count == 4
+    paths = [call.args[1] for call in mock_client.conjure.call_args_list]
+    assert "/ontology/ontology/bulkLoadEntities" in paths[2]
+    assert all("/modify?" not in path for path in paths)
+    update_dry_run = mock_client.conjure.call_args_list[3]
+    update_body = update_dry_run.kwargs["json_body"]["modificationRequest"]
+    update_variant = update_body["objectTypes"]["ns0abcde.example-object"]
+    assert update_variant["type"] == "update"
+    assert update_variant["update"]["objectType"] == merged
+
+
+def test_upsert_object_type_apply_updates_existing_type(
+    mock_object_type_service,
+):
+    """With apply, the merged update modification is issued and verified."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesAlreadyExistError"),
+        _bulk_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object v2",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+            description="updated description",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["upsertMode"] == "update"
+    assert result["changed"] is True
+    assert result["changedFields"] == ["displayName", "description"]
+    assert result["rid"] == "ri.ontology.main.object-type.example-object"
+    assert result["verification"]["status"] == "verified"
+    modify_call = mock_client.conjure.call_args_list[4]
+    assert "/modify?" in modify_call.args[1]
+    body = modify_call.kwargs["json_body"]
+    variant = body["objectTypes"]["ns0abcde.example-object"]
+    assert variant["type"] == "update"
+    assert (
+        variant["update"]["objectType"]["displayMetadata"]["displayName"]
+        == "Example Object v2"
+    )
+
+
+def test_upsert_object_type_update_fails_when_state_cannot_load(
+    mock_object_type_service,
+):
+    """A missing load entry fails loudly; nothing is guessed or recreated."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesAlreadyExistError"),
+        (200, {"objectTypes": [None]}, '{"objectTypes":[null]}'),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(RuntimeError, match="Could not load the current state"),
+    ):
+        service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object v2",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert mock_client.conjure.call_count == 3
+
+
+def test_upsert_object_type_update_noop_skips_modify(mock_object_type_service):
+    """Identical fields validate but skip the real modification."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesAlreadyExistError"),
+        _bulk_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
     ]
 
     with patch(
@@ -549,25 +756,31 @@ def test_upsert_object_type_dry_run_reports_existing_type(mock_object_type_servi
             display_name="Example Object",
             primary_key="id",
             backing_dataset="ri.foundry.main.dataset.example",
+            apply=True,
         )
 
-    assert result["mode"] == "dry-run"
-    assert result["validation"]["status"] == "error"
-    assert any(
-        "object type already exists; update path not yet implemented" in error
-        for error in result["validation"]["errors"]
-    )
-    assert mock_client.conjure.call_count == 2
+    assert result["mode"] == "applied"
+    assert result["upsertMode"] == "update"
+    assert result["changed"] is False
+    assert result["changedFields"] == []
+    assert result["verification"]["status"] == "skipped"
+    # No fifth call: the real modify endpoint was never hit.
+    assert mock_client.conjure.call_count == 4
+    for call in mock_client.conjure.call_args_list:
+        assert "/modify?" not in call.args[1]
 
 
-def test_upsert_object_type_apply_raises_on_existing_type(mock_object_type_service):
-    """With apply, existing creates stop at validation and never modify."""
+def test_upsert_object_type_update_refuses_backing_dataset_change(
+    mock_object_type_service,
+):
+    """A different backing dataset is refused, not silently dropped."""
     service, _ = mock_object_type_service
     service.profile = "test-profile"
     mock_client = Mock()
     mock_client.conjure.side_effect = [
         _namespace_probe_response(),
         _validation_error_response("ObjectTypesAlreadyExistError"),
+        _bulk_load_response(dataset_rid="ri.foundry.main.dataset.other"),
     ]
 
     with (
@@ -576,20 +789,45 @@ def test_upsert_object_type_apply_raises_on_existing_type(mock_object_type_servi
             return_value=mock_client,
         ),
         pytest.raises(
-            RuntimeError,
-            match="object type already exists; update path not yet implemented",
+            RuntimeError, match="cannot change the backing dataset"
         ),
     ):
         service.upsert_object_type(
             ontology_rid="ri.ontology.main.ontology.test",
             api_name="ExampleObject",
-            display_name="Example Object",
+            display_name="Example Object v2",
             primary_key="id",
             backing_dataset="ri.foundry.main.dataset.example",
-            apply=True,
         )
 
-    assert mock_client.conjure.call_count == 2
+
+def test_upsert_object_type_update_refuses_primary_key_change(
+    mock_object_type_service,
+):
+    """A different primary key is refused, not silently dropped."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesAlreadyExistError"),
+        _bulk_load_response(),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(RuntimeError, match="cannot change the primary key"),
+    ):
+        service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object v2",
+            primary_key="tail_number",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
 
 
 def test_upsert_object_type_surfaces_missing_dataset_schema(

@@ -328,8 +328,11 @@ def upsert_object_type(
     7) regenerate OSDK, 8) enable the corresponding application controls.
     Complete steps 1-2 first; the backing dataset must carry a schema.
 
-    Existing object types are not updated yet; the create validation reports
-    that case explicitly instead of attempting a delete-and-recreate.
+    When the object type already exists, the command switches to the
+    update path: it loads the type's current state, merges the provided
+    display name / description onto it, and issues an update modification.
+    The result reports the changed fields. Primary key and backing dataset
+    must match the existing type.
     """
     try:
         result = ObjectTypeService(profile=profile).upsert_object_type(
@@ -370,7 +373,12 @@ def _exit_on_validation_error(result: dict) -> None:
 def _warn_on_unverified(result: dict) -> None:
     """Warn honestly when a real mutation could not be read back."""
     verification = result.get("verification") if isinstance(result, dict) else None
-    if isinstance(verification, dict) and verification.get("status") != "verified":
+    # "skipped" is a deliberate no-op (nothing to apply), not a verification
+    # failure; only "not-verified" warrants a warning.
+    if (
+        isinstance(verification, dict)
+        and verification.get("status") not in ("verified", "skipped")
+    ):
         formatter.print_warning(
             f"Mutation applied but not verified: {verification.get('detail')}"
         )

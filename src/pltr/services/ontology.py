@@ -17,6 +17,10 @@ from .base import BaseService
 # Verified request contract for OntologyModificationService.modifyOntology:
 # the captured contract (contract-verified on a live Foundry deployment).
 _MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
+# Verified live 2026-07-24 on a live Foundry deployment: OntologyMetadataService.bulkLoadOntologyEntities
+# loads the current state of entities keyed by ObjectTypeId/LinkTypeId. The
+# response carries the full _api ObjectType used to build update modifications.
+_BULK_LOAD_ENTITIES_ENDPOINT = "/ontology-metadata/api/ontology/ontology/bulkLoadEntities"
 _NAMESPACE_PROBE_OBJECT_TYPE_ID = "probe.bad-id"
 
 # Terminal error names that prove an entity is gone when a delete is
@@ -37,6 +41,12 @@ _ALREADY_EXISTS_ERROR_NAMES = {
     "ActionTypesAlreadyExistError",
     "ActionTypesAlreadyExist",
     "actionTypesAlreadyExist",
+}
+
+_OBJECT_TYPE_ALREADY_EXISTS_NAMES = {
+    "ObjectTypesAlreadyExistError",
+    "ObjectTypesAlreadyExist",
+    "objectTypesAlreadyExist",
 }
 
 _COMMON_ERROR_MESSAGES = {
@@ -131,6 +141,10 @@ def _format_validation_error(error: Mapping[str, Any], *, entity: str) -> str:
     error_name = str(error_data.get("errorName") or "unknown")
     terminal_name = _error_terminal_name(error_name)
     if terminal_name in _ALREADY_EXISTS_ERROR_NAMES:
+        if entity == "object type":
+            # Object types have an update path; this message only surfaces
+            # when already-exists arrives mixed with other create errors.
+            return f"{entity} already exists ({error_name})"
         return (
             f"{entity} already exists; update path not yet implemented "
             f"({error_name})"
@@ -144,15 +158,21 @@ def _format_validation_error(error: Mapping[str, Any], *, entity: str) -> str:
     return error_name
 
 
-def _run_dry_run(
+def _run_dry_run_collect(
     client: Any,
     ontology_rid: str,
     modification_request: Mapping[str, Any],
     *,
     operation: str,
     entity: str,
-) -> List[str]:
-    """POST a dry-run validation; return formatted errors ([] on success)."""
+) -> Tuple[List[str], List[str]]:
+    """POST a dry-run validation.
+
+    Returns ``(formatted_errors, terminal_error_names)``. Callers that only
+    need messages use :func:`_run_dry_run`; callers that branch on the kind of
+    validation failure (for example already-exists -> update path) need the
+    terminal names too.
+    """
     dry_run_url, _ = _modify_urls(ontology_rid)
     status, parsed, raw = client.conjure(
         "POST",
@@ -164,16 +184,65 @@ def _run_dry_run(
         status, parsed, raw, operation=operation
     )
     if isinstance(parsed, Mapping) and parsed.get("type") == "success":
-        return []
+        return [], []
     errors = _dry_run_errors(parsed)
     if errors:
-        return [
-            _format_validation_error(error, entity=entity) for error in errors
-        ]
+        names = []
+        for error in errors:
+            error_data = error.get("errorData")
+            if isinstance(error_data, Mapping):
+                names.append(
+                    _error_terminal_name(str(error_data.get("errorName") or ""))
+                )
+        return (
+            [
+                _format_validation_error(error, entity=entity)
+                for error in errors
+            ],
+            names,
+        )
     raise RuntimeError(
         f"{operation} returned an invalid response shape: expected "
         "{'type': 'success'} or {'type': 'error', 'error': {'errors': [...]}}"
     )
+
+
+def _run_dry_run(
+    client: Any,
+    ontology_rid: str,
+    modification_request: Mapping[str, Any],
+    *,
+    operation: str,
+    entity: str,
+) -> List[str]:
+    """POST a dry-run validation; return formatted errors ([] on success)."""
+    errors, _ = _run_dry_run_collect(
+        client,
+        ontology_rid,
+        modification_request,
+        operation=operation,
+        entity=entity,
+    )
+    return errors
+
+
+def _strip_nulls(value: Any) -> Any:
+    """Recursively drop None values from mappings; keep lists and scalars.
+
+    Loaded entity state contains explicit JSON nulls for absent optional
+    fields. Conjure deserialization on this stack treats a present-but-null
+    optional field differently from an absent one, so update modifications
+    must omit them.
+    """
+    if isinstance(value, Mapping):
+        return {
+            key: _strip_nulls(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [_strip_nulls(item) for item in value]
+    return value
 
 
 def _run_modify(
@@ -592,9 +661,15 @@ class ObjectTypeService(BaseService):
         object type IDs. It does not expose that namespace directly, so a
         dry-run with a deliberately invalid ID discovers the namespace regex.
 
-        Existing object types are intentionally not updated yet. Foundry's
-        create validation is used to detect that case rather than attempting
-        a destructive delete-and-recreate.
+        When create validation reports the type already exists, the upsert
+        switches to the update path: the type's current state is loaded
+        through OntologyMetadataService.bulkLoadOntologyEntities, the
+        caller-provided fields (display name, description) are merged onto
+        that state, and an ``update`` modification is validated and issued.
+        The merge never replaces the loaded state wholesale; fields the
+        caller did not provide are carried over unchanged. Primary key and
+        backing dataset changes are refused with a clear error rather than
+        guessed at.
         """
         client = _internal_client(self)
         namespace = self._discover_object_type_namespace(client, ontology_rid)
@@ -615,13 +690,29 @@ class ObjectTypeService(BaseService):
             "ontologyRid": ontology_rid,
         }
 
-        validation_errors = _run_dry_run(
+        validation_errors, terminal_names = _run_dry_run_collect(
             client,
             ontology_rid,
             modification_request,
             operation="object type dry-run",
             entity="object type",
         )
+        if terminal_names and all(
+            name in _OBJECT_TYPE_ALREADY_EXISTS_NAMES
+            for name in terminal_names
+        ):
+            return self._update_existing_object_type(
+                client,
+                ontology_rid=ontology_rid,
+                object_type_id=object_type_id,
+                api_name=api_name,
+                display_name=display_name,
+                primary_key=primary_key,
+                backing_dataset=backing_dataset,
+                description=description,
+                apply=apply,
+                plan=plan,
+            )
         validation_errors = _order_hint(
             validation_errors,
             step=OBJECT_TYPE_UPSERT_STEP,
@@ -673,6 +764,352 @@ class ObjectTypeService(BaseService):
                 ontology_rid, api_name
             ),
         }
+
+    def _update_existing_object_type(
+        self,
+        client: Any,
+        *,
+        ontology_rid: str,
+        object_type_id: str,
+        api_name: str,
+        display_name: str,
+        primary_key: str,
+        backing_dataset: str,
+        description: Optional[str],
+        apply: bool,
+        plan: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Update an existing object type by merging the caller's delta.
+
+        The current state is loaded from OntologyMetadataService; the
+        caller-provided fields are applied onto that loaded state and the
+        merged object is sent as an ``update`` modification. Fields the
+        caller did not provide are preserved. If the current state cannot
+        be loaded or cannot be faithfully reconstructed (interfaces,
+        shared property types), the update fails loudly rather than
+        guessing.
+        """
+        loaded = self._load_object_type_state(client, object_type_id)
+        modification, changed_fields = self._merge_object_type_update(
+            loaded,
+            display_name=display_name,
+            primary_key=primary_key,
+            backing_dataset=backing_dataset,
+            description=description,
+        )
+        modification_request: Dict[str, Any] = {
+            "objectTypes": {
+                object_type_id: {
+                    "type": "update",
+                    "update": {"objectType": modification},
+                }
+            }
+        }
+        update_plan: Dict[str, Any] = {
+            **plan,
+            "upsertMode": "update",
+            "changedFields": changed_fields,
+            "update": {"objectType": modification},
+        }
+
+        validation_errors = _run_dry_run(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type update dry-run",
+            entity="object type",
+        )
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Object type update dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **update_plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **update_plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        result: Dict[str, Any] = {
+            **update_plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+        }
+        loaded_rid = loaded.get("objectType", {}).get("rid")
+        if isinstance(loaded_rid, str):
+            result["rid"] = loaded_rid
+        if not changed_fields:
+            result["changed"] = False
+            result["verification"] = {
+                "status": "skipped",
+                "detail": (
+                    "no field changes; the update modification was not "
+                    "issued to avoid a no-op ontology version bump"
+                ),
+            }
+            return result
+
+        result["changed"] = True
+        _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type update modify",
+        )
+        result["verification"] = self._verify_object_type_present(
+            ontology_rid, api_name
+        )
+        return result
+
+    @staticmethod
+    def _load_object_type_state(
+        client: Any, object_type_id: str
+    ) -> Mapping[str, Any]:
+        """Load an object type's current state via bulkLoadEntities.
+
+        Endpoint verified live 2026-07-24 on a live Foundry deployment. Requested entities that
+        do not exist (or are not visible) come back as null/absent entries,
+        which fails the update path loudly: no state, no update.
+        """
+        status, parsed, raw = client.conjure(
+            "POST",
+            _BULK_LOAD_ENTITIES_ENDPOINT,
+            json_body={
+                "objectTypes": [
+                    {
+                        "identifier": {
+                            "type": "objectTypeId",
+                            "objectTypeId": object_type_id,
+                        }
+                    }
+                ],
+                "linkTypes": [],
+                "actionTypes": [],
+                "interfaceTypes": [],
+                "sharedPropertyTypes": [],
+                "typeGroups": [],
+                # datasourceTypes filters which datasource definitions the
+                # server includes; an empty list returns none, which would
+                # silently disable the backing-dataset guard.
+                "datasourceTypes": [
+                    "DATASET",
+                    "DATASET_V2",
+                    "DATASET_V3",
+                    "EDITS_ONLY",
+                    "RESTRICTED_VIEW",
+                    "RESTRICTED_VIEW_V2",
+                    "STREAM",
+                    "STREAM_V2",
+                    "STREAM_V3",
+                    "TIME_SERIES",
+                ],
+            },
+            expected=200,
+        )
+        _require_successful_internal_response(
+            status, parsed, raw, operation="object type load"
+        )
+        if not isinstance(parsed, Mapping):
+            raise RuntimeError(
+                "object type load returned an invalid response shape: "
+                "expected a JSON object"
+            )
+        entries = parsed.get("objectTypes")
+        entry = entries[0] if isinstance(entries, list) and entries else None
+        if not isinstance(entry, Mapping) or not isinstance(
+            entry.get("objectType"), Mapping
+        ):
+            raise RuntimeError(
+                "Could not load the current state of object type "
+                f"{object_type_id}: bulkLoadEntities returned no usable "
+                "entry. The update path requires the existing type's "
+                "state and refuses to guess or recreate."
+            )
+        return entry
+
+    @staticmethod
+    def _merge_object_type_update(
+        loaded: Mapping[str, Any],
+        *,
+        display_name: str,
+        primary_key: str,
+        backing_dataset: str,
+        description: Optional[str],
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """Build an ObjectTypeModification from loaded state plus the delta.
+
+        The loaded ``_api`` ObjectType is translated field-by-field into
+        the modification shape (property RIDs become PropertyTypeIds,
+        interface RIDs become ``rid`` union members). Only display name
+        and description are caller-mutable; primary key and backing
+        dataset must match the loaded state. Returns
+        ``(modification, changed_fields)``.
+        """
+        object_type = loaded["objectType"]
+        if object_type.get("implementsInterfaces2"):
+            raise RuntimeError(
+                f"object type {object_type.get('id')} implements "
+                "interfaces; the update path cannot faithfully reconstruct "
+                "interface implementations and refuses to drop them"
+            )
+
+        loaded_properties = object_type.get("propertyTypes")
+        if not isinstance(loaded_properties, Mapping):
+            raise RuntimeError(
+                "loaded object type state is missing propertyTypes; the "
+                "update path cannot proceed without the current schema"
+            )
+
+        rid_to_id: Dict[str, str] = {}
+        property_mods: Dict[str, Any] = {}
+        copy_keys = (
+            "apiName",
+            "baseFormatter",
+            "dataConstraints",
+            "displayMetadata",
+            "id",
+            "indexedForSearch",
+            "inlineAction",
+            "ruleSetBinding",
+            "status",
+            "type",
+            "typeClasses",
+            "valueType",
+        )
+        for property_rid, loaded_property in loaded_properties.items():
+            if not isinstance(loaded_property, Mapping):
+                continue
+            if loaded_property.get("sharedPropertyTypeRid") or (
+                loaded_property.get("sharedPropertyTypeApiName")
+            ):
+                raise RuntimeError(
+                    "object type uses shared property types; the update "
+                    "path cannot faithfully reconstruct them and refuses "
+                    "to drop them"
+                )
+            property_id = loaded_property.get("id")
+            if not isinstance(property_id, str):
+                raise RuntimeError(
+                    f"loaded property {property_rid} has no PropertyTypeId; "
+                    "the update path cannot proceed without it"
+                )
+            rid_to_id[property_rid] = property_id
+            property_mods[property_id] = {
+                key: value
+                for key, value in (
+                    (key, loaded_property.get(key)) for key in copy_keys
+                )
+                if value is not None
+            }
+
+        loaded_primary_keys = [
+            rid_to_id[rid]
+            for rid in object_type.get("primaryKeys") or []
+            if rid in rid_to_id
+        ]
+        if primary_key not in loaded_primary_keys:
+            raise RuntimeError(
+                "the update path cannot change the primary key: the loaded "
+                f"primary keys are {loaded_primary_keys} but the caller "
+                f"requested {primary_key!r}; change the primary key in the "
+                "Foundry ontology manager instead"
+            )
+
+        for datasource_entry in loaded.get("datasources") or []:
+            if not isinstance(datasource_entry, Mapping):
+                continue
+            definition = datasource_entry.get("datasource")
+            if not isinstance(definition, Mapping):
+                continue
+            dataset = next(
+                (
+                    definition.get(variant)
+                    for variant in ("dataset", "datasetV2", "datasetV3")
+                    if isinstance(definition.get(variant), Mapping)
+                ),
+                None,
+            )
+            if dataset is None:
+                continue
+            loaded_dataset_rid = dataset.get("datasetRid")
+            if isinstance(loaded_dataset_rid, str) and (
+                loaded_dataset_rid != backing_dataset
+            ):
+                raise RuntimeError(
+                    "the update path cannot change the backing dataset: "
+                    f"the loaded datasource is {loaded_dataset_rid} but "
+                    f"the caller requested {backing_dataset}"
+                )
+
+        display_metadata = dict(object_type.get("displayMetadata") or {})
+        changed_fields: List[str] = []
+        if display_name != display_metadata.get("displayName"):
+            if display_metadata.get("pluralDisplayName") == (
+                display_metadata.get("displayName")
+            ):
+                display_metadata["pluralDisplayName"] = display_name
+            display_metadata["displayName"] = display_name
+            changed_fields.append("displayName")
+        if description is not None and description != (
+            display_metadata.get("description")
+        ):
+            display_metadata["description"] = description
+            changed_fields.append("description")
+
+        loaded_traits = object_type.get("traits") or {}
+        traits: Dict[str, Any] = {
+            "workflowObjectTypeTraits": (
+                loaded_traits.get("workflowObjectTypeTraits") or {}
+            )
+        }
+        for trait_key in (
+            "eventMetadata",
+            "actionLogMetadata",
+            "timeSeriesMetadata",
+            "peeringMetadata",
+            "sensorTrait",
+        ):
+            if loaded_traits.get(trait_key) is not None:
+                traits[trait_key] = loaded_traits[trait_key]
+
+        title_property_type_id = rid_to_id.get(
+            str(object_type.get("titlePropertyTypeRid") or "")
+        )
+        if title_property_type_id is None:
+            raise RuntimeError(
+                "loaded object type state has an unmapped "
+                "titlePropertyTypeRid; the update path cannot proceed "
+                "without the title property"
+            )
+
+        modification: Dict[str, Any] = {
+            "id": object_type["id"],
+            "displayMetadata": display_metadata,
+            "implementsInterfaces": [
+                {"type": "rid", "rid": rid}
+                for rid in object_type.get("implementsInterfaces") or []
+            ],
+            "implementsInterfaces2": [],
+            "primaryKeys": loaded_primary_keys,
+            "propertyTypes": property_mods,
+            "sharedPropertyTypes": {},
+            "titlePropertyTypeId": title_property_type_id,
+            "traits": traits,
+            "typeGroups": list(object_type.get("typeGroups") or []),
+        }
+        if object_type.get("apiName"):
+            modification["apiName"] = object_type["apiName"]
+        if object_type.get("status"):
+            modification["status"] = object_type["status"]
+
+        return _strip_nulls(modification), changed_fields
 
     def delete_object_type(
         self,
