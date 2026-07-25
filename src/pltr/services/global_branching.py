@@ -15,11 +15,20 @@ Write contracts, verified end-to-end against a live Foundry deployment (2026-07-
   ``{"externalMappingConfigurationFilters": []}``, read
   ``ontologies[ontologyRid].compassNamespaceRid``). The success response is
   ``{"branchRecord": {"branchRid": "ri.branch..branch.<uuid>", ...}}`` —
-  note the DOUBLE DOT in the rid (empty service segment).
+  note the DOUBLE DOT in the rid (empty service segment). ``resourcesToAdd``
+  entries are plain ResourceRid strings (server-evidenced:
+  string entries deserialize and are branchability-checked; object entries
+  are rejected with ``422 Conjure:UnprocessableEntity``).
 - ``POST /branch/proposal/create`` takes ``{branchRid, displayName,
-  description, mergeTo}`` where ``mergeTo`` is the Conjure union
-  ``{"main": {}, "type": "main"}``. The success response is
-  ``{"proposal": {"proposalRid": "ri.branch..proposal.<uuid>", ...}}``.
+  description, mergeTo}`` where ``mergeTo`` is the ``ProposalMergeTo``
+  Conjure union with exactly two arms (generated
+  ``@palantir/branch-service-api`` ``proposalMergeTo.js``, recovered from
+  the ``@palantir/mcp`` 0.408.0 dist published contract): ``{"main": {}, "type":
+  "main"}`` (contract-verified 200) and ``{"branchRid": <rid>, "type":
+  "branchRid"}`` (encoding accepted by the server, which answers a typed
+  ``400 Branch:InvalidMergeTo`` for semantically invalid targets). The
+  success response is ``{"proposal": {"proposalRid":
+  "ri.branch..proposal.<uuid>", ...}}``.
 - ``PUT /branch/close/{branchRid}`` and
   ``PUT /branch/proposal/close/{proposalRid}`` take an empty body with the
   RID in the path and return ``200 {}``.
@@ -35,7 +44,7 @@ rendering as a result.
 """
 
 import re
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, List, Mapping, Optional
 
 from .base import BaseService
 from .foundry_internal_client import FoundryInternalClient
@@ -225,7 +234,11 @@ class GlobalBranchService(_BranchServiceBase):
         "/branch/create with {description, displayName, ontologyRid, "
         "resourcesToAdd, compassNamespaceRid}; compassNamespaceRid resolved "
         "from POST /ontology-metadata/api/ontology/v2/load/all. Success "
-        "response branchRecord.branchRid is ri.branch..branch.<uuid>."
+        "response branchRecord.branchRid is ri.branch..branch.<uuid>. "
+        "resourcesToAdd entries are plain ResourceRid strings "
+        "(server-evidenced: object entries are rejected with "
+        "422 Conjure:UnprocessableEntity; string entries are "
+        "branchability-checked server-side)."
     )
     CLOSE_CONTRACT = (
         "contract-verified: PUT /branch/close/{branchRid}, empty "
@@ -256,7 +269,11 @@ class GlobalBranchService(_BranchServiceBase):
         )
 
     def plan_create_branch(
-        self, display_name: str, description: str, ontology_rid: str
+        self,
+        display_name: str,
+        description: str,
+        ontology_rid: str,
+        resources_to_add: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Describe a Global Branch create without issuing it.
@@ -268,6 +285,8 @@ class GlobalBranchService(_BranchServiceBase):
             display_name: Branch display name
             description: Branch description
             ontology_rid: Ontology RID the branch forks
+            resources_to_add: Resource RIDs (plain strings) to add to the
+                branch at create; defaults to the verified empty array
 
         Returns:
             Plan dictionary with the would-be request and contract status
@@ -279,7 +298,7 @@ class GlobalBranchService(_BranchServiceBase):
                 "description": description,
                 "displayName": display_name,
                 "ontologyRid": ontology_rid,
-                "resourcesToAdd": [],
+                "resourcesToAdd": list(resources_to_add or []),
                 "compassNamespaceRid": "<resolved-at-apply>",
             },
             self.CREATE_CONTRACT,
@@ -325,7 +344,11 @@ class GlobalBranchService(_BranchServiceBase):
         return namespace_rid
 
     def create_branch(
-        self, display_name: str, description: str, ontology_rid: str
+        self,
+        display_name: str,
+        description: str,
+        ontology_rid: str,
+        resources_to_add: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Create a Global Branch (REAL mutation).
@@ -338,6 +361,10 @@ class GlobalBranchService(_BranchServiceBase):
             display_name: Branch display name
             description: Branch description
             ontology_rid: Ontology RID the branch forks
+            resources_to_add: Resource RIDs (plain strings) to add to the
+                branch at create; defaults to the verified empty array. The
+                server rejects resources it cannot branch with a typed
+                ``Branch:ResourcesUnableToBranchError``.
 
         Returns:
             Dictionary with ``branchRid`` and the raw ``branchRecord``
@@ -353,7 +380,7 @@ class GlobalBranchService(_BranchServiceBase):
                 "description": description,
                 "displayName": display_name,
                 "ontologyRid": ontology_rid,
-                "resourcesToAdd": [],
+                "resourcesToAdd": list(resources_to_add or []),
                 "compassNamespaceRid": namespace_rid,
             },
             "branch",
@@ -396,9 +423,13 @@ class GlobalProposalService(_BranchServiceBase):
         "contract-verified via @palantir/mcp client contract "
         "(the captured contract): POST "
         "/branch/proposal/create with {branchRid, displayName, description, "
-        'mergeTo}; mergeTo is the Conjure union {"main": {}, "type": '
-        '"main"}. Success response proposal.proposalRid is '
-        "ri.branch..proposal.<uuid>."
+        "mergeTo}; mergeTo is the ProposalMergeTo Conjure union with two "
+        'arms: {"main": {}, "type": "main"} (contract-verified 200) and '
+        '{"branchRid": <rid>, "type": "branchRid"} (generated '
+        "@palantir/branch-service-api proposalMergeTo.js; encoding "
+        "accepted by the server, semantic target validity enforced "
+        "server-side with Branch:InvalidMergeTo). Success response "
+        "proposal.proposalRid is ri.branch..proposal.<uuid>."
     )
     CLOSE_CONTRACT = (
         "contract-verified: PUT /branch/proposal/close/{proposalRid}, "
@@ -430,22 +461,58 @@ class GlobalProposalService(_BranchServiceBase):
             "proposal",
         )
 
+    @staticmethod
+    def build_merge_to(merge_to: str) -> Dict[str, Any]:
+        """
+        Encode the ``ProposalMergeTo`` Conjure union for a merge target.
+
+        The generated ``@palantir/branch-service-api`` union has exactly two
+        arms: ``main`` (empty payload) and ``branchRid`` (a global branch
+        RID). Anything else fails loudly before any network request.
+
+        Args:
+            merge_to: ``"main"`` or a ``ri.branch..branch.<uuid>`` RID
+
+        Returns:
+            The union encoding, e.g. ``{"main": {}, "type": "main"}``
+
+        Raises:
+            ValueError: If the target is neither ``main`` nor a branch RID
+        """
+        if merge_to == "main":
+            # Fresh dict each call: callers must not mutate MERGE_TO_MAIN.
+            return {"main": {}, "type": "main"}
+        if merge_to.startswith(GlobalBranchService.BRANCH_RID_PREFIX):
+            return {"branchRid": merge_to, "type": "branchRid"}
+        raise ValueError(
+            f"Invalid merge target {merge_to!r}: expected 'main' or a "
+            f"global branch RID ({GlobalBranchService.BRANCH_RID_PREFIX}<uuid>)"
+        )
+
     def plan_create_proposal(
-        self, branch_rid: str, display_name: str, description: str
+        self,
+        branch_rid: str,
+        display_name: str,
+        description: str,
+        merge_to: str = "main",
     ) -> Dict[str, Any]:
         """
         Describe a Global Proposal create without issuing it.
 
-        Shows the verified request body, including the ``mergeTo`` Conjure
-        union (``{"main": {}, "type": "main"}``).
+        Shows the verified request body, including the ``mergeTo``
+        ``ProposalMergeTo`` Conjure union encoding.
 
         Args:
             branch_rid: Global Branch RID the proposal belongs to
             display_name: Proposal display name
             description: Proposal description
+            merge_to: Merge target: ``"main"`` or a global branch RID
 
         Returns:
             Plan dictionary with the would-be request and contract status
+
+        Raises:
+            ValueError: If ``merge_to`` is not a valid union target
         """
         return self._plan(
             "POST",
@@ -454,31 +521,37 @@ class GlobalProposalService(_BranchServiceBase):
                 "branchRid": branch_rid,
                 "displayName": display_name,
                 "description": description,
-                "mergeTo": dict(self.MERGE_TO_MAIN),
+                "mergeTo": self.build_merge_to(merge_to),
             },
             self.CREATE_CONTRACT,
         )
 
     def create_proposal(
-        self, branch_rid: str, display_name: str, description: str
+        self,
+        branch_rid: str,
+        display_name: str,
+        description: str,
+        merge_to: str = "main",
     ) -> Dict[str, Any]:
         """
         Create an Ontology Global Proposal (REAL mutation).
 
         Issues the verified ``POST /branch/proposal/create`` body with the
-        ``mergeTo`` Conjure union (``{"main": {}, "type": "main"}``). Returns
-        the proposal record plus the parsed proposal RID
+        ``mergeTo`` ``ProposalMergeTo`` Conjure union encoding. Returns the
+        proposal record plus the parsed proposal RID
         (``ri.branch..proposal.<uuid>`` — double dot).
 
         Args:
             branch_rid: Global Branch RID the proposal belongs to
             display_name: Proposal display name
             description: Proposal description
+            merge_to: Merge target: ``"main"`` or a global branch RID
 
         Returns:
             Dictionary with ``proposalRid`` and the raw ``proposal`` record
 
         Raises:
+            ValueError: If ``merge_to`` is not a valid union target
             GlobalBranchShapeError: If the response misses the expected fields
             RuntimeError: If the request fails or the API is not mounted
         """
@@ -488,7 +561,7 @@ class GlobalProposalService(_BranchServiceBase):
                 "branchRid": branch_rid,
                 "displayName": display_name,
                 "description": description,
-                "mergeTo": dict(self.MERGE_TO_MAIN),
+                "mergeTo": self.build_merge_to(merge_to),
             },
             "proposal",
         )

@@ -1016,3 +1016,212 @@ class TestCreatePullRequestComment:
         service = RepositoryService(profile="test")
         with pytest.raises(RuntimeError, match="Failed to comment on pull request"):
             service.create_pull_request_comment(PR_RID, "hello")
+
+
+def _open_pr(rid=PR_RID, title="test-pull-request-1"):
+    return {
+        "rid": rid,
+        "baseRepositoryRid": REPO_RID,
+        "headRepositoryRid": REPO_RID,
+        "baseBranchName": "refs/heads/master",
+        "headCommitish": "refs/heads/feat/x",
+        "currentRecord": {
+            "status": "OPEN",
+            "merged": False,
+            "title": title,
+        },
+    }
+
+
+class TestClosePullRequest:
+    """Test cases for pull-request close (verified contract)."""
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_plan_reads_pr_and_shows_verified_body(self, mock_client_class):
+        """Test the plan reads the PR for its title and never PUTs."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, _open_pr(), "{...}")
+
+        service = RepositoryService(profile="test")
+        plan = service.close_pull_request_plan(PR_RID)
+
+        assert plan["status"] == "dry-run"
+        assert plan["current_status"] == "OPEN"
+        assert plan["already_closed"] is False
+        assert plan["intended_endpoint"] == (
+            f"PUT /stemma-pull-request/api/pulls/{PR_RID}/update"
+        )
+        assert plan["intended_body"] == {
+            "title": "test-pull-request-1",
+            "status": "CLOSED",
+        }
+        assert plan["contract"] == "VERIFIED"
+        assert "pr-write-verification.md" in plan["evidence"]
+        mock_client.conjure.assert_called_once_with(
+            "GET", f"stemma-pull-request/api/pulls/{PR_RID}"
+        )
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_close_gets_then_puts_exact_body(self, mock_client_class):
+        """Test the real close reads the PR, PUTs the verified body, reads back."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        closed_pr = _open_pr()
+        closed_pr["currentRecord"] = {
+            "status": "CLOSED",
+            "merged": False,
+            "title": "test-pull-request-1",
+        }
+        mock_client.conjure.side_effect = [
+            (200, _open_pr(), "{...}"),
+            (200, closed_pr, "{...}"),
+            (200, closed_pr, "{...}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        result = service.close_pull_request(PR_RID)
+
+        assert result["status"] == "closed"
+        assert result["pull_request"]["rid"] == PR_RID
+        assert result["verification"] == {
+            "status": "CLOSED",
+            "merged": False,
+            "close_verified": True,
+        }
+        calls = mock_client.conjure.call_args_list
+        assert calls[0].args[:2] == (
+            "GET",
+            f"stemma-pull-request/api/pulls/{PR_RID}",
+        )
+        assert calls[1].args[:2] == (
+            "PUT",
+            f"stemma-pull-request/api/pulls/{PR_RID}/update",
+        )
+        assert calls[1].kwargs["json_body"] == {
+            "title": "test-pull-request-1",
+            "status": "CLOSED",
+        }
+        assert calls[2].args[:2] == (
+            "GET",
+            f"stemma-pull-request/api/pulls/{PR_RID}",
+        )
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_close_already_closed_never_puts(self, mock_client_class):
+        """Test an already-CLOSED pull request is reported, not re-closed."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, _sample_pr(), "{...}")
+
+        service = RepositoryService(profile="test")
+        result = service.close_pull_request(PR_RID)
+
+        assert result["status"] == "already-closed"
+        assert result["current_status"] == "CLOSED"
+        assert "no update was issued" in result["note"]
+        mock_client.conjure.assert_called_once_with(
+            "GET", f"stemma-pull-request/api/pulls/{PR_RID}"
+        )
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_plan_flags_already_closed(self, mock_client_class):
+        """Test the dry-run plan flags an already-CLOSED pull request."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, _sample_pr(), "{...}")
+
+        service = RepositoryService(profile="test")
+        plan = service.close_pull_request_plan(PR_RID)
+
+        assert plan["already_closed"] is True
+        assert plan["current_status"] == "CLOSED"
+        assert plan["intended_body"] == {
+            "title": "fix: example",
+            "status": "CLOSED",
+        }
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_missing_title_fails_loudly(self, mock_client_class):
+        """Test a PR without currentRecord.title fails as unverified shape."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (200, {"rid": PR_RID}, "{...}")
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(PullRequestShapeError, match="Unverified"):
+            service.close_pull_request_plan(PR_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_close_http_error_fails_loudly(self, mock_client_class):
+        """Test a non-2xx close PUT surfaces the HTTP status."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            (200, _open_pr(), "{...}"),
+            (400, {"errorName": "Default:InvalidArgument"}, "{}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            service.close_pull_request(PR_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_close_unverified_shape_fails_loudly(self, mock_client_class):
+        """Test a close response without a rid fails with reconcile guidance."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            (200, _open_pr(), "{...}"),
+            (200, {"unexpected": True}, "{}"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(PullRequestShapeError, match="reconcile"):
+            service.close_pull_request(PR_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_close_transport_error_wrapped(self, mock_client_class):
+        """Test transport failures on the PUT are wrapped."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.side_effect = [
+            (200, _open_pr(), "{...}"),
+            Exception("read timed out"),
+        ]
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(RuntimeError, match="Failed to close pull request"):
+            service.close_pull_request(PR_RID)
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_read_back_failure_does_not_hide_close(self, mock_client_class):
+        """Test a failed read-back still reports the successful close."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        closed_pr = _open_pr()
+        closed_pr["currentRecord"]["status"] = "CLOSED"
+        mock_client.conjure.side_effect = [
+            (200, _open_pr(), "{...}"),
+            (200, closed_pr, "{...}"),
+            Exception("read timed out"),
+        ]
+
+        service = RepositoryService(profile="test")
+        result = service.close_pull_request(PR_RID)
+
+        assert result["status"] == "closed"
+        verification = result["verification"]
+        assert verification["close_verified"] is None
+        assert "read timed out" in verification["verification_error"]
+
+    @patch("pltr.services.repository.FoundryInternalClient")
+    def test_close_unknown_pr_is_not_found(self, mock_client_class):
+        """Test closing a non-existent pull request maps to not-found."""
+        mock_client = Mock()
+        mock_client_class.return_value = mock_client
+        mock_client.conjure.return_value = (404, "", "")
+
+        service = RepositoryService(profile="test")
+        with pytest.raises(PullRequestNotFoundError, match="No pull request found"):
+            service.close_pull_request(PR_RID)

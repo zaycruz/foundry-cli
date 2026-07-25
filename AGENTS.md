@@ -34,3 +34,4 @@ The assessment is read-only. It does not authorize or execute a Foundry mutation
 ## Documented knowledge
 
 `docs/solutions/` records verified lessons by category, and `CONCEPTS.md` defines shared project vocabulary. Consult them when the current work touches a documented area or term.
+

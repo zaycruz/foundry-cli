@@ -142,7 +142,7 @@ class TestGlobalBranchCreateCommand:
 
         assert result.exit_code == 0
         mock_service.plan_create_branch.assert_called_once_with(
-            "my-branch", "", self.ONTOLOGY_RID
+            "my-branch", "", self.ONTOLOGY_RID, None
         )
 
     @patch("pltr.commands.global_branch.GlobalBranchService")
@@ -169,7 +169,7 @@ class TestGlobalBranchCreateCommand:
 
         assert result.exit_code == 0
         mock_service.create_branch.assert_called_once_with(
-            "my-branch", "", self.ONTOLOGY_RID
+            "my-branch", "", self.ONTOLOGY_RID, None
         )
 
     @patch("pltr.commands.global_branch.GlobalBranchService")
@@ -207,6 +207,65 @@ class TestGlobalBranchCreateCommand:
         assert envelope["meta"]["mode"] == "applied"
         assert envelope["meta"]["branch_rid"] == BRANCH_RID
         assert envelope["meta"]["write_verified"] is True
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_create_add_resource_plan(self, mock_service_class):
+        """Test repeatable --add-resource reaches the plan as a list."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_branch.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-branch",
+                "create",
+                "my-branch",
+                "--ontology-rid",
+                self.ONTOLOGY_RID,
+                "--add-resource",
+                "ri.foundry.main.dataset.aaa",
+                "--add-resource",
+                "ri.foundry.main.dataset.bbb",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.plan_create_branch.assert_called_once_with(
+            "my-branch",
+            "",
+            self.ONTOLOGY_RID,
+            ["ri.foundry.main.dataset.aaa", "ri.foundry.main.dataset.bbb"],
+        )
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_create_add_resource_apply(self, mock_service_class):
+        """Test --apply --add-resource reaches the create as a list."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.create_branch.return_value = {
+            "branchRid": BRANCH_RID,
+            "branchRecord": {"branchRid": BRANCH_RID},
+        }
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-branch",
+                "create",
+                "my-branch",
+                "--ontology-rid",
+                self.ONTOLOGY_RID,
+                "--add-resource",
+                "ri.foundry.main.dataset.aaa",
+                "--apply",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.create_branch.assert_called_once_with(
+            "my-branch", "", self.ONTOLOGY_RID, ["ri.foundry.main.dataset.aaa"]
+        )
 
     @patch("pltr.commands.global_branch.GlobalBranchService")
     def test_create_apply_error(self, mock_service_class):

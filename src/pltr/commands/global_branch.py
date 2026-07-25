@@ -3,7 +3,7 @@ Global Branch commands (read-only loads; plan-first writes).
 """
 
 import typer
-from typing import Optional
+from typing import List, Optional
 from rich.console import Console
 
 from ..services.global_branching import (
@@ -99,6 +99,13 @@ def create_branch(
         autocompletion=complete_rid,
     ),
     description: str = typer.Option("", "--description", help="Branch description"),
+    add_resource: Optional[List[str]] = typer.Option(
+        None,
+        "--add-resource",
+        help="Resource RID to add to the branch at create (repeatable; "
+        "entries are plain ResourceRid strings; default: none)",
+        autocompletion=complete_rid,
+    ),
     apply: bool = typer.Option(
         False,
         "--apply",
@@ -128,6 +135,12 @@ def create_branch(
     ontologyRid, resourcesToAdd, compassNamespaceRid}`` and returns the new
     branch RID (``ri.branch..branch.<uuid>`` — double dot).
 
+    ``--add-resource`` entries are sent as plain ResourceRid strings in
+    ``resourcesToAdd`` (server-evidenced); the server rejects
+    resources it cannot branch with a typed
+    ``Branch:ResourcesUnableToBranchError``. The default empty array is the
+    fully contract-verified path.
+
     Without ``--apply`` the command prints the dry-run plan and issues no
     network request.
     """
@@ -135,7 +148,9 @@ def create_branch(
         service = GlobalBranchService(profile=profile)
 
         if not apply:
-            plan = service.plan_create_branch(display_name, description, ontology_rid)
+            plan = service.plan_create_branch(
+                display_name, description, ontology_rid, add_resource
+            )
             if agent_mode_enabled() or format == "agent":
                 buffer_agent_payload(
                     plan,
@@ -152,7 +167,9 @@ def create_branch(
         with SpinnerProgressTracker().track_spinner(
             f"Creating global branch {display_name}..."
         ):
-            result = service.create_branch(display_name, description, ontology_rid)
+            result = service.create_branch(
+                display_name, description, ontology_rid, add_resource
+            )
 
         if agent_mode_enabled() or format == "agent":
             buffer_agent_payload(

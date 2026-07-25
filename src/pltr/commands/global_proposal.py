@@ -99,6 +99,13 @@ def create_proposal(
         autocompletion=complete_rid,
     ),
     description: str = typer.Option("", "--description", help="Proposal description"),
+    merge_to: str = typer.Option(
+        "main",
+        "--merge-to",
+        help="Proposal merge target: 'main' or a global branch RID "
+        "(ri.branch..branch.<uuid>)",
+        autocompletion=complete_rid,
+    ),
     apply: bool = typer.Option(
         False,
         "--apply",
@@ -125,7 +132,12 @@ def create_proposal(
     against a live deployment on a live Foundry deployment
     (``the captured contract``). The create sends
     ``{branchRid, displayName, description, mergeTo}`` where ``mergeTo`` is
-    the Conjure union ``{"main": {}, "type": "main"}``, and returns the new
+    the ``ProposalMergeTo`` Conjure union with two arms (generated
+    ``@palantir/branch-service-api`` evidence): ``--merge-to main`` sends
+    ``{"main": {}, "type": "main"}`` (default, contract-verified); a global
+    branch RID sends ``{"branchRid": <rid>, "type": "branchRid"}`` (encoding
+    accepted by the server, which validates the target semantically and
+    answers ``Branch:InvalidMergeTo`` when invalid). Returns the new
     proposal RID (``ri.branch..proposal.<uuid>`` — double dot).
 
     Without ``--apply`` the command prints the dry-run plan and issues no
@@ -135,7 +147,9 @@ def create_proposal(
         service = GlobalProposalService(profile=profile)
 
         if not apply:
-            plan = service.plan_create_proposal(branch_rid, display_name, description)
+            plan = service.plan_create_proposal(
+                branch_rid, display_name, description, merge_to=merge_to
+            )
             if agent_mode_enabled() or format == "agent":
                 buffer_agent_payload(
                     plan,
@@ -153,7 +167,9 @@ def create_proposal(
         with SpinnerProgressTracker().track_spinner(
             f"Creating global proposal {display_name}..."
         ):
-            result = service.create_proposal(branch_rid, display_name, description)
+            result = service.create_proposal(
+                branch_rid, display_name, description, merge_to=merge_to
+            )
 
         if agent_mode_enabled() or format == "agent":
             buffer_agent_payload(
