@@ -1,5 +1,6 @@
 """Command alias management commands."""
 
+from ..utils.agent_output import require_confirmation
 import json
 from typing import Optional
 

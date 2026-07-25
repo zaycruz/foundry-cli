@@ -3,6 +3,7 @@ DataHealth management commands for Foundry.
 Provides commands for managing data quality checks and reports.
 """
 
+from ..utils.agent_output import require_confirmation
 import typer
 import json
 from typing import Optional

@@ -13,6 +13,7 @@ from ..services.proposal import (
     normalize_proposal_error,
     parse_proposal_type,
 )
+from ..utils.agent_output import require_confirmation, resolve_output_format
 from ..utils.completion import complete_output_format, complete_profile
 from ..utils.formatting import OutputFormatter
 

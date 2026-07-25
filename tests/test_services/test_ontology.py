@@ -2,6 +2,8 @@
 Tests for ontology services.
 """
 
+import uuid
+
 import pytest
 import requests
 from unittest.mock import Mock, patch
@@ -316,38 +318,47 @@ def test_create_object_type_with_description(mock_object_type_service):
     assert mock_req.call_args.kwargs["json_data"]["description"] == "Example entity"
 
 
-def test_upsert_object_type_uses_internal_ontology_metadata_api(
-    mock_object_type_service,
-):
-    """Object-type upsert discovers, validates, then applies modifyOntology."""
+def test_upsert_object_type_dry_run_is_the_default(mock_object_type_service):
+    """Without apply, upsert discovers, validates, and stops before modify."""
     service, _ = mock_object_type_service
     service.profile = "test-profile"
 
     mock_client = Mock()
     mock_client.conjure.side_effect = [
-        (
-            200,
-            {
-                "type": "error",
-                "error": {
-                    "errors": [
-                        {
-                            "errorData": {
-                                "errorName": "OntologyMetadata:InvalidObjectTypeId",
-                                "errorMessage": "invalid object type id",
-                                "safeArgs": [
-                                    {
-                                        "name": "regex",
-                                        "value": r"^ns0abcde\.([a-z][a-z0-9\-]*)",
-                                    }
-                                ],
-                            }
-                        }
-                    ]
-                },
-            },
-            '{"type":"error"}',
-        ),
+        _namespace_probe_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["validation"] == {"status": "success", "errors": []}
+    assert result["objectTypeId"] == "ns0abcde.example-object"
+    assert "rid" not in result
+    # Probe + dry-run only; the real modify endpoint is never called.
+    assert mock_client.conjure.call_count == 2
+    for call in mock_client.conjure.call_args_list:
+        assert "/modify/dry-run" in call.args[1]
+
+
+def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
+    """Applied upserts modify and then read the object type back via SDK."""
+    service, mock_object_type_class = mock_object_type_service
+    service.profile = "test-profile"
+
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
         (200, {"type": "success", "success": {}}, '{"type":"success"}'),
         (
             200,
@@ -373,13 +384,20 @@ def test_upsert_object_type_uses_internal_ontology_metadata_api(
             primary_key="id",
             backing_dataset="ri.foundry.main.dataset.example",
             description="Example entity",
+            apply=True,
         )
 
+    assert result["mode"] == "applied"
     assert result["apiName"] == "ExampleObject"
     assert result["objectTypeId"] == "ns0abcde.example-object"
     assert result["rid"] == "ri.ontology.main.object-type.example-object"
     assert result["ontologyRid"] == "ri.ontology.main.ontology.test"
+    assert result["verification"]["status"] == "verified"
     assert mock_client.conjure.call_count == 3
+    # SDK read-back verification hit the mocked ObjectType.get.
+    mock_object_type_class.get.assert_called_once_with(
+        "ri.ontology.main.ontology.test", "ExampleObject"
+    )
 
     probe_call, dry_run_call, modify_call = mock_client.conjure.call_args_list
     expected_dry_run_path = (
@@ -428,6 +446,43 @@ def test_upsert_object_type_uses_internal_ontology_metadata_api(
     assert modify_call.kwargs["json_body"] == modification_request
 
 
+def test_upsert_object_type_apply_reports_unverified_read_back(
+    mock_object_type_service,
+):
+    """A failed read-back is reported honestly, not hidden."""
+    service, mock_object_type_class = mock_object_type_service
+    service.profile = "test-profile"
+    mock_object_type_class.get.side_effect = RuntimeError("not found")
+
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (
+            200,
+            {"createdObjectTypes": {"ns0abcde.example-object": "ri.x"}},
+            "{}",
+        ),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["verification"]["status"] == "not-verified"
+    assert "read-back" in result["verification"]["detail"]
+
+
 def _namespace_probe_response() -> tuple[int, dict, str]:
     return (
         200,
@@ -474,10 +529,39 @@ def _validation_error_response(error_name: str) -> tuple[int, dict, str]:
     )
 
 
-def test_upsert_object_type_reports_existing_type_without_modifying(
-    mock_object_type_service,
-):
-    """Existing creates stop after validation and do not delete or recreate."""
+def test_upsert_object_type_dry_run_reports_existing_type(mock_object_type_service):
+    """A dry-run plan carries the explicit no-update-yet validation error."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesAlreadyExistError"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["validation"]["status"] == "error"
+    assert any(
+        "object type already exists; update path not yet implemented" in error
+        for error in result["validation"]["errors"]
+    )
+    assert mock_client.conjure.call_count == 2
+
+
+def test_upsert_object_type_apply_raises_on_existing_type(mock_object_type_service):
+    """With apply, existing creates stop at validation and never modify."""
     service, _ = mock_object_type_service
     service.profile = "test-profile"
     mock_client = Mock()
@@ -502,6 +586,7 @@ def test_upsert_object_type_reports_existing_type_without_modifying(
             display_name="Example Object",
             primary_key="id",
             backing_dataset="ri.foundry.main.dataset.example",
+            apply=True,
         )
 
     assert mock_client.conjure.call_count == 2
@@ -535,9 +620,416 @@ def test_upsert_object_type_surfaces_missing_dataset_schema(
             display_name="Example Object",
             primary_key="id",
             backing_dataset="ri.foundry.main.dataset.example",
+            apply=True,
         )
 
     assert mock_client.conjure.call_count == 2
+
+
+# Object type delete tests
+def test_delete_object_type_rejects_api_name(mock_object_type_service):
+    """Deletes require the internal ObjectTypeId, not an API name."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+
+    with pytest.raises(RuntimeError, match="internal ObjectTypeId"):
+        service.delete_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type_id="ExampleObject",
+        )
+
+
+def test_delete_object_type_dry_run_is_the_default(mock_object_type_service):
+    """Without apply, a delete validates and returns the plan only."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.delete_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type_id="ns0abcde.example-object",
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["validation"] == {"status": "success", "errors": []}
+    assert mock_client.conjure.call_count == 1
+    body = mock_client.conjure.call_args.kwargs["json_body"]
+    assert body == {
+        "modificationRequest": {
+            "objectTypes": {
+                "ns0abcde.example-object": {"type": "delete", "delete": {}}
+            }
+        }
+    }
+    assert "/modify/dry-run" in mock_client.conjure.call_args.args[1]
+
+
+def test_delete_object_type_apply_verifies_gone(mock_object_type_service):
+    """An applied delete is verified by a post-delete dry-run NotFound."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+        _validation_error_response("ObjectTypesNotFound"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.delete_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type_id="ns0abcde.example-object",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["verification"]["status"] == "verified"
+    calls = mock_client.conjure.call_args_list
+    assert "/modify/dry-run" in calls[0].args[1]
+    assert calls[1].args[1].endswith(
+        "/modify?ontologyRid=ri.ontology.main.ontology.test"
+    )
+    assert calls[1].kwargs["json_body"] == {
+        "objectTypes": {"ns0abcde.example-object": {"type": "delete", "delete": {}}}
+    }
+    assert "/modify/dry-run" in calls[2].args[1]
+
+
+def test_delete_object_type_apply_reports_still_present(mock_object_type_service):
+    """A delete whose dry-run still validates is reported as not verified."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.delete_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type_id="ns0abcde.example-object",
+            apply=True,
+        )
+
+    assert result["verification"]["status"] == "not-verified"
+    assert "may not be deleted" in result["verification"]["detail"]
+
+
+# Link type upsert/delete tests
+def test_upsert_link_type_builds_verified_one_to_many_shape(
+    mock_object_type_service,
+):
+    """Link upsert dry-run sends the contract oneToMany create variant."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_link_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="exampleObjectOwner",
+            one_side_object_type_id="ns0abcde.tm-owner",
+            many_side_object_type_id="ns0abcde.example-object",
+            display_name="Example owner",
+            one_side_primary_key="owner_id",
+            many_side_property="owner_ref",
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["linkTypeId"] == "ns0abcde.example-object-owner"
+    modification_request = mock_client.conjure.call_args_list[1].kwargs[
+        "json_body"
+    ]["modificationRequest"]
+    create = modification_request["linkTypes"]["ns0abcde.example-object-owner"][
+        "create"
+    ]
+    link_type = create["linkType"]
+    assert link_type["linkTypeId"] == "ns0abcde.example-object-owner"
+    one_to_many = link_type["definition"]["oneToMany"]
+    assert one_to_many["cardinalityHint"] == "ONE_TO_MANY"
+    assert one_to_many["objectTypeIdOneSide"] == "ns0abcde.tm-owner"
+    assert one_to_many["objectTypeIdManySide"] == "ns0abcde.example-object"
+    assert one_to_many["oneSidePrimaryKeyToManySidePropertyMapping"] == {
+        "owner_id": "owner_ref"
+    }
+    assert one_to_many["oneToManyLinkMetadata"]["apiName"] == "exampleObjectOwner"
+    assert (
+        one_to_many["manyToOneLinkMetadata"]["apiName"]
+        == "exampleObjectOwnerReverse"
+    )
+    assert create["markings"] == []
+
+
+def test_upsert_link_type_apply_verifies_via_dry_run(mock_object_type_service):
+    """An applied link create is verified by an already-exists re-dry-run."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (
+            200,
+            {"createdLinkTypes": {"ns0abcde.tm-link": "ri.ontology.main.link-type.x"}},
+            "{}",
+        ),
+        _validation_error_response("LinkTypesAlreadyExistError"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_link_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="tmLink",
+            one_side_object_type_id="ns0abcde.tm-owner",
+            many_side_object_type_id="ns0abcde.example-object",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["rid"] == "ri.ontology.main.link-type.x"
+    assert result["verification"]["status"] == "verified"
+    assert mock_client.conjure.call_count == 4
+
+
+def test_delete_link_type_apply_verifies_gone(mock_object_type_service):
+    """Link delete uses the linkTypes delete variant and NotFound read-back."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+        _validation_error_response("LinkTypesNotFound"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.delete_link_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            link_type_id="ns0abcde.tm-link",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["verification"]["status"] == "verified"
+    modify_call = mock_client.conjure.call_args_list[1]
+    assert modify_call.kwargs["json_body"] == {
+        "linkTypes": {"ns0abcde.tm-link": {"type": "delete", "delete": {}}}
+    }
+
+
+def test_delete_link_type_rejects_api_name(mock_object_type_service):
+    """Link deletes require the internal LinkTypeId, not an API name."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+
+    with pytest.raises(RuntimeError, match="internal LinkTypeId"):
+        service.delete_link_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            link_type_id="tmLink",
+        )
+
+
+# Action type upsert/delete tests
+def _action_type_definition() -> dict:
+    return {
+        "apiName": "pltr-test-action",
+        "displayMetadata": {"displayName": "PLTR Test"},
+        "logic": {
+            "rules": [
+                {
+                    "type": "deleteObjectRule",
+                    "deleteObjectRule": {"objectToDelete": "Contact"},
+                }
+            ]
+        },
+        "parameters": {},
+        "validations": {
+            "always": {
+                "condition": {"type": "true", "true": {}},
+                "displayMetadata": {"failureMessage": "x", "typeClasses": []},
+            }
+        },
+        "validationsOrdering": ["always"],
+    }
+
+
+def test_action_type_create_normalization_rewrites_validation_keys():
+    """Non-UUID validations keys are rewritten and ordering kept in sync."""
+    create = ActionService._normalize_action_type_create(
+        _action_type_definition()
+    )
+
+    assert create["apiName"] == "pltr-test-action"
+    (new_key,) = create["validations"].keys()
+    assert new_key != "always"
+    uuid.UUID(new_key)  # raises if not a UUID
+    assert create["validationsOrdering"] == [new_key]
+
+
+def test_action_type_create_normalization_keeps_uuid_keys():
+    """Already-UUID validations keys pass through unchanged."""
+    definition = _action_type_definition()
+    uuid_key = "00000000-0000-0000-0000-0000000000d1"
+    definition["validations"] = {uuid_key: definition["validations"]["always"]}
+    definition["validationsOrdering"] = [uuid_key]
+
+    create = ActionService._normalize_action_type_create(definition)
+
+    assert list(create["validations"]) == [uuid_key]
+    assert create["validationsOrdering"] == [uuid_key]
+
+
+@pytest.mark.parametrize(
+    "missing_key", ["apiName", "logic", "validations"]
+)
+def test_action_type_create_normalization_requires_fields(missing_key):
+    """Required ActionTypeCreate fields are validated client-side."""
+    definition = _action_type_definition()
+    del definition[missing_key]
+
+    with pytest.raises(RuntimeError, match=missing_key):
+        ActionService._normalize_action_type_create(definition)
+
+
+def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
+    """Action upsert validates with UUID keys and stops before modify."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            definition=_action_type_definition(),
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["apiName"] == "pltr-test-action"
+    modification_request = mock_client.conjure.call_args.kwargs["json_body"][
+        "modificationRequest"
+    ]
+    (request_key,) = modification_request["actionTypesToCreate"].keys()
+    uuid.UUID(request_key)  # keys must be UUID strings on the wire
+    assert mock_client.conjure.call_count == 1
+
+
+def test_upsert_action_type_apply_verifies_read_back(mock_action_service):
+    """An applied action create reads the action type back via the SDK."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {"createdActionTypeRids": {}}, "{}"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService, "get_action_type", return_value={"rid": "ri.x"}
+        ) as mock_get,
+    ):
+        result = service.upsert_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            definition=_action_type_definition(),
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["verification"]["status"] == "verified"
+    mock_get.assert_called_once_with(
+        "ri.ontology.main.ontology.test", "pltr-test-action"
+    )
+
+
+def test_delete_action_type_resolves_rid_and_verifies_gone(mock_action_service):
+    """Action delete resolves the RID, modifies, and verifies via NotFound."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    rid = "ri.actions.main.action-type.abc"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+        _validation_error_response("ActionTypesNotFound"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService, "get_action_type", return_value={"rid": rid}
+        ),
+    ):
+        result = service.delete_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="pltr-test-action",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["rid"] == rid
+    assert result["verification"]["status"] == "verified"
+    modify_call = mock_client.conjure.call_args_list[1]
+    assert modify_call.kwargs["json_body"] == {"actionTypesToDelete": [rid]}
+
+
+def test_delete_action_type_missing_type_raises(mock_action_service):
+    """A missing action type fails before any modification is attempted."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+
+    with (
+        patch.object(
+            ActionService,
+            "get_action_type",
+            side_effect=RuntimeError("Failed to get action type"),
+        ),
+        pytest.raises(RuntimeError, match="Failed to get action type"),
+    ):
+        service.delete_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="does-not-exist",
+        )
 
 
 def test_create_link_type(mock_object_type_service):
@@ -1136,3 +1628,146 @@ def test_get_action_type_error(mock_action_type_full_metadata_service):
 
     with pytest.raises(RuntimeError, match="Failed to get action type"):
         service.get_action_type("ri.ontology.main.ontology.test", "modify-example")
+
+
+# Required publication order hints
+def test_upsert_object_type_schema_error_includes_order_hint(
+    mock_object_type_service,
+):
+    """A missing backing dataset schema hints at step 1 of the order."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("SchemaForObjectTypeDatasourceNotFound"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert result["validation"]["status"] == "error"
+    hint = result["validation"]["errors"][-1]
+    assert hint.startswith("hint (step 3 of the required publication order)")
+    assert "backing dataset schema" in hint
+    assert "object-type-upsert" in hint  # full order text is included
+
+
+def test_upsert_object_type_unrelated_error_has_no_hint(mock_object_type_service):
+    """Errors that are not missing-dependency signals carry no hint."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("TooManyObjectTypesInOntology"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="id",
+            backing_dataset="ri.foundry.main.dataset.example",
+        )
+
+    assert result["validation"]["status"] == "error"
+    assert not any(
+        error.startswith("hint (") for error in result["validation"]["errors"]
+    )
+
+
+def test_upsert_link_type_missing_object_type_includes_order_hint(
+    mock_object_type_service,
+):
+    """A missing side object type hints that step 3 must run first."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        _validation_error_response("ObjectTypesNotFound"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_link_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="tmLink",
+            one_side_object_type_id="ns0abcde.missing-one",
+            many_side_object_type_id="ns0abcde.missing-many",
+        )
+
+    assert result["validation"]["status"] == "error"
+    hint = result["validation"]["errors"][-1]
+    assert hint.startswith("hint (step 4 of the required publication order)")
+    assert "object-type-upsert (step 3)" in hint
+
+
+def test_upsert_action_type_missing_object_type_includes_order_hint(
+    mock_action_service,
+):
+    """A missing referenced object type hints at steps 3 and 4."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _validation_error_response("ObjectTypesNotFound"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            definition=_action_type_definition(),
+        )
+
+    assert result["validation"]["status"] == "error"
+    hint = result["validation"]["errors"][-1]
+    assert hint.startswith("hint (step 5 of the required publication order)")
+    assert "object-type-upsert (step 3)" in hint
+    assert "link-type-upsert (step 4)" in hint
+
+
+def test_delete_object_type_dependent_link_types_include_reverse_order_hint(
+    mock_object_type_service,
+):
+    """Dependent link types on delete hint at the reverse publication order."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _validation_error_response("ObjectTypeHasDependentLinkTypes"),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.delete_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type_id="ns0abcde.example-object",
+        )
+
+    assert result["validation"]["status"] == "error"
+    hint = result["validation"]["errors"][-1]
+    assert hint.startswith("hint (step 3 of the required publication order)")
+    assert "reverse publication order" in hint
+    assert "link-type-delete (step 4)" in hint

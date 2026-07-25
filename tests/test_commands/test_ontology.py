@@ -220,13 +220,14 @@ def _object_type_upsert_args(*extra: str) -> list[str]:
 
 
 def test_upsert_object_type_command_success(mock_services):
-    """Command returns formatted upsert result on success."""
+    """Command returns formatted upsert dry-run plan on success."""
     mock_instance = Mock()
     mock_instance.upsert_object_type.return_value = {
+        "mode": "dry-run",
         "apiName": "ExampleObject",
         "objectTypeId": "ns0abcde.example-object",
-        "rid": "ri.ontology.main.object-type.example-object",
         "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {"status": "success", "errors": []},
     }
     mock_services["object_type"].return_value = mock_instance
 
@@ -240,22 +241,51 @@ def test_upsert_object_type_command_success(mock_services):
         primary_key="id",
         backing_dataset="ri.foundry.main.dataset.example",
         description=None,
+        apply=False,
     )
+
+
+def test_upsert_object_type_command_apply_flag(mock_services):
+    """--apply is forwarded to the service."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.return_value = {
+        "mode": "applied",
+        "apiName": "ExampleObject",
+        "objectTypeId": "ns0abcde.example-object",
+        "rid": "ri.ontology.main.object-type.example-object",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {"status": "success", "errors": []},
+        "verification": {"status": "verified", "detail": "read back"},
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(app, _object_type_upsert_args("--apply"))
+
+    assert result.exit_code == 0
+    assert mock_instance.upsert_object_type.call_args.kwargs["apply"] is True
 
 
 def test_upsert_object_type_command_surfaces_existing_type(mock_services):
-    """Command preserves the service's explicit no-update-yet boundary."""
+    """A dry-run plan with a validation error exits non-zero with detail."""
     mock_instance = Mock()
-    mock_instance.upsert_object_type.side_effect = RuntimeError(
-        "object type already exists; update path not yet implemented "
-        "(OntologyMetadata:ObjectTypesAlreadyExistError)"
-    )
+    mock_instance.upsert_object_type.return_value = {
+        "mode": "dry-run",
+        "apiName": "ExampleObject",
+        "objectTypeId": "ns0abcde.example-object",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {
+            "status": "error",
+            "errors": [
+                "object type already exists; update path not yet implemented "
+                "(OntologyMetadata:ObjectTypesAlreadyExistError)"
+            ],
+        },
+    }
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(app, _object_type_upsert_args())
 
     assert result.exit_code == 1
-    assert "Failed to upsert object type" in result.output
     normalized_output = " ".join(result.output.split())
     assert "object type already exists; update path not yet implemented" in (
         normalized_output
@@ -265,11 +295,20 @@ def test_upsert_object_type_command_surfaces_existing_type(mock_services):
 def test_upsert_object_type_command_surfaces_missing_dataset_schema(mock_services):
     """Command tells the user to schema the backing dataset first."""
     mock_instance = Mock()
-    mock_instance.upsert_object_type.side_effect = RuntimeError(
-        "the backing dataset has no schema; apply a schema to the dataset "
-        "before creating the object type "
-        "(OntologyMetadata:SchemaForObjectTypeDatasourceNotFound)"
-    )
+    mock_instance.upsert_object_type.return_value = {
+        "mode": "dry-run",
+        "apiName": "ExampleObject",
+        "objectTypeId": "ns0abcde.example-object",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {
+            "status": "error",
+            "errors": [
+                "the backing dataset has no schema; apply a schema to the "
+                "dataset before creating the object type "
+                "(OntologyMetadata:SchemaForObjectTypeDatasourceNotFound)"
+            ],
+        },
+    }
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(app, _object_type_upsert_args())
@@ -279,8 +318,20 @@ def test_upsert_object_type_command_surfaces_missing_dataset_schema(mock_service
     assert "backing dataset has no schema; apply a schema" in normalized_output
 
 
+def test_upsert_object_type_command_apply_error(mock_services):
+    """Service-side apply failures surface as command errors."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.side_effect = RuntimeError("boom")
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(app, _object_type_upsert_args("--apply"))
+
+    assert result.exit_code == 1
+    assert "Failed to upsert object type" in result.output
+
+
 def test_object_type_upsert_capability_uses_internal_ontology_metadata_api():
-    """The live catalog maps upsert to the internal ontology-metadata API."""
+    """The live catalog maps upsert to the implemented modifyOntology command."""
     from pltr.capabilities import all_capabilities
 
     all_capabilities.cache_clear()
@@ -291,12 +342,9 @@ def test_object_type_upsert_capability_uses_internal_ontology_metadata_api():
     )
 
     assert capability.command == "ontology object-type-upsert"
-    assert capability.status == "blocked"
-    assert capability.blocked_reason is not None
-    assert "internal ontology-metadata API" in capability.blocked_reason
-    assert "POST /ontology-metadata/api/ontology/v2/modify" in (
-        capability.blocked_reason
-    )
+    assert capability.status == "implemented"
+    assert capability.api_evidence is not None
+    assert "/ontology-metadata/api/ontology/v2/modify" in capability.api_evidence
 
 
 def test_create_link_type_command(mock_services):
@@ -937,3 +985,343 @@ def test_get_action_type_command_not_found(mock_services):
 
     assert result.exit_code == 1
     assert "Failed to get action type" in result.stdout
+
+
+# Delete/upsert authoring commands (modifyOntology-backed)
+def _dry_run_plan(operation: str) -> dict:
+    return {
+        "operation": operation,
+        "mode": "dry-run",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {"status": "success", "errors": []},
+    }
+
+
+def _applied_result(operation: str) -> dict:
+    return {
+        "operation": operation,
+        "mode": "applied",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {"status": "success", "errors": []},
+        "verification": {"status": "verified", "detail": "verified"},
+    }
+
+
+def test_object_type_delete_dry_run_default(mock_services):
+    """object-type-delete previews the validated plan without --apply."""
+    mock_instance = Mock()
+    mock_instance.delete_object_type.return_value = _dry_run_plan(
+        "object-type-delete"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-delete",
+            "ri.ontology.main.ontology.test",
+            "ns0abcde.example-object",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.delete_object_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        object_type_id="ns0abcde.example-object",
+        apply=False,
+    )
+
+
+def test_object_type_delete_apply_requires_confirmation(mock_services):
+    """--apply --yes previews, confirms, and then deletes."""
+    mock_instance = Mock()
+    mock_instance.delete_object_type.side_effect = [
+        _dry_run_plan("object-type-delete"),
+        _applied_result("object-type-delete"),
+    ]
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-delete",
+            "ri.ontology.main.ontology.test",
+            "ns0abcde.example-object",
+            "--apply",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert mock_instance.delete_object_type.call_count == 2
+    assert mock_instance.delete_object_type.call_args_list[0].kwargs[
+        "apply"
+    ] is False
+    assert mock_instance.delete_object_type.call_args_list[1].kwargs[
+        "apply"
+    ] is True
+
+
+def test_object_type_delete_apply_cancelled_without_confirmation(mock_services):
+    """Declining the confirmation stops before the real deletion."""
+    mock_instance = Mock()
+    mock_instance.delete_object_type.return_value = _dry_run_plan(
+        "object-type-delete"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-delete",
+            "ri.ontology.main.ontology.test",
+            "ns0abcde.example-object",
+            "--apply",
+        ],
+        input="n\n",
+    )
+
+    assert result.exit_code == 0
+    # Only the dry-run preview call happened.
+    mock_instance.delete_object_type.assert_called_once()
+
+
+def test_object_type_delete_validation_error_exits_nonzero(mock_services):
+    """A failed delete validation is reported and exits 1."""
+    mock_instance = Mock()
+    plan = _dry_run_plan("object-type-delete")
+    plan["validation"] = {
+        "status": "error",
+        "errors": ["OntologyMetadata:ObjectTypesNotFound"],
+    }
+    mock_instance.delete_object_type.return_value = plan
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-delete",
+            "ri.ontology.main.ontology.test",
+            "ns0abcde.missing",
+            "--apply",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 1
+    # The real deletion was never attempted.
+    mock_instance.delete_object_type.assert_called_once()
+
+
+def test_link_type_upsert_command(mock_services):
+    """link-type-upsert forwards the contract options to the service."""
+    mock_instance = Mock()
+    mock_instance.upsert_link_type.return_value = _dry_run_plan(
+        "link-type-upsert"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "link-type-upsert",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "exampleObjectOwner",
+            "--from-object-type-id",
+            "ns0abcde.tm-owner",
+            "--to-object-type-id",
+            "ns0abcde.example-object",
+            "--display-name",
+            "Example owner",
+            "--one-side-primary-key",
+            "owner_id",
+            "--many-side-property",
+            "owner_ref",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.upsert_link_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        api_name="exampleObjectOwner",
+        one_side_object_type_id="ns0abcde.tm-owner",
+        many_side_object_type_id="ns0abcde.example-object",
+        display_name="Example owner",
+        reverse_api_name=None,
+        one_side_primary_key="owner_id",
+        many_side_property="owner_ref",
+        description=None,
+        apply=False,
+    )
+
+
+def test_link_type_delete_dry_run_default(mock_services):
+    """link-type-delete previews the validated plan without --apply."""
+    mock_instance = Mock()
+    mock_instance.delete_link_type.return_value = _dry_run_plan(
+        "link-type-delete"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        ["link-type-delete", "ri.ontology.main.ontology.test", "ns0abcde.tm-link"],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.delete_link_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        link_type_id="ns0abcde.tm-link",
+        apply=False,
+    )
+
+
+def test_action_type_upsert_command(mock_services, tmp_path):
+    """action-type-upsert reads the JSON definition and dry-runs by default."""
+    definition_file = tmp_path / "action.json"
+    definition_file.write_text(
+        json.dumps(
+            {
+                "apiName": "pltr-test-action",
+                "logic": {"rules": []},
+                "validations": {"always": {}},
+            }
+        )
+    )
+    mock_instance = Mock()
+    mock_instance.upsert_action_type.return_value = _dry_run_plan(
+        "action-type-upsert"
+    )
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-upsert",
+            "ri.ontology.main.ontology.test",
+            "--definition",
+            str(definition_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_instance.upsert_action_type.call_args.kwargs
+    assert call_kwargs["ontology_rid"] == "ri.ontology.main.ontology.test"
+    assert call_kwargs["definition"]["apiName"] == "pltr-test-action"
+    assert call_kwargs["apply"] is False
+
+
+def test_action_type_upsert_invalid_json(mock_services, tmp_path):
+    """A malformed definition file fails before any service call."""
+    definition_file = tmp_path / "action.json"
+    definition_file.write_text("{not json")
+    mock_services["action"].return_value = Mock()
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-upsert",
+            "ri.ontology.main.ontology.test",
+            "--definition",
+            str(definition_file),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.output
+
+
+def test_action_type_delete_dry_run_default(mock_services):
+    """action-type-delete previews the validated plan without --apply."""
+    mock_instance = Mock()
+    mock_instance.delete_action_type.return_value = _dry_run_plan(
+        "action-type-delete"
+    )
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        ["action-type-delete", "ri.ontology.main.ontology.test", "pltr-test"],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.delete_action_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        action_type="pltr-test",
+        apply=False,
+    )
+
+
+def test_action_type_delete_apply_with_yes(mock_services):
+    """action-type-delete --apply --yes previews then deletes."""
+    mock_instance = Mock()
+    mock_instance.delete_action_type.side_effect = [
+        _dry_run_plan("action-type-delete"),
+        _applied_result("action-type-delete"),
+    ]
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-delete",
+            "ri.ontology.main.ontology.test",
+            "pltr-test",
+            "--apply",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert mock_instance.delete_action_type.call_count == 2
+
+
+# Required publication order
+def test_link_type_upsert_command_surfaces_order_hint(mock_services):
+    """A missing-dependency plan prints the required-order hint."""
+    mock_instance = Mock()
+    plan = _dry_run_plan("link-type-upsert")
+    plan["validation"] = {
+        "status": "error",
+        "errors": [
+            "OntologyMetadata:ObjectTypesNotFound: not found",
+            "hint (step 4 of the required publication order): one of the "
+            "referenced object types does not exist yet; run "
+            "object-type-upsert (step 3) before link-type-upsert. "
+            "Full order: 1) modify backing dataset schemas",
+        ],
+    }
+    mock_instance.upsert_link_type.return_value = plan
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "link-type-upsert",
+            "ri.ontology.main.ontology.test",
+            "--api-name",
+            "tmLink",
+            "--from-object-type-id",
+            "ns0abcde.missing-one",
+            "--to-object-type-id",
+            "ns0abcde.missing-many",
+        ],
+    )
+
+    assert result.exit_code == 1
+    normalized_output = " ".join(result.output.split())
+    assert "step 4 of the required publication order" in normalized_output
+
+
+def test_upsert_help_texts_reference_publication_order():
+    """Each upsert command's help names its step in the required order."""
+    for command, step in [
+        ("object-type-upsert", "step 3"),
+        ("link-type-upsert", "step 4"),
+        ("action-type-upsert", "step 5"),
+    ]:
+        result = runner.invoke(app, [command, "--help"])
+        assert result.exit_code == 0
+        assert "publication" in result.output
+        assert step in result.output

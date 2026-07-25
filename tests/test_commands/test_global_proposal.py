@@ -104,3 +104,126 @@ class TestGlobalProposalGetCommand:
 
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
+
+
+BRANCH_RID = "ri.global-branch.main.branch.00000000-0000-0000-0000-000000000002"
+
+
+class TestGlobalProposalCreateCommand:
+    """Test cases for `global-proposal create` (plan-first)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_defaults_to_plan(self, mock_service_class):
+        """Test that create without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_proposal.return_value = {
+            "mode": "plan",
+            "request": {
+                "verb": "POST",
+                "path": "/branch-service/api/branch/proposal/create",
+            },
+        }
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-proposal", "create", "my-proposal", "--branch-rid", BRANCH_RID],
+        )
+
+        assert result.exit_code == 0
+        mock_service.plan_create_proposal.assert_called_once_with(
+            BRANCH_RID, "my-proposal", ""
+        )
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_create_apply_is_blocked(self, mock_service_class):
+        """Test that --apply refuses while the contract is unverified."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_proposal.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-proposal", "create", "my-proposal",
+                "--branch-rid", BRANCH_RID, "--apply",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "UNVERIFIED" in result.stdout
+
+
+class TestGlobalProposalCloseCommand:
+    """Test cases for `global-proposal close` (plan-first, destructive)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_close_defaults_to_plan(self, mock_service_class):
+        """Test that close without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+
+        result = self.runner.invoke(
+            root_app, ["global-proposal", "close", PROPOSAL_RID]
+        )
+
+        assert result.exit_code == 0
+        mock_service.close_proposal.assert_not_called()
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_close_apply_requires_yes(self, mock_service_class):
+        """Test that --apply without --yes asks, and 'n' cancels."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-proposal", "close", PROPOSAL_RID, "--apply"],
+            input="n\n",
+        )
+
+        assert result.exit_code == 1
+        mock_service.close_proposal.assert_not_called()
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_close_apply_yes_sends(self, mock_service_class):
+        """Test that --apply --yes issues the close."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_proposal.return_value = {
+            "rid": PROPOSAL_RID,
+            "acknowledged": True,
+        }
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-proposal", "close", PROPOSAL_RID, "--apply", "--yes"],
+        )
+
+        assert result.exit_code == 0
+        mock_service.close_proposal.assert_called_once_with(PROPOSAL_RID)
+
+    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    def test_close_not_found(self, mock_service_class):
+        """Test close when no proposal exists for the RID."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_proposal.side_effect = GlobalBranchNotFoundError(
+            f"No proposal found for RID {PROPOSAL_RID}"
+        )
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-proposal", "close", PROPOSAL_RID, "--apply", "--yes"],
+        )
+
+        assert result.exit_code == 1
+        assert "No proposal found" in result.stdout

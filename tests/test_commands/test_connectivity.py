@@ -847,3 +847,181 @@ class TestEgressCommands:
 
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
+
+
+class TestWebhookCreateCommand:
+    """Test cases for `connectivity webhook create` (plan-first)."""
+
+    SOURCE_RID = "ri.magritte..source.00000000-0000-0000-0000-000000000021"
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_defaults_to_plan(self, mock_service_class):
+        """Test that create without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.build_create_webhook_body.return_value = {"name": "wh"}
+
+        result = self.runner.invoke(
+            app, ["webhook", "create", "wh", "--source-rid", self.SOURCE_RID]
+        )
+
+        assert result.exit_code == 0
+        mock_service.build_create_webhook_body.assert_called_once_with(
+            "wh", "wh", "", self.SOURCE_RID, None
+        )
+        mock_service.create_webhook.assert_not_called()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_apply_sends(self, mock_service_class):
+        """Test that --apply issues the verified create body."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.build_create_webhook_body.return_value = {"name": "wh"}
+        mock_service.create_webhook.return_value = {
+            "metadata": {"rid": "ri.webhooks.main.webhook.abc"}
+        }
+
+        result = self.runner.invoke(
+            app,
+            ["webhook", "create", "wh", "--source-rid", self.SOURCE_RID, "--apply"],
+        )
+
+        assert result.exit_code == 0
+        mock_service.create_webhook.assert_called_once_with(
+            "wh", "wh", "", self.SOURCE_RID, None
+        )
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_apply_permission_error(self, mock_service_class):
+        """Test that a 403 from the registry surfaces as a loud failure."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.build_create_webhook_body.return_value = {"name": "wh"}
+        mock_service.create_webhook.side_effect = RuntimeError(
+            "Webhook registry create failed with HTTP 403 "
+            "(Compass:InsufficientPermissions)"
+        )
+
+        result = self.runner.invoke(
+            app,
+            ["webhook", "create", "wh", "--source-rid", self.SOURCE_RID, "--apply"],
+        )
+
+        assert result.exit_code == 1
+        assert "Error creating webhook" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_spec_file_override(self, mock_service_class, tmp_path):
+        """Test that --spec-file replaces the default spec."""
+        spec_path = tmp_path / "spec.json"
+        spec_path.write_text('{"config": {"type": "custom"}, "inputs": []}')
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.build_create_webhook_body.return_value = {"name": "wh"}
+
+        result = self.runner.invoke(
+            app,
+            [
+                "webhook", "create", "wh",
+                "--source-rid", self.SOURCE_RID,
+                "--spec-file", str(spec_path),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert mock_service.build_create_webhook_body.call_args[0][4] == {
+            "config": {"type": "custom"},
+            "inputs": [],
+        }
+
+
+class TestWebhookUpdateCommand:
+    """Test cases for `connectivity webhook update` (plan-first, blocked)."""
+
+    WEBHOOK_RID = "ri.webhooks.main.webhook.12345678-1234-1234-1234-123456789abc"
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_defaults_to_plan(self, mock_service_class):
+        """Test that update without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_update_webhook.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            app, ["webhook", "update", self.WEBHOOK_RID, '{"inputs": []}']
+        )
+
+        assert result.exit_code == 0
+        mock_service.plan_update_webhook.assert_called_once_with(
+            self.WEBHOOK_RID, {"inputs": []}
+        )
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_apply_is_blocked(self, mock_service_class):
+        """Test that --apply refuses while the contract is unverified."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_update_webhook.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            app,
+            ["webhook", "update", self.WEBHOOK_RID, '{"inputs": []}', "--apply"],
+        )
+
+        assert result.exit_code == 1
+        assert "UNVERIFIED" in result.stdout
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_update_requires_spec(self, mock_service_class):
+        """Test that a missing spec argument fails before any service call."""
+        result = self.runner.invoke(app, ["webhook", "update", self.WEBHOOK_RID])
+
+        assert result.exit_code == 1
+        assert "Must specify either spec or --spec-file" in result.stdout
+
+
+class TestRestSourceCreateCommand:
+    """Test cases for `connectivity rest-source create` (plan-only)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_defaults_to_plan(self, mock_service_class):
+        """Test that create without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_rest_source.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            app, ["rest-source", "create", "src", "--host", "example.invalid"]
+        )
+
+        assert result.exit_code == 0
+        mock_service.plan_create_rest_source.assert_called_once_with(
+            "src", "example.invalid", "HTTPS", 443
+        )
+
+    @patch("pltr.commands.connectivity.ConnectivityService")
+    def test_create_apply_is_blocked(self, mock_service_class):
+        """Test that --apply refuses while the contract is unverified."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_rest_source.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            app,
+            ["rest-source", "create", "src", "--host", "example.invalid", "--apply"],
+        )
+
+        assert result.exit_code == 1
+        assert "UNVERIFIED" in result.stdout

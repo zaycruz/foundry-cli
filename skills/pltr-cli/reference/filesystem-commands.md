@@ -54,6 +54,18 @@ pltr folder batch-get FOLDER_RIDS...
 pltr folder batch-get ri.compass.main.folder.abc123 ri.compass.main.folder.def456
 ```
 
+### Move Folder
+
+```bash
+pltr folder move FOLDER_RID [--parent-folder TARGET_FOLDER_RID] [--name NEW_NAME] [--confirm]
+
+# Moves a folder to a new parent, optionally renaming it in the same call
+
+# Example
+pltr folder move ri.compass.main.folder.abc123 \
+    --parent-folder ri.compass.main.folder.xyz789 --name "Archived Project"
+```
+
 ## Space Commands
 
 ### Create Space
@@ -232,6 +244,9 @@ pltr search "sales" \
 
 # Enumerate notepads from an explicit path
 pltr notepad list --path-prefix "/Finance" --page-size 100 --format json
+
+# Read one notepad's latest body and embedded resource references
+pltr notepad get NOTEPAD_RID [--format FORMAT] [--output-mode MODE]
 ```
 
 `search(title:)` is the legacy title-only operation. Path-scoped mode uses
@@ -252,6 +267,17 @@ Use `--format json` for machine-readable success output.
 
 ```bash
 pltr resource get RESOURCE_RID [--format FORMAT]
+```
+
+### Get Resource by Path
+
+```bash
+pltr resource get-by-path PATH [--format FORMAT]
+
+# PATH is the absolute Compass path (e.g. "/Finance/sales-data")
+
+# Example
+pltr resource get-by-path "/Finance/sales-data" --format json
 ```
 
 ### List Resources

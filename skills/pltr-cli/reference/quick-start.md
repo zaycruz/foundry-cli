@@ -66,6 +66,9 @@ pltr configure list
 # Set default profile
 pltr configure use production
 
+# Mark a profile as the default without switching sessions
+pltr configure set-default production
+
 # Use specific profile
 pltr verify --profile development
 ```
@@ -92,7 +95,7 @@ pltr <command> --output file.csv # Save to file
 ## Interactive Shell
 
 ```bash
-pltr shell --profile production
+pltr shell start --profile production
 
 # In shell mode:
 pltr (production)> admin user current
@@ -106,11 +109,20 @@ pltr (production)> exit
 pltr completion install           # Auto-detect shell
 pltr completion install --shell zsh
 pltr completion install --shell bash
+
+# Print the completion script without installing it (manual setup, debugging)
+pltr completion show --shell zsh
+
+# Remove installed completions
+pltr completion uninstall
 ```
 
 ## First Commands to Try
 
 ```bash
+# Sanity-check the CLI itself (no network call)
+pltr hello
+
 # Check current user
 pltr admin user current
 

@@ -3,6 +3,7 @@ Streams management commands for Foundry.
 Provides commands for managing streaming datasets and publishing records.
 """
 
+from ..utils.agent_output import require_confirmation
 import typer
 import json
 from typing import Optional

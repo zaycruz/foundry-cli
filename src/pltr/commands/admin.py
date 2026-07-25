@@ -6,6 +6,7 @@ Provides commands for user, group, role, and organization management.
 from pathlib import Path
 from typing import List, Optional
 
+from ..utils.agent_output import require_confirmation
 import typer
 from rich.console import Console
 

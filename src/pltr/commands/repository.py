@@ -1,17 +1,29 @@
 """
-Code repository commands (read-only pull-request access).
+Code repository commands (pull-request access, repository context, local
+clone, and Python-transforms repository creation planning).
 """
+
+import os
 
 import typer
 from typing import Optional
 from rich.console import Console
 
 from ..services.repository import (
+    CreateContractUnverifiedError,
     PullRequestNotFoundError,
     PullRequestShapeError,
+    RepositoryCloneError,
+    RepositoryNotFoundError,
     RepositoryService,
+    RepositoryShapeError,
 )
-from ..utils.agent_output import agent_mode_enabled, buffer_agent_payload
+from ..utils.agent_output import (
+    agent_mode_enabled,
+    buffer_agent_message,
+    buffer_agent_payload,
+    require_confirmation,
+)
 from ..utils.completion import (
     complete_rid,
     complete_profile,
@@ -140,4 +152,427 @@ def get_pull_request(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error getting pull request: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@pull_request_app.command("create")
+def create_pull_request(
+    title: str = typer.Argument(..., help="Pull request title"),
+    base_repository_rid: str = typer.Option(
+        ...,
+        "--base-repository-rid",
+        help="Repository RID the pull request targets",
+        autocompletion=complete_rid,
+    ),
+    head_commitish: str = typer.Option(
+        ...,
+        "--head-commitish",
+        help="Head branch ref to merge from (e.g. refs/heads/feature-x)",
+    ),
+    head_repository_rid: Optional[str] = typer.Option(
+        None,
+        "--head-repository-rid",
+        help="Repository RID the head branch lives in (default: same as base)",
+        autocompletion=complete_rid,
+    ),
+    base_branch: str = typer.Option(
+        "refs/heads/master",
+        "--base-branch",
+        help="Base branch ref the pull request merges into",
+    ),
+    description: Optional[str] = typer.Option(
+        None, "--description", "-d", help="Pull request description"
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real POST /stemma-pull-request/api/pulls "
+        "(default: dry-run plan only)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create a code repository pull request (dry-run plan by default).
+
+    Writes the internal stemma-pull-request API (POST /pulls) whose request
+    contract was verified on a live Foundry deployment (strict
+    strict deserialization; the captured contract). Without
+    --apply the command prints the exact intended write and changes
+    nothing; with --apply it posts that body verbatim and passes the
+    created pull request through raw.
+    """
+    try:
+        service = RepositoryService(profile=profile)
+
+        if apply:
+            with SpinnerProgressTracker().track_spinner("Creating pull request..."):
+                result = service.create_pull_request(
+                    title=title,
+                    base_repository_rid=base_repository_rid,
+                    head_commitish=head_commitish,
+                    head_repository_rid=head_repository_rid,
+                    base_branch_name=base_branch,
+                    description=description,
+                )
+            warnings = []
+        else:
+            result = service.create_pull_request_plan(
+                title=title,
+                base_repository_rid=base_repository_rid,
+                head_commitish=head_commitish,
+                head_repository_rid=head_repository_rid,
+                base_branch_name=base_branch,
+                description=description,
+            )
+            warnings = [result["evidence"]]
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                result,
+                meta={
+                    "operation": "create_code_repository_pull_request",
+                    "status": result.get("status", "created"),
+                    "pull_request_rid": result.get("rid"),
+                },
+                warnings=warnings,
+            )
+        else:
+            formatter.format_output([result], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (PullRequestShapeError,) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error creating pull request: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@pull_request_app.command("comment")
+def comment_pull_request(
+    pull_request_rid: str = typer.Argument(
+        ..., help="Pull request Resource Identifier", autocompletion=complete_rid
+    ),
+    content: str = typer.Argument(..., help="Comment body (markdown)"),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real POST /pulls/{rid}/comments/global "
+        "(default: dry-run plan only)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Comment on a code repository pull request (dry-run plan by default).
+
+    Writes the internal stemma-pull-request API (POST
+    /pulls/{pullRequestRid}/comments/global) whose request contract was
+    verified on a live Foundry deployment (strict deserialization;
+    the captured contract). Without --apply the command prints
+    the exact intended write and changes nothing; with --apply it posts
+    that body verbatim and passes the created comment through raw.
+    """
+    try:
+        cache_rid(pull_request_rid)
+        service = RepositoryService(profile=profile)
+
+        if apply:
+            with SpinnerProgressTracker().track_spinner(
+                f"Commenting on pull request {pull_request_rid}..."
+            ):
+                result = service.create_pull_request_comment(pull_request_rid, content)
+            warnings = []
+        else:
+            result = service.create_pull_request_comment_plan(pull_request_rid, content)
+            warnings = [result["evidence"]]
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                result,
+                meta={
+                    "operation": "create_code_repository_pull_request_comment",
+                    "pull_request_rid": pull_request_rid,
+                    "status": result.get("status", "created"),
+                },
+                warnings=warnings,
+            )
+        else:
+            formatter.format_output([result], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (PullRequestShapeError,) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error commenting on pull request: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("context")
+def get_repository_context(
+    repository_rid: str = typer.Argument(
+        ..., help="Repository Resource Identifier", autocompletion=complete_rid
+    ),
+    path: str = typer.Option(
+        "", "--path", help="Subtree path for the file tree (default: root)"
+    ),
+    ref: Optional[str] = typer.Option(
+        None,
+        "--ref",
+        help="Commitish for the file tree (default: the repository's default "
+        "branch). Note: stemma silently falls back to the default branch for "
+        "unresolvable refs.",
+    ),
+    no_tree: bool = typer.Option(
+        False, "--no-tree", help="Skip the file tree (metadata and refs only)"
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Get headless repository context (read-only).
+
+    Aggregates the contract-verified internal stemma reads: repository metadata
+    (stemma + Compass name/path), the default branch (HEAD), branch and tag
+    refs, and the recursive file tree at a ref.
+    """
+    try:
+        cache_rid(repository_rid)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Fetching repository context for {repository_rid}..."
+        ):
+            service = RepositoryService(profile=profile)
+            context = service.get_repository_context(
+                repository_rid, path=path, ref=ref, include_tree=not no_tree
+            )
+
+        warnings = []
+        tree = context.get("tree")
+        if tree:
+            warnings.append(tree["ref_note"])
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                context,
+                meta={
+                    "operation": "get_repository_context",
+                    "repository_rid": repository_rid,
+                    "path": path,
+                },
+                warnings=warnings,
+            )
+        else:
+            formatter.format_output([context], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (RepositoryNotFoundError, RepositoryShapeError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error getting repository context: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("clone")
+def clone_repository(
+    repository_rid: str = typer.Argument(
+        ..., help="Repository Resource Identifier", autocompletion=complete_rid
+    ),
+    target_dir: str = typer.Argument(..., help="Local directory to clone into"),
+    branch: Optional[str] = typer.Option(
+        None, "--branch", "-b", help="Branch to check out (default: HEAD)"
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Delete a non-empty target directory and re-clone into it",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Resolve and print the clone plan without cloning",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Clone a Foundry code repository to a local path.
+
+    Resolves the repository's git URL from the contract-verified stemma smart-HTTP
+    endpoint (https://<host>/stemma/git/<repositoryRid>) and runs `git clone`
+    with the profile bearer token passed via environment-injected
+    http.extraHeader — the token is never printed, never on the command line,
+    and never persisted in the clone's config (later fetches need fresh
+    credentials). Refuses to overwrite a non-empty target without --force.
+    """
+    try:
+        cache_rid(repository_rid)
+
+        if force and os.path.isdir(target_dir) and os.listdir(target_dir):
+            require_confirmation(
+                f"Target directory {target_dir} is not empty and will be "
+                "deleted before cloning. Continue?",
+                confirmed=force,
+            )
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Cloning {repository_rid} into {target_dir}..."
+        ):
+            service = RepositoryService(profile=profile)
+            result = service.clone_repository(
+                repository_rid,
+                target_dir,
+                branch=branch,
+                force=force,
+                dry_run=dry_run,
+            )
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                result,
+                meta={
+                    "operation": "clone_code_repository_locally",
+                    "repository_rid": repository_rid,
+                    "target_dir": target_dir,
+                    "status": result.get("status"),
+                },
+            )
+        else:
+            formatter.format_output([result], format, output)
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (RepositoryCloneError, RepositoryNotFoundError, RepositoryShapeError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error cloning repository: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("create-python-transforms")
+def create_python_transforms(
+    name: str = typer.Argument(
+        ..., help="Name for the new Python transforms repository"
+    ),
+    parent_rid: Optional[str] = typer.Option(
+        None,
+        "--parent-rid",
+        help="Compass folder RID to create the repository under",
+        autocompletion=complete_rid,
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Attempt the real creation (currently blocked: the stemma "
+        "createRepository contract is UNVERIFIED)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create a Python transforms code repository (dry-run plan by default).
+
+    The stemma createRepository endpoint is catalogue-only and its request
+    contract could not be verified on a live Foundry deployment (12 candidate bodies all
+    returned opaque 500s; see the captured contract*.jsonl). The CLI
+    therefore prints the intended write as a dry-run plan and refuses to
+    guess: --apply fails loudly with the verification evidence instead of
+    issuing a speculative mutation.
+    """
+    try:
+        service = RepositoryService(profile=profile)
+
+        if apply:
+            # Always raises CreateContractUnverifiedError today; kept as a
+            # call (not an inline raise) so the verified write lands in one
+            # place once the contract is established.
+            service.create_python_transforms_repository(name, parent_rid)
+
+        plan = service.create_python_transforms_plan(name, parent_rid)
+
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                plan,
+                meta={
+                    "operation": "create_python_transforms_code_repository",
+                    "name": name,
+                    "status": plan["status"],
+                },
+                warnings=[plan["evidence"]],
+            )
+        else:
+            formatter.format_output([plan], format, output)
+
+    except CreateContractUnverifiedError as e:
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_message(str(e), level="error")
+        else:
+            console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error creating Python transforms repository: {e}[/red]")
         raise typer.Exit(1)

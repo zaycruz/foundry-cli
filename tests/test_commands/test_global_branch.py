@@ -104,3 +104,145 @@ class TestGlobalBranchGetCommand:
 
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
+
+
+class TestGlobalBranchCreateCommand:
+    """Test cases for `global-branch create` (plan-first)."""
+
+    ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000003"
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_create_defaults_to_plan(self, mock_service_class):
+        """Test that create without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_branch.return_value = {
+            "mode": "plan",
+            "request": {"verb": "POST", "path": "/branch-service/api/branch/create"},
+        }
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-branch", "create", "my-branch", "--ontology-rid", self.ONTOLOGY_RID],
+        )
+
+        assert result.exit_code == 0
+        mock_service.plan_create_branch.assert_called_once_with(
+            "my-branch", "", self.ONTOLOGY_RID
+        )
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_create_apply_is_blocked(self, mock_service_class):
+        """Test that --apply refuses while the contract is unverified."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_branch.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-branch", "create", "my-branch",
+                "--ontology-rid", self.ONTOLOGY_RID, "--apply",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "UNVERIFIED" in result.stdout
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_create_apply_agent_format_buffers_error(self, mock_service_class):
+        """Test the blocked --apply records an agent error payload."""
+        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.plan_create_branch.return_value = {"mode": "plan"}
+
+        result = self.runner.invoke(
+            root_app,
+            [
+                "global-branch", "create", "my-branch",
+                "--ontology-rid", self.ONTOLOGY_RID, "--apply", "--format", "agent",
+            ],
+        )
+
+        assert result.exit_code == 1
+        envelope = build_agent_output()
+        reset_agent_output()
+        assert envelope is not None
+        assert envelope["errors"][0]["type"] == "unverified-write-contract"
+        assert envelope["meta"]["operation"] == "create_global_branch"
+        assert envelope["meta"]["mode"] == "blocked"
+
+
+class TestGlobalBranchCloseCommand:
+    """Test cases for `global-branch close` (plan-first, destructive)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_close_defaults_to_plan(self, mock_service_class):
+        """Test that close without --apply prints the plan, no mutation."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+
+        result = self.runner.invoke(root_app, ["global-branch", "close", BRANCH_RID])
+
+        assert result.exit_code == 0
+        mock_service.close_branch.assert_not_called()
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_close_apply_requires_yes(self, mock_service_class):
+        """Test that --apply without --yes asks, and 'n' cancels."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-branch", "close", BRANCH_RID, "--apply"],
+            input="n\n",
+        )
+
+        assert result.exit_code == 1
+        mock_service.close_branch.assert_not_called()
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_close_apply_yes_sends(self, mock_service_class):
+        """Test that --apply --yes issues the close."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_branch.return_value = {
+            "rid": BRANCH_RID,
+            "acknowledged": True,
+        }
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-branch", "close", BRANCH_RID, "--apply", "--yes"],
+        )
+
+        assert result.exit_code == 0
+        mock_service.close_branch.assert_called_once_with(BRANCH_RID)
+
+    @patch("pltr.commands.global_branch.GlobalBranchService")
+    def test_close_not_found(self, mock_service_class):
+        """Test close when no branch exists for the RID."""
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.close_branch.side_effect = GlobalBranchNotFoundError(
+            f"No branch found for RID {BRANCH_RID}"
+        )
+
+        result = self.runner.invoke(
+            root_app,
+            ["global-branch", "close", BRANCH_RID, "--apply", "--yes"],
+        )
+
+        assert result.exit_code == 1
+        assert "No branch found" in result.stdout

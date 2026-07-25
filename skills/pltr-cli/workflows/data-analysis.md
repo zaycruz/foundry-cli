@@ -196,7 +196,7 @@ pltr sql execute "
 Use shell mode for exploratory work:
 
 ```bash
-pltr shell --profile production
+pltr shell start --profile production
 
 # In shell:
 pltr> admin user current
