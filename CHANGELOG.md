@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] - 2026-07-24
+
+### Added
+
+- `ontology object-type-upsert` now performs real merge-delta updates on existing object types: loads current state via the internal `bulkLoadEntities` endpoint, applies caller-provided fields (display name, description), dry-run validates, then modifies. No-op updates skip the modify (no ontology version bump). Fail-closed guards refuse primary-key changes, backing-dataset changes, and types with interface implementations or shared property types that cannot be faithfully reconstructed. Link/action type upserts keep the explicit create-only refusal.
+
 ## [0.25.0] - 2026-07-24
 
 ### Added
