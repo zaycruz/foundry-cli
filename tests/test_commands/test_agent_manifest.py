@@ -86,6 +86,36 @@ def test_manifest_includes_invocable_group_callbacks() -> None:
     ]
 
 
+
+def test_manifest_emits_optional_apply_flags() -> None:
+    root = click.Group(
+        commands={
+            "publish": click.Command(
+                "publish",
+                params=[
+                    click.Option(["--apply/--no-apply"], default=False),
+                    click.Option(["--format"], type=click.Choice(["json"])),
+                ],
+            )
+        }
+    )
+
+    payload = build_manifest(root, generated_at="fixed")
+
+    apply = payload["commands"][0]["parameters"][0]
+    assert apply == {
+        "name": "apply",
+        "description": "apply",
+        "help": None,
+        "type": "boolean",
+        "required": False,
+        "default": False,
+        "enum": None,
+        "repeatable": False,
+        "nargs": 1,
+        "mapping": {"kind": "flag", "argv": "--apply", "aliases": [], "activeWhen": True},
+    }
+
 def test_manifest_is_stable() -> None:
     first = _manifest(runner.invoke(app, ["agent-manifest"]))
     second = _manifest(runner.invoke(app, ["agent-manifest"]))
