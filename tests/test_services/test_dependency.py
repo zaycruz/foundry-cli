@@ -380,7 +380,9 @@ def test_graphql_operation_provenance_round_trips_acp_pins_and_variables():
         acp_id="ACP-05",
         http_verb="POST",
         path="/graphql-gateway/api/bulk",
-        contract_pins={"mcp": "0.397.0", },
+        contract_pins={
+            "mcp": "0.397.0",
+        },
         operation_name="GetObjectTypeDependents",
         document_sha256="abc123",
         request_variables={"rid": "ri.ontology.main.object-type.employee"},
@@ -414,7 +416,6 @@ def test_graphql_operation_provenance_round_trips_acp_pins_and_variables():
             "path": "/graphql-gateway/api/bulk",
             "contract_pins": {
                 "mcp": "0.397.0",
-                
             },
             "operation_name": "GetObjectTypeDependents",
             "document_sha256": "abc123",
