@@ -229,13 +229,15 @@ def test_pip_install_with_target_uses_current_interpreter_without_sudo(storage):
     command = pypi_calls[0].args[0]
     assert command[0] == sys.executable
     assert "sudo" not in command
-    assert command[command.index("--target") + 1] == "/tmp/sdk-target"
+    assert command[command.index("--target") + 1] == str(Path("/tmp/sdk-target"))
     # npm steps are refused without a --target prefix, but target was given,
     # so npm must have run with --prefix.
     npm_calls = [call for call in run.call_args_list if call.args[0][0] == "npm"]
     assert npm_calls
     npm_command = npm_calls[0].args[0]
-    assert npm_command[npm_command.index("--prefix") + 1] == "/tmp/sdk-target"
+    assert npm_command[npm_command.index("--prefix") + 1] == str(
+        Path("/tmp/sdk-target")
+    )
 
 
 def test_npm_without_target_is_refused_and_marks_failure(storage):

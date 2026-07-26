@@ -466,7 +466,10 @@ def test_output_alias_collision_is_rejected_before_analysis_or_writes(
         output = tmp_path / "nested" / ".." / "graph.json"
     else:
         output = tmp_path / "rendered.json"
-        output.symlink_to(graph)
+        try:
+            output.symlink_to(graph)
+        except OSError as exc:  # pragma: no cover - platform-dependent
+            pytest.skip(f"symlink creation unavailable on this platform: {exc}")
 
     with (
         patch("pltr.commands.dependency.AuthManager") as auth_constructor,
