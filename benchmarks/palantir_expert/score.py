@@ -100,7 +100,9 @@ SECRET_RE = re.compile(
 )
 FORBIDDEN_TERMS = tuple(
     term.strip().lower()
-    for term in os.environ.get("PLTR_BENCH_FORBIDDEN_TERMS", "example-internal").split(",")
+    for term in os.environ.get("PLTR_BENCH_FORBIDDEN_TERMS", "example-internal").split(
+        ","
+    )
     if term.strip()
 )
 """Terms the corpus must not contain.

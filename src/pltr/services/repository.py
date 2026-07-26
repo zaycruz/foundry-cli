@@ -262,8 +262,8 @@ class RepositoryService(BaseService):
         "Comments:NotPermittedToWriteComment) against a non-existent "
         "pull-request RID, so the shape was established without any "
         "speculative 200. End-to-end verified on the disposable test PR "
-        "(comment ri.pull-request.main.pull-request-comment.00000000-"
-        "a5f2-0000-0000-000000000030.00000000-0000-0000-0000-000000000029 "
+        "(comment ri.pull-request.main.pull-request-comment."
+        "00000000-0000-0000-0000-000000000030.00000000-0000-0000-0000-000000000029 "
         "read back via GET /pulls/{rid}/comments/global)"
     )
 
