@@ -140,7 +140,7 @@ When commits and tags are pushed to the repository, GitHub Actions will automati
 3. Publish to PyPI (for tagged releases)
 4. Create GitHub release with release notes
 
-Monitor the workflow at: https://github.com/anjor/pltr-cli/actions
+Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions
 
 ## Error Handling
 

@@ -173,5 +173,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line interface for data operations
 
 [0.18.0]: https://github.com/zaycruz/foundry-cli/compare/v0.17.1...v0.18.0
-[0.4.0]: https://github.com/anjor/pltr-cli/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/anjor/pltr-cli/releases/tag/v0.3.0
+[0.4.0]: https://github.com/zaycruz/foundry-cli/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/zaycruz/foundry-cli/releases/tag/v0.3.0

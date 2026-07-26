@@ -1,16 +1,14 @@
-# pltr-cli
+# foundry-cli
 
-> **A fork of [`anjor/pltr-cli`](https://github.com/anjor/pltr-cli) by [@anjor](https://github.com/anjor), who built the original CLI.** All credit for the base tool is theirs. This fork keeps upstream's name, command, and MIT license, then takes it agent-native: the `pltr-agent-v1` JSON contract, the dependency / change-impact gate, the skill bundle, and optional Langfuse tracing.
+An **agent-native** command-line interface for Palantir Foundry.
 
-An **agent-native** fork of the command-line interface for Palantir Foundry.
-
-`pltr-cli` wraps the official [`foundry-platform-sdk`](https://github.com/palantir/foundry-platform-python) and adds three things on top of upstream:
+`pltr-cli` wraps the official [`foundry-platform-sdk`](https://github.com/palantir/foundry-platform-python) and adds three things:
 
 1. **A stable machine contract.** Every command can emit one JSON envelope (`pltr-agent-v1`) with `--agent`, so an autonomous caller never has to parse tables or scrape text.
 2. **A read-only dependency and change-impact gate.** Before you touch a Foundry resource, `pltr dependency` tells you what breaks — with explicit coverage gaps, provenance, and a CI exit code.
 3. **A drop-in skill bundle.** `skills/pltr-cli/` teaches any coding agent (Claude, Codex, others) how to drive the CLI safely.
 
-**Why this fork exists.** The JSON contract, the change-impact gate, and the skill bundle let an autonomous agent operate Foundry safely and cheaply, with no human in the loop. Everything upstream already did — Rich tables, the interactive shell, multi-profile switching, and the commands across datasets, SQL, ontology, orchestration, filesystem, and admin — still works the same way.
+**Why this exists.** The JSON contract, the change-impact gate, and the skill bundle let an autonomous agent operate Foundry safely and cheaply, with no human in the loop. The full interactive surface — Rich tables, the shell, multi-profile switching, and the commands across datasets, SQL, ontology, orchestration, filesystem, and admin — works the same way.
 
 ---
 
@@ -31,7 +29,7 @@ Install the pltr CLI (Palantir Foundry) for me, end to end:
 
 ### Install it yourself
 
-Installed from git (not published to PyPI). Upstream `anjor/pltr-cli` is on PyPI; this fork is not, so install it by URL. The command is still `pltr`.
+Installed from git; not published to PyPI, so install it by URL. The command is `pltr`.
 
 ```bash
 uv pip install "git+https://github.com/zaycruz/foundry-cli"
@@ -68,24 +66,24 @@ OAuth2 uses `FOUNDRY_CLIENT_ID` and `FOUNDRY_CLIENT_SECRET` instead of `FOUNDRY_
 
 ---
 
-## What this fork adds
+## Capabilities
 
-Nine capability areas and two global flags that upstream does not have:
+Nine capability areas and two global flags:
 
-| Area | Upstream | This fork |
-|------|----------|-----------|
-| Machine output | — | `--agent` on agent-aware commands → one `pltr-agent-v1` JSON envelope |
-| Non-interactive mode | — | `--non-interactive` — no prompts, no envelope switch |
-| Change impact | — | `pltr dependency` — 6 target types, evidence graph, CI exit codes |
-| Grammar discovery | — | `pltr agent-manifest`, `pltr capabilities` |
-| Resource search | — | `pltr search` — title or path-scoped paginated discovery |
-| Lineage | — | `pltr lineage graph` |
-| Proposals | — | `pltr proposal` — 9 subcommands |
-| Namespaces | — | `pltr namespace list` |
-| Notepads | — | `pltr notepad list`, `pltr notepad get` |
-| Agent skill bundle | — | `skills/pltr-cli/` — workflows + 17 references |
-| Tracing | — | optional Langfuse |
-| Leaf commands | 215 | 236 |
+| Area | What you get |
+|------|--------------|
+| Machine output | `--agent` on agent-aware commands → one `pltr-agent-v1` JSON envelope |
+| Non-interactive mode | `--non-interactive` — no prompts, no envelope switch |
+| Change impact | `pltr dependency` — 6 target types, evidence graph, CI exit codes |
+| Grammar discovery | `pltr agent-manifest`, `pltr capabilities` |
+| Resource search | `pltr search` — title or path-scoped paginated discovery |
+| Lineage | `pltr lineage graph` |
+| Proposals | `pltr proposal` — 9 subcommands |
+| Namespaces | `pltr namespace list` |
+| Notepads | `pltr notepad list`, `pltr notepad get` |
+| Agent skill bundle | `skills/pltr-cli/` — workflows + 17 references |
+| Tracing | optional Langfuse |
+| Leaf commands | 236 |
 
 ### Change-impact gate
 
@@ -208,7 +206,7 @@ Full command reference: [`skills/pltr-cli/reference/dependency-commands.md`](ski
 
 ## Skill bundle for coding agents
 
-`skills/pltr-cli/` is the single, model-agnostic source of truth for driving `pltr` from an agent. Point your agent client at it; do not fork per-provider copies.
+`skills/pltr-cli/` is the single, model-agnostic source of truth for driving `pltr` from an agent. Point your agent client at it; do not create per-provider copies.
 
 - **[`SKILL.md`](skills/pltr-cli/SKILL.md)** — overview, critical concepts, when to load which reference.
 - **[`AGENTS.md`](AGENTS.md)** — repository rules, including the **mandatory change-impact gate**: assess with `pltr dependency` before proposing or applying any Foundry change, and do not merge while status is `needs-verification`.
@@ -283,6 +281,6 @@ When extending the SDK surface, be exact about what Foundry exposes and preserve
 
 ## License
 
-MIT, same as upstream. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
 
-Original CLI by [@anjor](https://github.com/anjor) — [`anjor/pltr-cli`](https://github.com/anjor/pltr-cli). Built on the official [Palantir Foundry Platform Python SDK](https://github.com/palantir/foundry-platform-python).
+Built on the official [Palantir Foundry Platform Python SDK](https://github.com/palantir/foundry-platform-python).

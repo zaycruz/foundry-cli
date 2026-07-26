@@ -201,7 +201,7 @@ def create_release_commit_and_tag(version, release_type, push_mode="ask"):
         run_git_command(f"git push origin {tag_name}")
         print("Pushed commit and tag to origin")
         print("GitHub Actions will now build and publish the release automatically")
-        print("Monitor the workflow at: https://github.com/anjor/pltr-cli/actions")
+        print("Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions")
     elif push_mode == "no":
         print("Not pushing to origin (--no-push specified).")
         print("You can push manually later with:")
@@ -218,7 +218,7 @@ def create_release_commit_and_tag(version, release_type, push_mode="ask"):
             run_git_command(f"git push origin {tag_name}")
             print("Pushed commit and tag to origin")
             print("GitHub Actions will now build and publish the release automatically")
-            print("Monitor the workflow at: https://github.com/anjor/pltr-cli/actions")
+            print("Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions")
         else:
             print("Not pushing to origin. You can push manually later with:")
             print("  git push origin HEAD")
