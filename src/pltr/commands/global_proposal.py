@@ -127,9 +127,8 @@ def create_proposal(
 ):
     """Create an Ontology Global Proposal (plan-first; --apply issues the real mutation).
 
-    Backed by branch-service ``POST /branch/proposal/create`` with the
-    contract verified from ``@palantir/mcp`` client
-    contract against a live deployment. The create sends
+    Backed by branch-service ``POST /branch/proposal/create``, with the
+    contract verified against a live deployment. The create sends
     ``{branchRid, displayName, description, mergeTo}`` where ``mergeTo`` is
     the ``ProposalMergeTo`` Conjure union with two arms (generated
     ``@palantir/branch-service-api`` evidence): ``--merge-to main`` sends
