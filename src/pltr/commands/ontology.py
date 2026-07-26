@@ -659,7 +659,7 @@ def upsert_action_type(
     objects), step 7 (regenerate OSDK), and step 8 (enable the
     corresponding application controls).
 
-    The definition is an ActionTypeCreate JSON document ( section 4). Existing action types
+    The definition is an ActionTypeCreate JSON document. Existing action types
     are not updated yet; the create validation reports that case explicitly.
     """
     try:

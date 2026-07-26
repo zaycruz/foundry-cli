@@ -295,7 +295,7 @@ pltr ontology action-validate ri.ontology.main.ontology.abc123 promoteEmployee '
 pltr ontology action-type-upsert ONTOLOGY_RID --definition ACTION_TYPE_CREATE_JSON [--apply]
 
 # The definition is an ActionTypeCreate JSON document (inline or @file; see
-# the captured contract section 4). Default is a dry-run
+# the captured contract). Default is a dry-run
 # plan; nothing is written without --apply. Existing action types are NOT
 # updated yet; the create validation reports that case explicitly. Step 5
 # of the required publication order -- referenced object types (step 3) and

@@ -134,11 +134,16 @@ python scripts/release.py --version 0.6.0 --yes --no-push
 
 ## GitHub Actions Integration
 
-When commits and tags are pushed to the repository, GitHub Actions will automatically:
-1. Build the package
-2. Run tests
-3. Publish to PyPI (for tagged releases)
-4. Create GitHub release with release notes
+`main` is protected: the version-bump commit lands through a pull request, and
+only the tag is pushed directly. Pushing a `v*` tag starts the publish workflow,
+which will:
+1. Run the test suite -- the build does not start if it fails
+2. Build the package
+3. Wait for approval on the `pypi` environment
+4. Publish to PyPI on approval
+
+It does **not** create a GitHub release; write release notes by hand or with
+`gh release create` after publishing.
 
 Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions
 
