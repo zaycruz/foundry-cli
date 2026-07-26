@@ -1,5 +1,7 @@
 """Tests for the skill reference command drift checker."""
 
+import json
+
 from pathlib import Path
 
 from scripts.check_skill_command_drift import main
@@ -31,6 +33,28 @@ pltr ontology object-type-list ONTOLOGY_RID
     result = main(
         ["--manifest", str(FIXTURE_MANIFEST), "--reference-dir", str(reference_dir)]
     )
+
+    assert result == 0
+    assert "Result: no drift detected" in capsys.readouterr().out
+
+
+def test_drift_check_accepts_typed_manifest_paths(tmp_path, capsys) -> None:
+    manifest = tmp_path / "typed-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "commands": [
+                    {"path": ["dataset", "list"]},
+                    {"path": ["ontology", "object-type-list"]},
+                ]
+            }
+        )
+    )
+    reference_dir = _write_reference_dir(
+        tmp_path, "`pltr dataset list`\n`pltr ontology object-type-list RID`\n"
+    )
+
+    result = main(["--manifest", str(manifest), "--reference-dir", str(reference_dir)])
 
     assert result == 0
     assert "Result: no drift detected" in capsys.readouterr().out
