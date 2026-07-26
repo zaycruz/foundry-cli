@@ -662,8 +662,8 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "view_global_branch": (
         "internal branch-service (contract-verified): PUT "
         "/branch-service/api/branch/load/{branchRid} (empty-body load; "
-        "success shape UNVERIFIED — branch-service is unused on the "
-        "a live Foundry deployment, responses passed through raw)"
+        "success shape UNVERIFIED — branch-service is unused on a live "
+        "Foundry deployment, responses passed through raw)"
     ),
     "create_global_branch": (
         "internal branch-service: POST /branch-service/api/branch/create; "
@@ -719,14 +719,14 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "contract — the service drops unknown keys leniently (defeating the "
         "field validation) and every candidate envelope failed 400; the printed "
         "candidate body models the live target config shape with dummy "
-        "values and is never sent. --apply refuses. The CLI never calls "
-        "getSourceConfigWithPlaintextSecretValues"
+        "values and is never sent. --apply refuses. The CLI "
+        "never reads configured source secrets"
     ),
     "view_global_proposal": (
         "internal branch-service (contract-verified): PUT "
         "/branch-service/api/branch/proposal/load/{proposalRid} (empty-body "
-        "load; success shape UNVERIFIED — branch-service is unused on the "
-        "a live Foundry deployment, responses passed through raw)"
+        "load; success shape UNVERIFIED — branch-service is unused on a "
+        "live Foundry deployment, responses passed through raw)"
     ),
     "get_or_create_network_egress_policy": (
         "internal resource-policy-manager (read-contract-verified): POST "
@@ -808,7 +808,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "/latest?sdkStatus=REQUESTED confirmation read 204s once the record "
         "leaves requested. Dry-run plan by default, real generation behind "
         "--apply; verified on a disposable test application "
-        "tutorial app (0.8.0 minted by the MCP capture, 0.9.0 by this CLI) "
+        "(0.8.0 minted by the MCP capture, 0.9.0 by this CLI) "
         "from applicationVersion 6"
     ),
     "get_ontology_sdk_examples": (
@@ -918,7 +918,7 @@ _U3_BLOCKED: dict[str, str] = {
     "preview_transform": (
         "foundry-platform-sdk==1.95.0 exposes no transform preview or dry-run "
         "operation in its orchestration module (its 'preview' flag only gates "
-        "preview API features), and the gap analysis catalogues no "
+        "preview API features), and no VERIFIED internal "
         "VERIFIED internal transform-preview endpoint; implementing one would "
         "require guessing an unverified request contract"
     ),

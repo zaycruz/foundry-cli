@@ -197,30 +197,19 @@ def create_release_commit_and_tag(version, release_type, push_mode="ask"):
 
     # Handle push based on mode
     if push_mode == "force":
-        run_git_command("git push origin HEAD")
         run_git_command(f"git push origin {tag_name}")
-        print("Pushed commit and tag to origin")
-        print("GitHub Actions will now build and publish the release automatically")
-        print("Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions")
+        print(f"Pushed tag {tag_name} to origin")
+        print(_publish_notice())
     elif push_mode == "no":
         print("Not pushing to origin (--no-push specified).")
         print("You can push manually later with:")
-        print("  git push origin HEAD")
         print(f"  git push origin {tag_name}")
     else:  # push_mode == "ask"
-        push_choice = (
-            input(f"Push commit and tag '{tag_name}' to origin? (y/N): ")
-            .strip()
-            .lower()
-        )
+        push_choice = input(f"Push tag '{tag_name}' to origin? (y/N): ").strip().lower()
         if push_choice in ["y", "yes"]:
-            run_git_command("git push origin HEAD")
             run_git_command(f"git push origin {tag_name}")
-            print("Pushed commit and tag to origin")
-            print("GitHub Actions will now build and publish the release automatically")
-            print(
-                "Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions"
-            )
+            print(f"Pushed tag {tag_name} to origin")
+            print(_publish_notice())
         else:
             print("Not pushing to origin. You can push manually later with:")
             print("  git push origin HEAD")
@@ -247,6 +236,21 @@ def bump_version(current_version, bump_type):
     else:
         print(f"Error: Invalid bump type '{bump_type}'. Use: major, minor, or patch")
         sys.exit(1)
+
+
+def _publish_notice() -> str:
+    """Describe what pushing the tag actually triggers.
+
+    `main` is protected, so the version commit reaches origin through a pull
+    request; only the tag is pushed directly. The tag is what starts the
+    publish workflow, which runs the suite, builds, and then waits on the
+    `pypi` environment reviewer before uploading.
+    """
+    return (
+        "The publish workflow will run the test suite, build, and then wait for\n"
+        "approval on the 'pypi' environment before uploading.\n"
+        "Monitor: https://github.com/zaycruz/foundry-cli/actions"
+    )
 
 
 def main():

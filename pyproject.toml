@@ -1,6 +1,6 @@
 [project]
 name = "foundry-cli"
-version = "0.29.0"
+version = "0.29.1"
 description = "Agent-native command-line interface for Palantir Foundry APIs"
 authors = [
     { name = "Anjor Kanekar" },

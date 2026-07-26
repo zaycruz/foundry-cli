@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.1] - 2026-07-26
+
+### Changed
+- Release path is gated: a `v*` tag now runs the test suite before building, and
+  publishing waits on the `pypi` environment reviewer.
+- CI reports every matrix leg (`fail-fast: false`) behind a single `ci-ok` status
+  check, and cancels superseded runs.
+- Test suite no longer depends on terminal colour: `GITHUB_ACTIONS`, `FORCE_COLOR`
+  and `PY_COLORS` are neutralised before collection, so assertions on flag strings
+  behave the same locally and in CI.
+- Test fixtures are platform-agnostic: file writes pin UTF-8, path comparisons are
+  normalised, and symlink creation is guarded. Windows and Linux now run in CI.
+- `scripts/release.py` pushes only the tag; `main` is protected, so the version
+  commit travels through a pull request. `RELEASE.md` describes the real flow.
+- Capability and service descriptions no longer cite documents this package does
+  not ship, and no longer name a credential-reading endpoint the CLI never calls.
+
 ## [0.28.0] - 2026-07-25
 
 ### Added

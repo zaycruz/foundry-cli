@@ -2,11 +2,11 @@
 Code repository service wrapper.
 
 Pull-request reads plus contract-verified writes backed by the internal
-``stemma-pull-request`` API, which the gap analysis catalogues
-(29 endpoints) and which was contract-verified against a live deployment:
+``stemma-pull-request`` API, which was contract-verified against a live
+deployment:
 
 - ``GET /stemma-pull-request/api/pulls`` returns ``{"values": [...]}``. The
-  gap analysis noted a live PR read was UNVERIFIED without a repository
+  a live PR read was UNVERIFIED without a repository
   argument; validation showed a ``repositoryRid`` query parameter is silently
   ignored (PRs from other repositories are still returned), so repository
   filtering is done client-side and documented as such.

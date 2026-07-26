@@ -67,7 +67,7 @@ GRADER_FIELDS = {
 }
 SIGNATURE_FIELDS = {"command_path", "required_tokens"}
 SOURCE_REF_RE = re.compile(r"^[0-9a-f]{12}$")
-EXPECTED_CLI_VERSION = "0.29.0"
+EXPECTED_CLI_VERSION = "0.29.1"
 EXPECTED_CLI_CONTRACT = f"foundry-cli {EXPECTED_CLI_VERSION}"
 ABSOLUTE_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9_.-])/(?:[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_.-]+)*|[A-Za-z]:\\"
@@ -317,7 +317,7 @@ def validate_corpus(corpus: Any) -> dict[str, Any]:
             errors.append(f"benchmark: {privacy_error}")
     if pltr_version != EXPECTED_CLI_VERSION:
         errors.append(
-            f"installed {EXPECTED_CLI_CONTRACT} is required; got pltr-cli {pltr_version}"
+            f"installed {EXPECTED_CLI_CONTRACT} is required; got {pltr_version}"
         )
     if not isinstance(cases, list):
         raise CorpusValidationError("cases must be a list")
