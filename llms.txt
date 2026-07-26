@@ -10,7 +10,7 @@ Paste the block below into Claude Code, Codex, or any coding agent. It will inst
 
 ```
 Install the pltr CLI (Palantir Foundry) for me, end to end:
-1. Install from git: `uv pip install "git+https://github.com/zaycruz/pltr-cli"` (fall back to `pip install "git+https://github.com/zaycruz/pltr-cli"` if uv is missing).
+1. Install from git: `uv pip install "git+https://github.com/zaycruz/foundry-cli"` (fall back to `pip install "git+https://github.com/zaycruz/foundry-cli"` if uv is missing).
 2. Confirm it works: run `pltr --help` and show me the command groups.
 3. Set up auth: ask me for my Foundry host and API token, then export FOUNDRY_HOST and FOUNDRY_TOKEN, or run `pltr configure configure`. I may have more than one Foundry environment — support named profiles.
 4. Verify the connection: run `pltr verify`.
@@ -20,7 +20,7 @@ Install the pltr CLI (Palantir Foundry) for me, end to end:
 ## Install
 
 ```
-uv pip install "git+https://github.com/zaycruz/pltr-cli"
+uv pip install "git+https://github.com/zaycruz/foundry-cli"
 ```
 
 Then authenticate and verify:
@@ -55,7 +55,7 @@ For CI gating use `--output-mode ci`: exit 0 is clean, 2 needs verification, 1 i
 
 ## Docs
 
-- Skill bundle (how an agent should drive pltr): https://github.com/zaycruz/pltr-cli/blob/main/skills/pltr-cli/SKILL.md
-- Repository agent rules and the mandatory change-impact gate: https://github.com/zaycruz/pltr-cli/blob/main/AGENTS.md
-- Dependency command reference: https://github.com/zaycruz/pltr-cli/blob/main/skills/pltr-cli/reference/dependency-commands.md
-- README: https://github.com/zaycruz/pltr-cli/blob/main/README.md
+- Skill bundle (how an agent should drive pltr): https://github.com/zaycruz/foundry-cli/blob/main/skills/pltr-cli/SKILL.md
+- Repository agent rules and the mandatory change-impact gate: https://github.com/zaycruz/foundry-cli/blob/main/AGENTS.md
+- Dependency command reference: https://github.com/zaycruz/foundry-cli/blob/main/skills/pltr-cli/reference/dependency-commands.md
+- README: https://github.com/zaycruz/foundry-cli/blob/main/README.md

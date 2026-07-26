@@ -49,11 +49,11 @@ classifiers = [
 text = "MIT"
 
 [project.urls]
-Homepage = "https://github.com/zaycruz/pltr-cli"
-Repository = "https://github.com/zaycruz/pltr-cli"
-Issues = "https://github.com/zaycruz/pltr-cli/issues"
-Changelog = "https://github.com/zaycruz/pltr-cli/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/zaycruz/pltr-cli/blob/main/README.md"
+Homepage = "https://github.com/zaycruz/foundry-cli"
+Repository = "https://github.com/zaycruz/foundry-cli"
+Issues = "https://github.com/zaycruz/foundry-cli/issues"
+Changelog = "https://github.com/zaycruz/foundry-cli/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/zaycruz/foundry-cli/blob/main/README.md"
 
 [project.scripts]
 pltr = "pltr.cli:main_entrypoint"

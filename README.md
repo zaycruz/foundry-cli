@@ -22,7 +22,7 @@ Copy the block below into Claude Code, Codex, or any coding agent. It installs, 
 
 ```
 Install the pltr CLI (Palantir Foundry) for me, end to end:
-1. Install from git: `uv pip install "git+https://github.com/zaycruz/pltr-cli"` (fall back to `pip install "git+https://github.com/zaycruz/pltr-cli"` if uv is missing).
+1. Install from git: `uv pip install "git+https://github.com/zaycruz/foundry-cli"` (fall back to `pip install "git+https://github.com/zaycruz/foundry-cli"` if uv is missing).
 2. Confirm it works: run `pltr --help` and show me the command groups.
 3. Set up auth: ask me for my Foundry host and API token, then export FOUNDRY_HOST and FOUNDRY_TOKEN, or run `pltr configure configure`. I may have more than one Foundry environment — support named profiles.
 4. Verify the connection: run `pltr verify`.
@@ -34,13 +34,13 @@ Install the pltr CLI (Palantir Foundry) for me, end to end:
 Installed from git (not published to PyPI). Upstream `anjor/pltr-cli` is on PyPI; this fork is not, so install it by URL. The command is still `pltr`.
 
 ```bash
-uv pip install "git+https://github.com/zaycruz/pltr-cli"
+uv pip install "git+https://github.com/zaycruz/foundry-cli"
 ```
 
 Or clone for development:
 
 ```bash
-git clone https://github.com/zaycruz/pltr-cli.git
+git clone https://github.com/zaycruz/foundry-cli.git
 cd pltr-cli
 uv sync
 uv run pltr --help
@@ -257,7 +257,7 @@ pltr <command> --profile <name>   # use a specific profile for one command
 Install the extra and set all three variables to trace command paths, redacted arguments, duration, and exit codes. Tracing is a no-op when the variables are absent, and a tracing failure never changes the command result.
 
 ```bash
-uv pip install "pltr[langfuse] @ git+https://github.com/zaycruz/pltr-cli"
+uv pip install "pltr[langfuse] @ git+https://github.com/zaycruz/foundry-cli"
 export LANGFUSE_HOST="https://cloud.langfuse.com"
 export LANGFUSE_PUBLIC_KEY="pk-lf-..."
 export LANGFUSE_SECRET_KEY="sk-lf-..."
