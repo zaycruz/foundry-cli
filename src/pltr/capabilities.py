@@ -668,7 +668,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "create_global_branch": (
         "internal branch-service: POST /branch-service/api/branch/create; "
         "plan-first command (dry-run default). 2026-07-24 contract-recovery "
-        "validation (the captured contract) validation identified "
+        "validation identified "
         "{displayName, description, ontologyRid} but the request never "
         "progressed past 400 Default:InvalidArgument, so --apply refuses "
         "with an unverified-write-contract error instead of guessing"
@@ -736,7 +736,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "get_compute_modules_info": (
         "internal contour-backend-multiplexer (routes contract-verified "
-        "on a live Foundry deployment, the captured contract): GET "
+        "on a live Foundry deployment): GET "
         "/contour-backend-multiplexer/api/deployed-apps/{rid}/{branch}/status "
         "+ GET /contour-backend-multiplexer/api/deployed-apps/{rid}/v2; "
         "mounts proved by 403 Contour:InsufficientPermission (not "
@@ -754,7 +754,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "manage_compute_modules": (
         "internal build2 + contour-backend-multiplexer (routes contract-verified "
-        "2026-07-25 on a live Foundry deployment, the captured contract): start "
+        "2026-07-25 on a live Foundry deployment): start "
         "= POST /build2/api/manager/submitBuild with the deployed-app RID as "
         "a datasets jobSpecSelection (isRequired: true) — 400 "
         "Build2:JobSpecsForDatasetsNotFoundInGraph proves the contract; stop "
@@ -767,7 +767,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "execute_compute_modules_function": (
         "internal contour-backend-multiplexer (route contract-verified "
-        "on a live Foundry deployment, the captured contract): POST "
+        "on a live Foundry deployment): POST "
         "/contour-backend-multiplexer/api/module-group-multiplexer/"
         "compute-modules/jobs/execute — 403 Contour:InsufficientPermission "
         "(deployed-apps:submit) proves the mount; response is a raw "
@@ -792,7 +792,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "get_ontology_sdk_context": (
         "foundry-platform-sdk==1.95.0: ontologies.Ontology.list + "
         "Ontology.get_full_metadata + vendored @osdk/foundry.ontologies@2.69.0 "
-        "type declarations (the captured contract)"
+        "type declarations"
     ),
     "generate_new_ontology_sdk_version": (
         "internal third-party-application-service ("

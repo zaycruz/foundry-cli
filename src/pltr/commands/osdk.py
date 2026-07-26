@@ -28,7 +28,9 @@ def _check_format(format_type: str) -> None:
         raise typer.BadParameter("must be markdown or json", param_hint="--format")
 
 
-def _emit(result: Mapping[str, Any], format_type: str, *, result_type: str, human: str) -> None:
+def _emit(
+    result: Mapping[str, Any], format_type: str, *, result_type: str, human: str
+) -> None:
     if resolve_output_format(format_type) == "agent":
         buffer_agent_payload(dict(result), meta={"result_type": result_type})
         return
@@ -76,7 +78,9 @@ def _render_context(result: Mapping[str, Any]) -> str:
     if result.get("status") != "ok":
         lines = [f"UNAVAILABLE: {result.get('reason', 'unknown')}"]
         for choice in result.get("choices") or []:
-            lines.append(f"  {choice.get('api_name') or 'unknown'} ({choice.get('rid')})")
+            lines.append(
+                f"  {choice.get('api_name') or 'unknown'} ({choice.get('rid')})"
+            )
         return "\n".join(lines) + "\n"
     ontology = result.get("ontology") or {}
     lines = [
@@ -94,7 +98,9 @@ def _render_context(result: Mapping[str, Any]) -> str:
     lines.append("")
     lines.append("Vendored OSDK packages:")
     for package in osdk.get("packages") or []:
-        lines.append(f"  {package['name']}@{package['version']} ({package['provenance']})")
+        lines.append(
+            f"  {package['name']}@{package['version']} ({package['provenance']})"
+        )
     components = osdk.get("components") or {}
     lines.append(f"  {len(components)} declared API components")
     lines.append("")
@@ -132,11 +138,11 @@ def osdk_examples(
     """Show real OSDK usage examples plus live-ontology bindings."""
     _check_format(format)
     if language not in {"typescript", "python"}:
-        raise typer.BadParameter("must be typescript or python", param_hint="--language")
-    try:
-        result = OsdkService(profile=profile).sdk_examples(
-            ontology, language=language
+        raise typer.BadParameter(
+            "must be typescript or python", param_hint="--language"
         )
+    try:
+        result = OsdkService(profile=profile).sdk_examples(ontology, language=language)
     except (ProfileNotFoundError, MissingCredentialsError) as exc:
         typer.echo(f"Authentication Error: {exc}")
         raise typer.Exit(1)
@@ -154,7 +160,9 @@ def _render_examples(result: Mapping[str, Any]) -> str:
     lines = [f"OSDK examples ({result.get('language')})"]
     ontology = result.get("ontology") or {}
     if ontology.get("rid"):
-        lines.append(f"Ontology: {ontology.get('api_name') or 'unknown'} ({ontology.get('rid')})")
+        lines.append(
+            f"Ontology: {ontology.get('api_name') or 'unknown'} ({ontology.get('rid')})"
+        )
     for warning in result.get("warnings") or []:
         lines.append(f"WARNING: {warning}")
     lines.append("")

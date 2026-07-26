@@ -34,4 +34,4 @@ The agent should load this skill and use the change-impact workflow before propo
 
 ## Documentation
 
-See [docs/user-guide/agent-skill.md](../../docs/user-guide/agent-skill.md) for installation and usage guidance.
+Run `pltr --agent skill` for installation and usage guidance.

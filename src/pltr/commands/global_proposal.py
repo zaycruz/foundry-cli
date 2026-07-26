@@ -129,8 +129,7 @@ def create_proposal(
 
     Backed by branch-service ``POST /branch/proposal/create`` with the
     contract verified
-    against a live deployment on a live Foundry deployment
-    (``the captured contract``). The create sends
+    against a live deployment on a live Foundry deployment. The create sends
     ``{branchRid, displayName, description, mergeTo}`` where ``mergeTo`` is
     the ``ProposalMergeTo`` Conjure union with two arms (generated
     ``@palantir/branch-service-api`` evidence): ``--merge-to main`` sends

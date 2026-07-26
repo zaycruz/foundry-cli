@@ -158,7 +158,7 @@ def _normalize_page_path(path_or_url: str) -> str:
             )
         candidate = parsed.path
     if candidate.startswith(DOCS_BASE_PATH):
-        candidate = candidate[len(DOCS_BASE_PATH):]
+        candidate = candidate[len(DOCS_BASE_PATH) :]
     for locale in ("/jp", "/zh", "/kr"):
         if candidate.startswith(locale + "/"):
             raise DocumentationError(
@@ -200,8 +200,12 @@ class DocumentationService:
         try:
             html = self._fetch(source_url)
         except DocumentationError as exc:
-            return {"status": "unavailable", "reason": str(exc), "page": path,
-                    "source_url": source_url}
+            return {
+                "status": "unavailable",
+                "reason": str(exc),
+                "page": path,
+                "source_url": source_url,
+            }
         match = _NEXT_DATA_RE.search(html)
         if not match:
             return {
@@ -263,12 +267,14 @@ class DocumentationService:
             fetched.append(sitemap_url)
             urls.update(self._parse_sitemap(body))
         paths = sorted(
-            urlparse(url).path[len(DOCS_BASE_PATH):]
+            urlparse(url).path[len(DOCS_BASE_PATH) :]
             for url in urls
             if _FOUNDRY_PREFIX in url
             and not any(locale in url for locale in _LOCALE_PREFIXES)
         )
-        status = "ok" if paths and not failures else ("partial" if paths else "unavailable")
+        status = (
+            "ok" if paths and not failures else ("partial" if paths else "unavailable")
+        )
         return {
             "status": status,
             "page_count": len(paths),
@@ -335,7 +341,10 @@ class DocumentationService:
                         "lead": _first_markdown_block(overview["markdown"]),
                     }
                     if overview.get("status") == "ok"
-                    else {"status": overview.get("status"), "reason": overview.get("reason")}
+                    else {
+                        "status": overview.get("status"),
+                        "reason": overview.get("reason"),
+                    }
                 )
             summaries.append(entry)
         return {
@@ -364,17 +373,17 @@ class DocumentationService:
         index is WASM-bound and not reproduced here.
         """
         if not query.strip():
-            return {"status": "invalid", "reason": "query must not be empty",
-                    "results": None}
+            return {
+                "status": "invalid",
+                "reason": "query must not be empty",
+                "results": None,
+            }
         corpus = self.list_page_urls()
         if corpus["status"] == "unavailable":
             return {**corpus, "results": None}
         terms = [term.casefold() for term in re.findall(r"[a-z0-9]+", query)]
         candidates = sorted(
-            (
-                (self._slug_score(path, terms), path)
-                for path in corpus["pages"]
-            ),
+            ((self._slug_score(path, terms), path) for path in corpus["pages"]),
             key=lambda item: (-item[0], item[1]),
         )
         scored = [path for score, path in candidates if score > 0]
@@ -427,16 +436,26 @@ class DocumentationService:
                 pages.append(page)
             else:
                 failures.append(
-                    {"page": path, "status": page.get("status"),
-                     "reason": page.get("reason")}
+                    {
+                        "page": path,
+                        "status": page.get("status"),
+                        "reason": page.get("reason"),
+                    }
                 )
         corpus = self.list_page_urls()
         prefix = spec["family_prefix"]
-        related = [
-            path for path in corpus.get("pages", [])
-            if path.startswith(prefix) and path not in spec["pages"]
-        ][:related_limit] if corpus.get("status") != "unavailable" else []
-        status = "ok" if pages and not failures else ("partial" if pages else "unavailable")
+        related = (
+            [
+                path
+                for path in corpus.get("pages", [])
+                if path.startswith(prefix) and path not in spec["pages"]
+            ][:related_limit]
+            if corpus.get("status") != "unavailable"
+            else []
+        )
+        status = (
+            "ok" if pages and not failures else ("partial" if pages else "unavailable")
+        )
         return {
             "status": status,
             "topic": topic_key,
@@ -484,7 +503,7 @@ def _excerpt(markdown: str, terms: list[str], chars: int) -> str:
         default=0,
     )
     start = max(first - chars // 3, 0)
-    return markdown[start:start + chars].strip()
+    return markdown[start : start + chars].strip()
 
 
 def extract_code_blocks(markdown: str) -> list[dict[str, str]]:

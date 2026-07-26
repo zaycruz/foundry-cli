@@ -2,7 +2,7 @@
 
 Backed by the internal ``third-party-application-service`` application-sdks
 endpoints, VERIFIED in
-``docs/plans/2026-07-22-foundry-full-surface-gap-analysis.md``:
+the internal capability analysis:
 
 - ``GET /third-party-application-service/api/application-sdks/{applicationRid}``
 - ``GET /third-party-application-service/api/application-sdks/{applicationRid}/latest``
@@ -10,7 +10,7 @@ endpoints, VERIFIED in
 - ``GET /third-party-application-service/api/application-sdks/{applicationRid}/repository``
 
 SDK generation uses the contract-derived, contract-verified createSdkV2 contract
-(``the captured contract``, 2026-07-25):
+(, 2026-07-25):
 ``POST /third-party-application-service/api/application-sdks/v2/{applicationRid}``
 with exactly ``{"applicationVersion": <int>, "npm": {}}``, after reading
 ``metadata.applicationVersion`` from the getApplication endpoint.
@@ -40,7 +40,7 @@ APPLICATION_SDKS_BASE = "/third-party-application-service/api/application-sdks"
 APPLICATIONS_BASE = "/third-party-application-service/api/applications"
 
 # SDK generation contract, derived from the vendor MCP 0.408.0 client contract and verified
-# end-to-end 2026-07-25 on a live Foundry deployment (the captured contract):
+# end-to-end 2026-07-25 on a live Foundry deployment:
 # POST /application-sdks/v2/{applicationRid} with exactly
 # {"applicationVersion": <int>, "npm": {}} mints a new SDK version from that
 # app version (verified: 0.8.0 minted from applicationVersion 6). Unknown
@@ -49,7 +49,7 @@ APPLICATIONS_BASE = "/third-party-application-service/api/applications"
 # server-side; npm.status.type flips requested -> success (~24s observed).
 SDK_GENERATE_CONTRACT = (
     "contract-verified on a live Foundry deployment "
-    "(the captured contract): POST "
+    ": POST "
     "/third-party-application-service/api/application-sdks/v2/{applicationRid} "
     'with exactly {"applicationVersion": <int>, "npm": {}}; unknown top-level '
     "keys -> 422 Conjure:UnprocessableEntity. The MCP's scope-patch PUT is "
@@ -242,9 +242,7 @@ class DeveloperConsoleService:
                 if isinstance(variant, Mapping):
                     auth_code = variant.get("authorizationCodeGrant")
                     if isinstance(auth_code, Mapping):
-                        grants["authorization_code"] = bool(
-                            auth_code.get("enabled")
-                        )
+                        grants["authorization_code"] = bool(auth_code.get("enabled"))
                         urls = auth_code.get("redirectUrls")
                         if isinstance(urls, list):
                             redirect_urls = [
@@ -297,9 +295,7 @@ class DeveloperConsoleService:
         payload = self._conjure_get(
             f"{APPLICATIONS_BASE}/{application_rid}", "getApplication"
         )
-        metadata = (
-            payload.get("metadata") if isinstance(payload, Mapping) else None
-        )
+        metadata = payload.get("metadata") if isinstance(payload, Mapping) else None
         version = (
             metadata.get("applicationVersion")
             if isinstance(metadata, Mapping)
@@ -330,16 +326,12 @@ class DeveloperConsoleService:
         Never mutates; ``generate_sdk(apply=True)`` sends this request.
         """
 
-        application_version = self.get_current_application_version(
-            application_rid
-        )
+        application_version = self.get_current_application_version(application_rid)
         return {
             "application_rid": application_rid,
             "status": "dry-run",
             "application_version": application_version,
-            "request": self._sdk_generate_request(
-                application_rid, application_version
-            ),
+            "request": self._sdk_generate_request(application_rid, application_version),
             "contract": SDK_GENERATE_CONTRACT,
             "warnings": [],
         }
@@ -366,9 +358,7 @@ class DeveloperConsoleService:
         if not apply:
             return self.plan_sdk_generation(application_rid)
 
-        application_version = self.get_current_application_version(
-            application_rid
-        )
+        application_version = self.get_current_application_version(application_rid)
         request = self._sdk_generate_request(application_rid, application_version)
         payload = self._conjure_write(
             str(request["verb"]),
@@ -451,9 +441,7 @@ class DeveloperConsoleService:
                         "status": "success" if npm_status == "success" else "failed",
                         "poll": {
                             "attempts": attempts,
-                            "elapsed_seconds": round(
-                                time.monotonic() - started, 3
-                            ),
+                            "elapsed_seconds": round(time.monotonic() - started, 3),
                         },
                     }
             now = time.monotonic()
@@ -570,18 +558,20 @@ class DeveloperConsoleService:
             ontology_rid, scoped_rids
         )
         rendered = [
-            (output_dir / f"{object_type['api_name']}Card.tsx",
-             _render_object_card(object_type))
+            (
+                output_dir / f"{object_type['api_name']}Card.tsx",
+                _render_object_card(object_type),
+            )
             for object_type in object_types
         ]
         rendered.append(
-            (output_dir / "index.ts",
-             _render_barrel([ot["api_name"] for ot in object_types]))
+            (
+                output_dir / "index.ts",
+                _render_barrel([ot["api_name"] for ot in object_types]),
+            )
         )
 
-        conflicts = [
-            str(path) for path, _ in rendered if path.exists()
-        ]
+        conflicts = [str(path) for path, _ in rendered if path.exists()]
         if conflicts and not force:
             return {
                 "application_rid": application_rid,
@@ -627,9 +617,7 @@ class DeveloperConsoleService:
             if page_token:
                 path += f"&pageToken={quote(page_token, safe='')}"
             page = self._conjure_get(path, "listObjectTypes")
-            if not isinstance(page, Mapping) or not isinstance(
-                page.get("data"), list
-            ):
+            if not isinstance(page, Mapping) or not isinstance(page.get("data"), list):
                 raise SdkDefinitionDriftError(
                     f"listObjectTypes for {ontology_rid} returned a payload "
                     f"without a 'data' list: {str(page)[:200]}"
@@ -643,7 +631,6 @@ class DeveloperConsoleService:
                 break
             page_token = token
         return object_types, warnings
-
 
     # ------------------------------------------------------------------
     # Install planning and execution
@@ -746,9 +733,7 @@ class DeveloperConsoleService:
         if json_body is None:
             status, payload, raw = self.client.conjure(verb, path)
         else:
-            status, payload, raw = self.client.conjure(
-                verb, path, json_body=json_body
-            )
+            status, payload, raw = self.client.conjure(verb, path, json_body=json_body)
         if not 200 <= status < 300:
             error_name = (
                 payload.get("errorName") if isinstance(payload, Mapping) else None
@@ -760,8 +745,7 @@ class DeveloperConsoleService:
                 )
             detail = f" ({error_name})" if error_name else ""
             raise RuntimeError(
-                f"{operation} failed with HTTP {status}{detail}: "
-                f"{str(raw)[:200]}"
+                f"{operation} failed with HTTP {status}{detail}: {str(raw)[:200]}"
             )
         return payload
 
@@ -968,16 +952,17 @@ def _parse_v2_object_type(
 
     if not isinstance(raw_object, Mapping):
         raise SdkDefinitionDriftError(
-            f"listObjectTypes returned a non-object entry: "
-            f"{str(raw_object)[:200]}"
+            f"listObjectTypes returned a non-object entry: {str(raw_object)[:200]}"
         )
     rid = raw_object.get("rid")
     if isinstance(rid, str) and rid not in scoped_rids:
         return None
     api_name = raw_object.get("apiName")
     properties = raw_object.get("properties")
-    if not isinstance(api_name, str) or not api_name or not isinstance(
-        properties, Mapping
+    if (
+        not isinstance(api_name, str)
+        or not api_name
+        or not isinstance(properties, Mapping)
     ):
         raise SdkDefinitionDriftError(
             "listObjectTypes entry missing string apiName or object "

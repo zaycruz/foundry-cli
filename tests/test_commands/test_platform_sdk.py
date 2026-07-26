@@ -26,8 +26,18 @@ LISTING = {
                 "Ontology": {
                     "module": "foundry_sdk.v2.ontologies.ontology",
                     "methods": [
-                        {"name": "get", "signature": "(self, ontology)", "summary": "Get an ontology.", "docstring": "Get an ontology."},
-                        {"name": "list", "signature": "(self)", "summary": "List ontologies.", "docstring": "List ontologies."},
+                        {
+                            "name": "get",
+                            "signature": "(self, ontology)",
+                            "summary": "Get an ontology.",
+                            "docstring": "Get an ontology.",
+                        },
+                        {
+                            "name": "list",
+                            "signature": "(self)",
+                            "summary": "List ontologies.",
+                            "docstring": "List ontologies.",
+                        },
                     ],
                 }
             },
@@ -77,7 +87,9 @@ def test_api_reference_method():
     assert result.exit_code == 0, result.output
     assert "ontologies.Ontology.get(self, ontology)" in result.output
     assert "Full details." in result.output
-    service.return_value.api_reference.assert_called_once_with("ontologies.Ontology.get")
+    service.return_value.api_reference.assert_called_once_with(
+        "ontologies.Ontology.get"
+    )
 
 
 def test_api_reference_not_found_exits_nonzero():

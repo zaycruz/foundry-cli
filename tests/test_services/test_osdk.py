@@ -29,9 +29,7 @@ def _service(ontologies=None, metadata=None) -> OsdkService:
     ontology_api = client.ontologies.Ontology
     if ontologies is not None:
         ontology_api.list.return_value = SimpleNamespace(data=ontologies)
-    ontology_api.get.return_value = (
-        ontologies[0] if ontologies else _ontology()
-    )
+    ontology_api.get.return_value = ontologies[0] if ontologies else _ontology()
     ontology_api.get_full_metadata.return_value = (
         metadata if metadata is not None else _metadata()
     )
@@ -114,8 +112,7 @@ class TestSdkExamples:
         kinds = {binding["kind"] for binding in bindings}
         assert kinds == {"object-fetch", "action-apply", "query-execute"}
         assert any(
-            "client(Restaurant).fetchPage()" in binding["code"]
-            for binding in bindings
+            "client(Restaurant).fetchPage()" in binding["code"] for binding in bindings
         )
 
     def test_python_generates_only_verified_object_bindings(self):

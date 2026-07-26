@@ -364,9 +364,7 @@ def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
             200,
             {
                 "createdObjectTypes": {
-                    "ns0abcde.example-object": (
-                        "ri.ontology.main.object-type.example-object"
-                    )
+                    "ns0abcde.example-object": ("ri.ontology.main.object-type.example-object")
                 }
             },
             '{"createdObjectTypes":{}}',
@@ -423,9 +421,7 @@ def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
     assert object_type["apiName"] == "ExampleObject"
     assert object_type["displayMetadata"]["description"] == "Example entity"
     assert (
-        object_type["propertyTypes"]["id"]["type"]["string"][
-            "supportsExactMatching"
-        ]
+        object_type["propertyTypes"]["id"]["type"]["string"]["supportsExactMatching"]
         is False
     )
     assert modification_request["objectTypeEntityMetadata"][object_type_id] == {
@@ -788,9 +784,7 @@ def test_upsert_object_type_update_refuses_backing_dataset_change(
             "pltr.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
-        pytest.raises(
-            RuntimeError, match="cannot change the backing dataset"
-        ),
+        pytest.raises(RuntimeError, match="cannot change the backing dataset"),
     ):
         service.upsert_object_type(
             ontology_rid="ri.ontology.main.ontology.test",
@@ -901,9 +895,7 @@ def test_delete_object_type_dry_run_is_the_default(mock_object_type_service):
     body = mock_client.conjure.call_args.kwargs["json_body"]
     assert body == {
         "modificationRequest": {
-            "objectTypes": {
-                "ns0abcde.example-object": {"type": "delete", "delete": {}}
-            }
+            "objectTypes": {"ns0abcde.example-object": {"type": "delete", "delete": {}}}
         }
     }
     assert "/modify/dry-run" in mock_client.conjure.call_args.args[1]
@@ -934,8 +926,8 @@ def test_delete_object_type_apply_verifies_gone(mock_object_type_service):
     assert result["verification"]["status"] == "verified"
     calls = mock_client.conjure.call_args_list
     assert "/modify/dry-run" in calls[0].args[1]
-    assert calls[1].args[1].endswith(
-        "/modify?ontologyRid=ri.ontology.main.ontology.test"
+    assert (
+        calls[1].args[1].endswith("/modify?ontologyRid=ri.ontology.main.ontology.test")
     )
     assert calls[1].kwargs["json_body"] == {
         "objectTypes": {"ns0abcde.example-object": {"type": "delete", "delete": {}}}
@@ -997,12 +989,10 @@ def test_upsert_link_type_builds_verified_one_to_many_shape(
 
     assert result["mode"] == "dry-run"
     assert result["linkTypeId"] == "ns0abcde.example-object-owner"
-    modification_request = mock_client.conjure.call_args_list[1].kwargs[
-        "json_body"
-    ]["modificationRequest"]
-    create = modification_request["linkTypes"]["ns0abcde.example-object-owner"][
-        "create"
+    modification_request = mock_client.conjure.call_args_list[1].kwargs["json_body"][
+        "modificationRequest"
     ]
+    create = modification_request["linkTypes"]["ns0abcde.example-object-owner"]["create"]
     link_type = create["linkType"]
     assert link_type["linkTypeId"] == "ns0abcde.example-object-owner"
     one_to_many = link_type["definition"]["oneToMany"]
@@ -1013,10 +1003,7 @@ def test_upsert_link_type_builds_verified_one_to_many_shape(
         "owner_id": "owner_ref"
     }
     assert one_to_many["oneToManyLinkMetadata"]["apiName"] == "exampleObjectOwner"
-    assert (
-        one_to_many["manyToOneLinkMetadata"]["apiName"]
-        == "exampleObjectOwnerReverse"
-    )
+    assert one_to_many["manyToOneLinkMetadata"]["apiName"] == "exampleObjectOwnerReverse"
     assert create["markings"] == []
 
 
@@ -1121,9 +1108,7 @@ def _action_type_definition() -> dict:
 
 def test_action_type_create_normalization_rewrites_validation_keys():
     """Non-UUID validations keys are rewritten and ordering kept in sync."""
-    create = ActionService._normalize_action_type_create(
-        _action_type_definition()
-    )
+    create = ActionService._normalize_action_type_create(_action_type_definition())
 
     assert create["apiName"] == "pltr-test-action"
     (new_key,) = create["validations"].keys()
@@ -1145,9 +1130,7 @@ def test_action_type_create_normalization_keeps_uuid_keys():
     assert create["validationsOrdering"] == [uuid_key]
 
 
-@pytest.mark.parametrize(
-    "missing_key", ["apiName", "logic", "validations"]
-)
+@pytest.mark.parametrize("missing_key", ["apiName", "logic", "validations"])
 def test_action_type_create_normalization_requires_fields(missing_key):
     """Required ActionTypeCreate fields are validated client-side."""
     definition = _action_type_definition()
@@ -1234,9 +1217,7 @@ def test_delete_action_type_resolves_rid_and_verifies_gone(mock_action_service):
             "pltr.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
-        patch.object(
-            ActionService, "get_action_type", return_value={"rid": rid}
-        ),
+        patch.object(ActionService, "get_action_type", return_value={"rid": rid}),
     ):
         result = service.delete_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
@@ -1814,7 +1795,9 @@ def test_get_action_type(mock_action_type_full_metadata_service):
     service, mock_metadata_class = mock_action_type_full_metadata_service
     mock_metadata_class.get.return_value = _sample_action_type_metadata()
 
-    result = service.get_action_type("ri.ontology.main.ontology.test", "modify-example")
+    result = service.get_action_type(
+        "ri.ontology.main.ontology.test", "modify-example"
+    )
 
     assert result["rid"].startswith("ri.actions.main.action-type.")
     assert result["api_name"] == "modify-example"

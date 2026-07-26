@@ -31,7 +31,9 @@ def _check_format(format_type: str) -> None:
         raise typer.BadParameter("must be table or json", param_hint="--format")
 
 
-def _emit(result: Mapping[str, Any], format_type: str, *, result_type: str, human: str) -> None:
+def _emit(
+    result: Mapping[str, Any], format_type: str, *, result_type: str, human: str
+) -> None:
     if resolve_output_format(format_type) == "agent":
         buffer_agent_payload(dict(result), meta={"result_type": result_type})
         return
@@ -118,7 +120,9 @@ def _render_reference(result: Mapping[str, Any]) -> str:
         lines = [f"NOT FOUND: {result.get('reason', 'unknown')}"]
         available = result.get("available") or []
         if available:
-            lines.append("Available: " + ", ".join(str(item) for item in available[:20]))
+            lines.append(
+                "Available: " + ", ".join(str(item) for item in available[:20])
+            )
         return "\n".join(lines) + "\n"
     kind = result.get("kind")
     if kind == "method":
@@ -140,5 +144,7 @@ def _render_reference(result: Mapping[str, Any]) -> str:
         return "\n".join(lines) + "\n"
     lines = [f"namespace {result['namespace']}"]
     for resource, resource_data in (result.get("resources") or {}).items():
-        lines.append(f"  {resource} ({len(resource_data.get('methods') or [])} methods)")
+        lines.append(
+            f"  {resource} ({len(resource_data.get('methods') or [])} methods)"
+        )
     return "\n".join(lines) + "\n"

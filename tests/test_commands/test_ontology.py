@@ -1029,9 +1029,7 @@ def _applied_result(operation: str) -> dict:
 def test_object_type_delete_dry_run_default(mock_services):
     """object-type-delete previews the validated plan without --apply."""
     mock_instance = Mock()
-    mock_instance.delete_object_type.return_value = _dry_run_plan(
-        "object-type-delete"
-    )
+    mock_instance.delete_object_type.return_value = _dry_run_plan("object-type-delete")
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(
@@ -1073,20 +1071,14 @@ def test_object_type_delete_apply_requires_confirmation(mock_services):
 
     assert result.exit_code == 0
     assert mock_instance.delete_object_type.call_count == 2
-    assert mock_instance.delete_object_type.call_args_list[0].kwargs[
-        "apply"
-    ] is False
-    assert mock_instance.delete_object_type.call_args_list[1].kwargs[
-        "apply"
-    ] is True
+    assert mock_instance.delete_object_type.call_args_list[0].kwargs["apply"] is False
+    assert mock_instance.delete_object_type.call_args_list[1].kwargs["apply"] is True
 
 
 def test_object_type_delete_apply_cancelled_without_confirmation(mock_services):
     """Declining the confirmation stops before the real deletion."""
     mock_instance = Mock()
-    mock_instance.delete_object_type.return_value = _dry_run_plan(
-        "object-type-delete"
-    )
+    mock_instance.delete_object_type.return_value = _dry_run_plan("object-type-delete")
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(
@@ -1135,9 +1127,7 @@ def test_object_type_delete_validation_error_exits_nonzero(mock_services):
 def test_link_type_upsert_command(mock_services):
     """link-type-upsert forwards the contract options to the service."""
     mock_instance = Mock()
-    mock_instance.upsert_link_type.return_value = _dry_run_plan(
-        "link-type-upsert"
-    )
+    mock_instance.upsert_link_type.return_value = _dry_run_plan("link-type-upsert")
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(
@@ -1178,9 +1168,7 @@ def test_link_type_upsert_command(mock_services):
 def test_link_type_delete_dry_run_default(mock_services):
     """link-type-delete previews the validated plan without --apply."""
     mock_instance = Mock()
-    mock_instance.delete_link_type.return_value = _dry_run_plan(
-        "link-type-delete"
-    )
+    mock_instance.delete_link_type.return_value = _dry_run_plan("link-type-delete")
     mock_services["object_type"].return_value = mock_instance
 
     result = runner.invoke(
@@ -1209,9 +1197,7 @@ def test_action_type_upsert_command(mock_services, tmp_path):
         )
     )
     mock_instance = Mock()
-    mock_instance.upsert_action_type.return_value = _dry_run_plan(
-        "action-type-upsert"
-    )
+    mock_instance.upsert_action_type.return_value = _dry_run_plan("action-type-upsert")
     mock_services["action"].return_value = mock_instance
 
     result = runner.invoke(
@@ -1254,9 +1240,7 @@ def test_action_type_upsert_invalid_json(mock_services, tmp_path):
 def test_action_type_delete_dry_run_default(mock_services):
     """action-type-delete previews the validated plan without --apply."""
     mock_instance = Mock()
-    mock_instance.delete_action_type.return_value = _dry_run_plan(
-        "action-type-delete"
-    )
+    mock_instance.delete_action_type.return_value = _dry_run_plan("action-type-delete")
     mock_services["action"].return_value = mock_instance
 
     result = runner.invoke(

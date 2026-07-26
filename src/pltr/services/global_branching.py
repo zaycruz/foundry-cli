@@ -5,8 +5,7 @@ Load-by-RID reads and plan-first writes backed by the internal
 ``branch-service`` API (base ``/branch-service/api``). There is no list
 endpoint; load-by-RID only.
 
-Write contracts, verified end-to-end against a live Foundry deployment (2026-07-25,
-``the captured contract``, derived from
+Write contracts, verified end-to-end against a live Foundry deployment (2026-07-25,, derived from
 ``@palantir/mcp`` 0.408.0 client contract):
 
 - ``POST /branch/create`` takes ``{description, displayName, ontologyRid,
@@ -33,7 +32,7 @@ Write contracts, verified end-to-end against a live Foundry deployment (2026-07-
   ``PUT /branch/proposal/close/{proposalRid}`` take an empty body with the
   RID in the path and return ``200 {}``.
 
-Earlier 2026-07-24 validation (``the captured contract``) never
+Earlier 2026-07-24 validation never
 got the creates past ``400 Default:InvalidArgument`` because it guessed
 ``namespaceRid`` instead of ``compassNamespaceRid`` and omitted
 ``resourcesToAdd``/``mergeTo``; the MCP capture recovered the exact bodies.
@@ -230,7 +229,7 @@ class GlobalBranchService(_BranchServiceBase):
     BRANCH_RID_PREFIX = "ri.branch..branch."
     CREATE_CONTRACT = (
         "contract-verified via @palantir/mcp client contract "
-        "(the captured contract): POST "
+        ": POST "
         "/branch/create with {description, displayName, ontologyRid, "
         "resourcesToAdd, compassNamespaceRid}; compassNamespaceRid resolved "
         "from POST /ontology-metadata/api/ontology/v2/load/all. Success "
@@ -421,7 +420,7 @@ class GlobalProposalService(_BranchServiceBase):
     MERGE_TO_MAIN: Dict[str, Any] = {"main": {}, "type": "main"}
     CREATE_CONTRACT = (
         "contract-verified via @palantir/mcp client contract "
-        "(the captured contract): POST "
+        ": POST "
         "/branch/proposal/create with {branchRid, displayName, description, "
         "mergeTo}; mergeTo is the ProposalMergeTo Conjure union with two "
         'arms: {"main": {}, "type": "main"} (contract-verified 200) and '

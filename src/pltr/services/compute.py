@@ -2,8 +2,7 @@
 Compute Modules service wrapper.
 
 Backed by the internal gateways the Palantir MCP compute-module tools use,
-per the 2026-07-25 client contract against a live Foundry deployment
-(``the captured contract``). The MCP does NOT call the
+per the 2026-07-25 client contract against a live Foundry deployment. The MCP does NOT call the
 module-group service at its own mount (``/module-group/api/...`` is
 ``Route:RouteNotMounted`` on every stack verified); everything goes
 through gateways that ARE mounted:

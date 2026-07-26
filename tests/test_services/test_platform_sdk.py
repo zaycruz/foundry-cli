@@ -7,7 +7,7 @@ from pathlib import Path
 from pltr.services.platform_sdk import PlatformSdkService
 
 
-CLIENT_PY = '''
+CLIENT_PY = """
 from functools import cached_property
 
 
@@ -25,7 +25,7 @@ class DemoClient:
         )  # NOQA
 
         return GadgetClient(auth=self._auth)
-'''
+"""
 
 WIDGET_PY = '''
 class WidgetClient:

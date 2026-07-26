@@ -4,11 +4,11 @@ Ontology Global Branch and Global Proposal operations, backed by the
 internal `branch-service` API. There are no list endpoints; load-by-RID
 only. All contracts (loads, creates, closes) were verified end-to-end on
 a live Foundry deployment 2026-07-25 — request/response shapes derived from
-`@palantir/mcp` client contract (`the captured contract`)
+`@palantir/mcp` client contract ()
 and confirmed by a live create→load→proposal→close→close run
-(`the captured contract`).
+().
 The `mergeTo` union arms and `resourcesToAdd` element shape were verified
-separately (`the captured contract`).
+separately ().
 
 Write commands are plan-first: they print a dry-run plan by default and
 issue no network request. A real mutation requires `--apply`; destructive

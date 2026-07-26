@@ -113,7 +113,7 @@ class TestGlobalBranchGetCommand:
 class TestGlobalBranchCreateCommand:
     """Test cases for `global-branch create` (plan-first)."""
 
-    ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000003"
+    ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000002"
 
     def setup_method(self):
         """Set up test fixtures."""

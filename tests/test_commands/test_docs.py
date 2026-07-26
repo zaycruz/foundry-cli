@@ -75,7 +75,10 @@ def test_page_command():
             app, ["docs", "page", "/foundry/transforms-python/overview/"]
         )
     assert result.exit_code == 0, result.output
-    assert "Source: https://www.palantir.com/docs/foundry/transforms-python/overview/" in result.output
+    assert (
+        "Source: https://www.palantir.com/docs/foundry/transforms-python/overview/"
+        in result.output
+    )
     assert "Real body." in result.output
 
 
@@ -150,9 +153,7 @@ def test_search_command_shows_partial_coverage():
 def test_agent_mode_emits_single_envelope():
     with patch("pltr.commands.docs.DocumentationService") as service:
         service.return_value.fetch_page.return_value = PAGE
-        result = runner.invoke(
-            app, ["--agent", "docs", "page", "/foundry/x/"]
-        )
+        result = runner.invoke(app, ["--agent", "docs", "page", "/foundry/x/"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["schema_version"] == "pltr-agent-v1"

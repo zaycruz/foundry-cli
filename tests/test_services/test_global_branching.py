@@ -14,8 +14,8 @@ from pltr.services.global_branching import (
 
 BRANCH_RID = "ri.branch..branch.00000000-0000-0000-0000-000000000002"
 PROPOSAL_RID = "ri.branch..proposal.00000000-0000-0000-0000-000000000013"
-ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000003"
-NAMESPACE_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000007"
+ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000002"
+NAMESPACE_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000005"
 
 
 class TestGlobalBranchService:
@@ -536,7 +536,7 @@ class TestBuildMergeTo:
         """Test a non-branch RID is rejected as a merge target."""
         with pytest.raises(ValueError, match="Invalid merge target"):
             GlobalProposalService.build_merge_to(
-                "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000003"
+                "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000002"
             )
 
 

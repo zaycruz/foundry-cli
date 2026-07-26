@@ -14,9 +14,9 @@ from pltr.services.repository import (
     RepositoryShapeError,
 )
 
-REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000014"
-PR_RID = "ri.pull-request.main.pull-request.00000000-0000-0000-0000-000000000012"
-FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000011"
+REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000010"
+PR_RID = "ri.pull-request.main.pull-request.00000000-0000-0000-0000-000000000009"
+FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000008"
 
 
 def _sample_pr():
@@ -103,9 +103,7 @@ class TestPullRequestListCommand:
         mock_service_class.return_value = mock_service
         mock_service.list_pull_requests.return_value = []
 
-        result = self.runner.invoke(
-            app, ["pull-request", "list", "--profile", "test"]
-        )
+        result = self.runner.invoke(app, ["pull-request", "list", "--profile", "test"])
 
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
@@ -233,8 +231,15 @@ class TestContextCommand:
 
         result = self.runner.invoke(
             app,
-            ["context", REPO_RID, "--path", "src", "--ref", "refs/tags/0.3.0",
-             "--no-tree"],
+            [
+                "context",
+                REPO_RID,
+                "--path",
+                "src",
+                "--ref",
+                "refs/tags/0.3.0",
+                "--no-tree",
+            ],
         )
 
         assert result.exit_code == 0
@@ -290,9 +295,7 @@ class TestCloneCommand:
             "status": "cloned",
         }
 
-        result = self.runner.invoke(
-            app, ["clone", REPO_RID, str(tmp_path / "target")]
-        )
+        result = self.runner.invoke(app, ["clone", REPO_RID, str(tmp_path / "target")])
 
         assert result.exit_code == 0
         mock_service.clone_repository.assert_called_once_with(
@@ -316,8 +319,14 @@ class TestCloneCommand:
 
         result = self.runner.invoke(
             app,
-            ["clone", REPO_RID, str(tmp_path / "target"), "--dry-run",
-             "--format", "json"],
+            [
+                "clone",
+                REPO_RID,
+                str(tmp_path / "target"),
+                "--dry-run",
+                "--format",
+                "json",
+            ],
         )
 
         assert result.exit_code == 0
@@ -348,9 +357,7 @@ class TestCloneCommand:
         mock_service_class.return_value = mock_service
         mock_service.clone_repository.side_effect = Exception("network down")
 
-        result = self.runner.invoke(
-            app, ["clone", REPO_RID, str(tmp_path / "target")]
-        )
+        result = self.runner.invoke(app, ["clone", REPO_RID, str(tmp_path / "target")])
 
         assert result.exit_code == 1
         assert "Error cloning repository" in result.stdout

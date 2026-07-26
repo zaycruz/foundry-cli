@@ -45,9 +45,7 @@ def _emit(
 
 def _check_format(format_type: str) -> None:
     if format_type not in _FORMATS:
-        raise typer.BadParameter(
-            "must be markdown or json", param_hint="--format"
-        )
+        raise typer.BadParameter("must be markdown or json", param_hint="--format")
 
 
 def _fail_unless_ok(result: Mapping[str, Any]) -> None:
@@ -78,9 +76,7 @@ def _render_topic(result: Mapping[str, Any]) -> str:
     for page in result.get("pages") or []:
         lines.append(_render_page(page))
     for failure in result.get("failures") or []:
-        lines.append(
-            f"FAILED PAGE: {failure.get('page')} — {failure.get('reason')}\n"
-        )
+        lines.append(f"FAILED PAGE: {failure.get('page')} — {failure.get('reason')}\n")
     related = result.get("related_pages") or []
     if related:
         lines.append("Related pages (from the docs sitemap):")

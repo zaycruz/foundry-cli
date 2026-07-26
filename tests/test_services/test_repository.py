@@ -14,9 +14,9 @@ from pltr.services.repository import (
     RepositoryShapeError,
 )
 
-REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000014"
-OTHER_REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000005"
-PR_RID = "ri.pull-request.main.pull-request.00000000-0000-0000-0000-000000000012"
+REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000010"
+OTHER_REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000003"
+PR_RID = "ri.pull-request.main.pull-request.00000000-0000-0000-0000-000000000009"
 
 
 def _sample_pr(rid=PR_RID, repo=REPO_RID):
@@ -224,7 +224,11 @@ class TestGetPullRequest:
 
 
 REPO_GET = {"rid": REPO_RID, "sourceRid": None}
-COMPASS_GET = {"rid": REPO_RID, "name": "example_repo", "path": "/Example/Apps/example_repo"}
+COMPASS_GET = {
+    "rid": REPO_RID,
+    "name": "example_repo",
+    "path": "/Example/Apps/example_repo",
+}
 HEAD_GET = {
     "commitish": "refs/heads/master",
     "peeledCommitHash": "1c4aa0d9eb1fbbe1da28cece1eac08434432467c",
@@ -283,9 +287,7 @@ class TestGetRepositoryContext:
         assert [entry["path"] for entry in tree["entries"]] == ["", "README.md"]
         # Tree at the default branch forwards the head commitish as ?ref=
         tree_call = mock_client.conjure.call_args_list[-1]
-        assert tree_call.args[1].endswith(
-            "paths/tree/?ref=refs/heads/master"
-        )
+        assert tree_call.args[1].endswith("paths/tree/?ref=refs/heads/master")
 
     @patch("pltr.services.repository.FoundryInternalClient")
     def test_context_explicit_ref_and_path(self, mock_client_class):
@@ -452,11 +454,14 @@ class TestCloneRepository:
         ]
 
         service = RepositoryService(profile="test")
-        with patch.object(
-            RepositoryService,
-            "_git_credentials",
-            return_value=("https://foundry.example.com", "secret-token"),
-        ), patch("subprocess.run") as mock_run:
+        with (
+            patch.object(
+                RepositoryService,
+                "_git_credentials",
+                return_value=("https://foundry.example.com", "secret-token"),
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             plan = service.clone_repository(REPO_RID, "/tmp/target", dry_run=True)
 
         assert plan["status"] == "dry-run"
@@ -478,11 +483,14 @@ class TestCloneRepository:
         (tmp_path / "existing.txt").write_text("keep me")
 
         service = RepositoryService(profile="test")
-        with patch.object(
-            RepositoryService,
-            "_git_credentials",
-            return_value=("https://foundry.example.com", "secret-token"),
-        ), patch("subprocess.run") as mock_run:
+        with (
+            patch.object(
+                RepositoryService,
+                "_git_credentials",
+                return_value=("https://foundry.example.com", "secret-token"),
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             with pytest.raises(RepositoryCloneError, match="refusing to overwrite"):
                 service.clone_repository(REPO_RID, str(tmp_path))
 
@@ -504,15 +512,16 @@ class TestCloneRepository:
         target = tmp_path / "clone-target"
 
         service = RepositoryService(profile="test")
-        with patch.object(
-            RepositoryService,
-            "_git_credentials",
-            return_value=("https://foundry.example.com", "secret-token"),
-        ), patch("subprocess.run") as mock_run:
+        with (
+            patch.object(
+                RepositoryService,
+                "_git_credentials",
+                return_value=("https://foundry.example.com", "secret-token"),
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.return_value = Mock(returncode=0, stderr="", stdout="")
-            plan = service.clone_repository(
-                REPO_RID, str(target), branch="master"
-            )
+            plan = service.clone_repository(REPO_RID, str(target), branch="master")
 
         assert plan["status"] == "cloned"
         cmd, kwargs = mock_run.call_args.args[0], mock_run.call_args.kwargs
@@ -537,11 +546,14 @@ class TestCloneRepository:
         target = tmp_path / "clone-target"
 
         service = RepositoryService(profile="test")
-        with patch.object(
-            RepositoryService,
-            "_git_credentials",
-            return_value=("https://foundry.example.com", "secret-token"),
-        ), patch("subprocess.run") as mock_run:
+        with (
+            patch.object(
+                RepositoryService,
+                "_git_credentials",
+                return_value=("https://foundry.example.com", "secret-token"),
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.return_value = Mock(
                 returncode=128, stderr="fatal: auth failed for secret-token", stdout=""
             )
@@ -564,19 +576,22 @@ class TestCloneRepository:
         ]
 
         service = RepositoryService(profile="test")
-        with patch.object(
-            RepositoryService,
-            "_git_credentials",
-            return_value=("https://foundry.example.com", "secret-token"),
-        ), patch("shutil.which", return_value=None):
+        with (
+            patch.object(
+                RepositoryService,
+                "_git_credentials",
+                return_value=("https://foundry.example.com", "secret-token"),
+            ),
+            patch("shutil.which", return_value=None),
+        ):
             with pytest.raises(RepositoryCloneError, match="git is not available"):
                 service.clone_repository(REPO_RID, str(tmp_path / "t"))
 
 
-FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000011"
-PROJECT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000009"
+FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000008"
+PROJECT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000006"
 PROJECT_PATH = "/Example-000000/Shared Ontology"
-NEW_REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000010"
+NEW_REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000007"
 
 RESOLVE_PROJECT = (200, {FOLDER_RID: PROJECT_RID}, "{}")
 PROJECT_V3 = (
@@ -638,9 +653,7 @@ class TestCreatePythonTransforms:
         mock_client.conjure.side_effect = [RESOLVE_PROJECT, PROJECT_V3]
 
         service = RepositoryService(profile="test")
-        plan = service.create_python_transforms_plan(
-            "test-pull-request-1", FOLDER_RID
-        )
+        plan = service.create_python_transforms_plan("test-pull-request-1", FOLDER_RID)
 
         assert plan["status"] == "dry-run"
         assert plan["project_rid"] == PROJECT_RID

@@ -159,3 +159,6 @@ credentials.json
 # Local dependency-analysis outputs may contain tenant metadata.
 /artifacts/
 /data/
+
+# Internal planning, capability, and verification docs — not published.
+/docs/

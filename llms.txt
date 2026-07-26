@@ -58,5 +58,4 @@ For CI gating use `--output-mode ci`: exit 0 is clean, 2 needs verification, 1 i
 - Skill bundle (how an agent should drive pltr): https://github.com/zaycruz/pltr-cli/blob/main/skills/pltr-cli/SKILL.md
 - Repository agent rules and the mandatory change-impact gate: https://github.com/zaycruz/pltr-cli/blob/main/AGENTS.md
 - Dependency command reference: https://github.com/zaycruz/pltr-cli/blob/main/skills/pltr-cli/reference/dependency-commands.md
-- Full command reference: https://github.com/zaycruz/pltr-cli/blob/main/docs/user-guide/commands.md
 - README: https://github.com/zaycruz/pltr-cli/blob/main/README.md

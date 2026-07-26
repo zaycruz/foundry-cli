@@ -375,9 +375,9 @@ def _warn_on_unverified(result: dict) -> None:
     verification = result.get("verification") if isinstance(result, dict) else None
     # "skipped" is a deliberate no-op (nothing to apply), not a verification
     # failure; only "not-verified" warrants a warning.
-    if (
-        isinstance(verification, dict)
-        and verification.get("status") not in ("verified", "skipped")
+    if isinstance(verification, dict) and verification.get("status") not in (
+        "verified",
+        "skipped",
     ):
         formatter.print_warning(
             f"Mutation applied but not verified: {verification.get('detail')}"
@@ -452,8 +452,7 @@ def delete_object_type(
         )
         if not apply:
             formatter.print_info(
-                f"Dry-run only; pass --apply to delete object type "
-                f"{object_type_id}."
+                f"Dry-run only; pass --apply to delete object type {object_type_id}."
             )
             return
         if not require_confirmation(
@@ -603,8 +602,7 @@ def delete_link_type(
         )
         if not apply:
             formatter.print_info(
-                f"Dry-run only; pass --apply to delete link type "
-                f"{link_type_id}."
+                f"Dry-run only; pass --apply to delete link type {link_type_id}."
             )
             return
         if not require_confirmation(
@@ -661,8 +659,7 @@ def upsert_action_type(
     objects), step 7 (regenerate OSDK), and step 8 (enable the
     corresponding application controls).
 
-    The definition is an ActionTypeCreate JSON document (see
-    the captured contract section 4). Existing action types
+    The definition is an ActionTypeCreate JSON document ( section 4). Existing action types
     are not updated yet; the create validation reports that case explicitly.
     """
     try:
@@ -733,8 +730,7 @@ def delete_action_type(
         )
         if not apply:
             formatter.print_info(
-                f"Dry-run only; pass --apply to delete action type "
-                f"{action_type}."
+                f"Dry-run only; pass --apply to delete action type {action_type}."
             )
             return
         if not require_confirmation(

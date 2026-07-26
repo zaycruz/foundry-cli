@@ -21,15 +21,14 @@ Pull-request reads plus contract-verified writes backed by the internal
   posture. Both write contracts were established with strict
   deserialization probes that stop short of any 200 and then verified
   end-to-end on a disposable test pull request (closed unmerged
-  afterward); see ``the captured contract``.
+  afterward).
 - ``PUT /stemma-pull-request/api/pulls/{pullRequestRid}/update`` closes a
   pull request with ``{"title": <current title>, "status": "CLOSED"}``
   (both fields required; the title is read from the verified get first).
   Dry-run plan by default; the real close sits behind ``--apply --yes``.
-  See ``the captured contract``.
 
 Repository context (contract-verified on a live Foundry deployment, probes retained
-under ``the captured contract``):
+under):
 
 - ``GET /stemma/api/repos/{repositoryRid}`` returns ``{"rid", "sourceRid"}``.
 - ``GET /stemma/api/repos/{repositoryRid}/head`` returns
@@ -53,8 +52,7 @@ rc 128). Bearer-token auth via ``http.extraHeader`` passed through
 written into the clone's config, never printed.
 
 Python transforms repository creation (contract derived from Palantir MCP
-the client contract 2026-07-25 on a live Foundry deployment, see
-``the captured contract`` and the pltr live
+the client contract 2026-07-25 on a live Foundry deployment, see and the pltr live
 verification in ``repo-create-live-verification.md``): the folder RID is
 resolved to its enclosing project and the project's Compass path via the
 read-PUT batch endpoints ``PUT /compass/api/hierarchy/v2/batch/resources/
@@ -238,7 +236,7 @@ class RepositoryService(BaseService):
     #: Evidence for the POST /pulls request contract.
     PULL_REQUEST_CREATE_CONTRACT_EVIDENCE = (
         "POST /stemma-pull-request/api/pulls contract contract-verified "
-        "2026-07-24 on a live Foundry deployment (the captured contract): "
+        "2026-07-24 on a live Foundry deployment: "
         "strict deserialization (400 Default:InvalidArgument on empty "
         "body, bogus keys, and headBranchName-style variants); "
         "{title, baseRepositoryRid, headRepositoryRid, baseBranchName, "
@@ -257,7 +255,7 @@ class RepositoryService(BaseService):
     PULL_REQUEST_COMMENT_CONTRACT_EVIDENCE = (
         "POST /stemma-pull-request/api/pulls/{pullRequestRid}/comments/"
         "global contract contract-verified on a live Foundry deployment "
-        "(the captured contract): strict deserialization (400 "
+        ": strict deserialization (400 "
         "Default:InvalidArgument on empty body, bogus keys, and "
         "text/body/markdown variants); {content} passed deserialization "
         "and failed only semantically (403 "
@@ -424,7 +422,7 @@ class RepositoryService(BaseService):
     # Pull-request close
     #
     # Contract contract-verified on a live Foundry deployment during the
-    # pr-write cleanup (the captured contract): PUT
+    # pr-write cleanup: PUT
     # /stemma-pull-request/api/pulls/{pullRequestRid}/update with
     # {"title": <current title>, "status": "CLOSED"} -> 200; probes with
     # {}, {"status"} alone, and {"title"} alone all 400, so both fields
@@ -436,7 +434,7 @@ class RepositoryService(BaseService):
     PULL_REQUEST_CLOSE_CONTRACT_EVIDENCE = (
         "PUT /stemma-pull-request/api/pulls/{pullRequestRid}/update close "
         "contract contract-verified on a live Foundry deployment "
-        "(the captured contract): probes with {}, "
+        ": probes with {}, "
         '{"status": "CLOSED"} alone, and {"title": ...} alone all failed '
         "deserialization with 400 Default:InvalidArgument; "
         '{"title": <current title>, "status": "CLOSED"} returned 200 and '
@@ -973,7 +971,7 @@ class RepositoryService(BaseService):
     #
     # Contract derived from the Palantir MCP client contract
     # (@palantir/mcp 0.408.0) traffic on a live Foundry deployment
-    # (the captured contract): the MCP resolves
+    #: the MCP resolves
     # the folder RID to its enclosing project, reads the project's Compass
     # path, creates the repository with a single {"path": ...} stemma
     # body, and applies the Python transforms template with a second
@@ -995,7 +993,7 @@ class RepositoryService(BaseService):
     CREATE_CONTRACT_EVIDENCE = (
         "Repository creation contract derived from the Palantir MCP client contract "
         "(@palantir/mcp 0.408.0) traffic 2026-07-25 on a live Foundry deployment "
-        "(the captured contract): folder RID -> "
+        ": folder RID -> "
         "enclosing project via PUT /compass/api/hierarchy/v2/batch/"
         "resources/projects; project Compass path via PUT /compass/api/"
         'hierarchy/v2/batch/projects-v3 (decorations ["path"]); '

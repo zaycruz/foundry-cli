@@ -1110,7 +1110,7 @@ class TestWebhookUpdateCommand:
 class TestRestSourceCreateCommand:
     """Test cases for `connectivity rest-source create` (plan-first)."""
 
-    PARENT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000006"
+    PARENT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000004"
     EGRESS_RID = (
         "ri.resource-policy-manager.global.network-egress-policy."
         "00000000-0000-0000-0000-000000000027"

@@ -20,7 +20,9 @@ _MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
 # Verified live 2026-07-24 on a live Foundry deployment: OntologyMetadataService.bulkLoadOntologyEntities
 # loads the current state of entities keyed by ObjectTypeId/LinkTypeId. The
 # response carries the full _api ObjectType used to build update modifications.
-_BULK_LOAD_ENTITIES_ENDPOINT = "/ontology-metadata/api/ontology/ontology/bulkLoadEntities"
+_BULK_LOAD_ENTITIES_ENDPOINT = (
+    "/ontology-metadata/api/ontology/ontology/bulkLoadEntities"
+)
 _NAMESPACE_PROBE_OBJECT_TYPE_ID = "probe.bad-id"
 
 # Terminal error names that prove an entity is gone when a delete is
@@ -51,8 +53,7 @@ _OBJECT_TYPE_ALREADY_EXISTS_NAMES = {
 
 _COMMON_ERROR_MESSAGES = {
     "InvalidObjectTypeId": (
-        "Foundry rejected the generated object type ID for this "
-        "ontology namespace"
+        "Foundry rejected the generated object type ID for this ontology namespace"
     ),
     "CannotCreateV1ObjectType": (
         "Foundry requires objectStorageV2 metadata for new object types"
@@ -64,9 +65,7 @@ _COMMON_ERROR_MESSAGES = {
         "the backing dataset has no schema; apply a schema to the "
         "dataset before creating the object type"
     ),
-    "TooManyObjectTypesInOntology": (
-        "the ontology has reached its object type limit"
-    ),
+    "TooManyObjectTypesInOntology": ("the ontology has reached its object type limit"),
 }
 
 
@@ -146,8 +145,7 @@ def _format_validation_error(error: Mapping[str, Any], *, entity: str) -> str:
             # when already-exists arrives mixed with other create errors.
             return f"{entity} already exists ({error_name})"
         return (
-            f"{entity} already exists; update path not yet implemented "
-            f"({error_name})"
+            f"{entity} already exists; update path not yet implemented ({error_name})"
         )
     mapped = _COMMON_ERROR_MESSAGES.get(terminal_name)
     if mapped:
@@ -180,9 +178,7 @@ def _run_dry_run_collect(
         json_body={"modificationRequest": modification_request},
         expected=200,
     )
-    _require_successful_internal_response(
-        status, parsed, raw, operation=operation
-    )
+    _require_successful_internal_response(status, parsed, raw, operation=operation)
     if isinstance(parsed, Mapping) and parsed.get("type") == "success":
         return [], []
     errors = _dry_run_errors(parsed)
@@ -195,10 +191,7 @@ def _run_dry_run_collect(
                     _error_terminal_name(str(error_data.get("errorName") or ""))
                 )
         return (
-            [
-                _format_validation_error(error, entity=entity)
-                for error in errors
-            ],
+            [_format_validation_error(error, entity=entity) for error in errors],
             names,
         )
     raise RuntimeError(
@@ -236,9 +229,7 @@ def _strip_nulls(value: Any) -> Any:
     """
     if isinstance(value, Mapping):
         return {
-            key: _strip_nulls(item)
-            for key, item in value.items()
-            if item is not None
+            key: _strip_nulls(item) for key, item in value.items() if item is not None
         }
     if isinstance(value, list):
         return [_strip_nulls(item) for item in value]
@@ -260,13 +251,10 @@ def _run_modify(
         json_body=modification_request,
         expected=200,
     )
-    _require_successful_internal_response(
-        status, parsed, raw, operation=operation
-    )
+    _require_successful_internal_response(status, parsed, raw, operation=operation)
     if not isinstance(parsed, Mapping):
         raise RuntimeError(
-            f"{operation} returned an invalid response shape: "
-            "expected a JSON object"
+            f"{operation} returned an invalid response shape: expected a JSON object"
         )
     return parsed
 
@@ -281,9 +269,7 @@ def _collect_terminal_error_names(status: int, payload: Any) -> List[str]:
     for error in _dry_run_errors(payload):
         error_data = error.get("errorData")
         if isinstance(error_data, Mapping):
-            names.append(
-                _error_terminal_name(str(error_data.get("errorName") or ""))
-            )
+            names.append(_error_terminal_name(str(error_data.get("errorName") or "")))
     return names
 
 
@@ -313,9 +299,7 @@ def _verify_entity_gone(
     if status in (200, 400) and any(name in names for name in terminal_names):
         return {
             "status": "verified",
-            "detail": (
-                "post-delete dry-run now reports the entity as not found"
-            ),
+            "detail": ("post-delete dry-run now reports the entity as not found"),
         }
     if (
         status == 200
@@ -325,15 +309,13 @@ def _verify_entity_gone(
         return {
             "status": "not-verified",
             "detail": (
-                "post-delete dry-run still validates, so the entity "
-                "may not be deleted"
+                "post-delete dry-run still validates, so the entity may not be deleted"
             ),
         }
     return {
         "status": "not-verified",
         "detail": (
-            f"post-delete verification inconclusive (HTTP {status}): "
-            f"{str(raw)[:200]}"
+            f"post-delete verification inconclusive (HTTP {status}): {str(raw)[:200]}"
         ),
     }
 
@@ -357,14 +339,11 @@ def _verify_entity_present(
         expected=200,
     )
     terminal_names = _collect_terminal_error_names(status, parsed)
-    if status == 200 and any(
-        "AlreadyExist" in name for name in terminal_names
-    ):
+    if status == 200 and any("AlreadyExist" in name for name in terminal_names):
         return {
             "status": "verified",
             "detail": (
-                "post-create dry-run now reports the entity as "
-                "already existing"
+                "post-create dry-run now reports the entity as already existing"
             ),
         }
     if (
@@ -382,8 +361,7 @@ def _verify_entity_present(
     return {
         "status": "not-verified",
         "detail": (
-            f"post-create verification inconclusive (HTTP {status}): "
-            f"{str(raw)[:200]}"
+            f"post-create verification inconclusive (HTTP {status}): {str(raw)[:200]}"
         ),
     }
 
@@ -391,12 +369,8 @@ def _verify_entity_present(
 def _entity_id_suffix(api_name: str) -> str:
     """Convert an API name into the lower-kebab ID required by OMS."""
     with_word_boundaries = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", api_name)
-    with_word_boundaries = re.sub(
-        r"([a-z0-9])([A-Z])", r"\1-\2", with_word_boundaries
-    )
-    suffix = re.sub(r"[^a-z0-9]+", "-", with_word_boundaries.casefold()).strip(
-        "-"
-    )
+    with_word_boundaries = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", with_word_boundaries)
+    suffix = re.sub(r"[^a-z0-9]+", "-", with_word_boundaries.casefold()).strip("-")
     if not suffix or not suffix[0].isalpha():
         raise RuntimeError(
             f"Cannot derive a valid entity ID from API name {api_name!r}; "
@@ -698,8 +672,7 @@ class ObjectTypeService(BaseService):
             entity="object type",
         )
         if terminal_names and all(
-            name in _OBJECT_TYPE_ALREADY_EXISTS_NAMES
-            for name in terminal_names
+            name in _OBJECT_TYPE_ALREADY_EXISTS_NAMES for name in terminal_names
         ):
             return self._update_existing_object_type(
                 client,
@@ -760,9 +733,7 @@ class ObjectTypeService(BaseService):
             "mode": "applied",
             "rid": rid,
             "validation": {"status": "success", "errors": []},
-            "verification": self._verify_object_type_present(
-                ontology_rid, api_name
-            ),
+            "verification": self._verify_object_type_present(ontology_rid, api_name),
         }
 
     def _update_existing_object_type(
@@ -869,9 +840,7 @@ class ObjectTypeService(BaseService):
         return result
 
     @staticmethod
-    def _load_object_type_state(
-        client: Any, object_type_id: str
-    ) -> Mapping[str, Any]:
+    def _load_object_type_state(client: Any, object_type_id: str) -> Mapping[str, Any]:
         """Load an object type's current state via bulkLoadEntities.
 
         Endpoint verified live 2026-07-24 on a live Foundry deployment. Requested entities that
@@ -1003,9 +972,7 @@ class ObjectTypeService(BaseService):
             rid_to_id[property_rid] = property_id
             property_mods[property_id] = {
                 key: value
-                for key, value in (
-                    (key, loaded_property.get(key)) for key in copy_keys
-                )
+                for key, value in ((key, loaded_property.get(key)) for key in copy_keys)
                 if value is not None
             }
 
@@ -1197,9 +1164,7 @@ class ObjectTypeService(BaseService):
             ),
         }
 
-    def _discover_object_type_namespace(
-        self, client: Any, ontology_rid: str
-    ) -> str:
+    def _discover_object_type_namespace(self, client: Any, ontology_rid: str) -> str:
         """Discover the ontology ID namespace via a deliberate ID error."""
         dry_run_url, _ = _modify_urls(ontology_rid)
         probe_request = self._build_object_type_modification_request(
@@ -1230,10 +1195,7 @@ class ObjectTypeService(BaseService):
         except Exception as e:
             return {
                 "status": "not-verified",
-                "detail": (
-                    "read-back via SDK ontologies ObjectType.get failed: "
-                    f"{e}"
-                ),
+                "detail": (f"read-back via SDK ontologies ObjectType.get failed: {e}"),
             }
         return {
             "status": "verified",
@@ -2192,8 +2154,7 @@ class ActionService(BaseService):
     ) -> Dict[str, Any]:
         """Create an action type through the verified modifyOntology contract.
 
-        ``definition`` is an ``ActionTypeCreate`` JSON document (see
-        the captured contract §4). It must contain
+        ``definition`` is an ``ActionTypeCreate`` JSON document ( §4). It must contain
         ``apiName``, ``logic``, and at least one action-type-level entry in
         ``validations`` — all required by Foundry. ``actionTypesToCreate``
         and ``validations`` map keys must be UUID strings on the wire, so
@@ -2268,9 +2229,7 @@ class ActionService(BaseService):
             **plan,
             "mode": "applied",
             "validation": {"status": "success", "errors": []},
-            "verification": self._verify_action_type_present(
-                ontology_rid, api_name
-            ),
+            "verification": self._verify_action_type_present(ontology_rid, api_name),
         }
         if isinstance(rid, str):
             result["rid"] = rid
@@ -2361,13 +2320,9 @@ class ActionService(BaseService):
             )
         api_name = definition.get("apiName")
         if not isinstance(api_name, str) or not api_name:
-            raise RuntimeError(
-                "Action type definition requires a non-empty 'apiName'"
-            )
+            raise RuntimeError("Action type definition requires a non-empty 'apiName'")
         logic = definition.get("logic")
-        if not isinstance(logic, Mapping) or not isinstance(
-            logic.get("rules"), list
-        ):
+        if not isinstance(logic, Mapping) or not isinstance(logic.get("rules"), list):
             raise RuntimeError(
                 "Action type definition requires 'logic' with a 'rules' list"
             )
@@ -2413,9 +2368,7 @@ class ActionService(BaseService):
             }
         return {
             "status": "verified",
-            "detail": (
-                "read back via SDK ontologies ActionTypeFullMetadata.get"
-            ),
+            "detail": ("read back via SDK ontologies ActionTypeFullMetadata.get"),
         }
 
     def _format_action_type_info(self, metadata: Any) -> Dict[str, Any]:

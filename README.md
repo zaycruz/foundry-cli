@@ -64,7 +64,7 @@ export FOUNDRY_HOST="foundry.company.com"
 pltr verify
 ```
 
-OAuth2 uses `FOUNDRY_CLIENT_ID` and `FOUNDRY_CLIENT_SECRET` instead of `FOUNDRY_TOKEN`. See [Authentication Setup](docs/user-guide/authentication.md).
+OAuth2 uses `FOUNDRY_CLIENT_ID` and `FOUNDRY_CLIENT_SECRET` instead of `FOUNDRY_TOKEN`.
 
 ---
 
@@ -232,7 +232,7 @@ pltr shell                                         # REPL with tab completion + 
 pltr completion install                            # bash / zsh / fish completion
 ```
 
-Full command list: `pltr --help`, or per command `pltr <command> --help`. See the [Command Reference](docs/user-guide/commands.md) and [Common Workflows](docs/user-guide/workflows.md).
+Full command list: `pltr --help`, or per command `pltr <command> --help`.
 
 ---
 
@@ -277,7 +277,7 @@ uv run ruff check src/ && uv run ruff format src/
 uv run mypy src/
 ```
 
-**Architecture** is layered: CLI (Typer) → command layer (validation) → service layer (`foundry-platform-sdk`) → auth (keyring). Agent output and dependency analysis live in `src/pltr/utils/` and `src/pltr/services/`. See [API Wrapper Documentation](docs/api/wrapper.md) and [`CONCEPTS.md`](CONCEPTS.md).
+**Architecture** is layered: CLI (Typer) → command layer (validation) → service layer (`foundry-platform-sdk`) → auth (keyring). Agent output and dependency analysis live in `src/pltr/utils/` and `src/pltr/services/`. See [`CONCEPTS.md`](CONCEPTS.md).
 
 When extending the SDK surface, be exact about what Foundry exposes and preserve explicit gaps instead of guessing — see [`AGENTS.md`](AGENTS.md).
 

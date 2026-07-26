@@ -28,8 +28,7 @@ from .documentation import DocumentationService, extract_code_blocks
 _VENDORED_OSDK_PACKAGE = {
     "name": "@osdk/foundry.ontologies",
     "version": "2.69.0",
-    "provenance": "the captured contract "
-    "(build/esm/public/*.d.ts)",
+    "provenance": "the captured contract (build/esm/public/*.d.ts)",
 }
 _VENDORED_MAKER_PACKAGE = {
     "name": "@osdk/maker",
@@ -37,20 +36,65 @@ _VENDORED_MAKER_PACKAGE = {
     "provenance": "the captured contract",
 }
 _OSDK_COMPONENTS: dict[str, list[str]] = {
-    "Action": ["apply", "applyAsync", "applyBatch", "applyWithOverrides", "applyBatchWithOverrides"],
+    "Action": [
+        "apply",
+        "applyAsync",
+        "applyBatch",
+        "applyWithOverrides",
+        "applyBatchWithOverrides",
+    ],
     "ActionTypeFullMetadata": ["list", "get"],
     "ActionTypeV2": ["list", "search", "get", "getByRid", "getByRidBatch"],
     "Attachment": ["upload", "uploadWithRid", "read", "get"],
-    "AttachmentPropertyV2": ["getAttachment", "getAttachmentByRid", "readAttachment", "readAttachmentByRid"],
+    "AttachmentPropertyV2": [
+        "getAttachment",
+        "getAttachmentByRid",
+        "readAttachment",
+        "readAttachmentByRid",
+    ],
     "CipherTextProperty": ["decrypt", "encryptWithDefaultChannel", "encrypt"],
     "GeotemporalSeriesProperty": ["loadGeotemporalSeriesEntries"],
     "LinkedObjectV2": ["listLinkedObjects", "getLinkedObject"],
     "MediaReferenceProperty": ["getMediaContent", "getMediaMetadata", "upload"],
-    "ObjectTypeV2": ["list", "get", "getByRidBatch", "getFullMetadata", "getEditsHistory", "listOutgoingLinkTypes", "getOutgoingLinkType", "getOutgoingLinkTypesByObjectTypeRidBatch"],
-    "OntologyInterface": ["list", "get", "listObjectsForInterface", "search", "aggregate", "listOutgoingInterfaceLinkTypes", "getOutgoingInterfaceLinkType", "listInterfaceLinkedObjects"],
-    "OntologyObjectSet": ["createTemporary", "get", "load", "loadMultipleObjectTypes", "loadObjectsOrInterfaces", "aggregate", "loadLinks"],
+    "ObjectTypeV2": [
+        "list",
+        "get",
+        "getByRidBatch",
+        "getFullMetadata",
+        "getEditsHistory",
+        "listOutgoingLinkTypes",
+        "getOutgoingLinkType",
+        "getOutgoingLinkTypesByObjectTypeRidBatch",
+    ],
+    "OntologyInterface": [
+        "list",
+        "get",
+        "listObjectsForInterface",
+        "search",
+        "aggregate",
+        "listOutgoingInterfaceLinkTypes",
+        "getOutgoingInterfaceLinkType",
+        "listInterfaceLinkedObjects",
+    ],
+    "OntologyObjectSet": [
+        "createTemporary",
+        "get",
+        "load",
+        "loadMultipleObjectTypes",
+        "loadObjectsOrInterfaces",
+        "aggregate",
+        "loadLinks",
+    ],
     "OntologyObjectV2": ["list", "get", "count", "search", "aggregate"],
-    "OntologyScenario": ["createScenario", "listScenarioEditedObjectTypes", "listScenarioEditedLinkTypes", "listScenarioEditedEntityTypes", "listScenarioEditedObjects", "listScenarioEditedLinks", "listScenarioConflictingObjects"],
+    "OntologyScenario": [
+        "createScenario",
+        "listScenarioEditedObjectTypes",
+        "listScenarioEditedLinkTypes",
+        "listScenarioEditedEntityTypes",
+        "listScenarioEditedObjects",
+        "listScenarioEditedLinks",
+        "listScenarioConflictingObjects",
+    ],
     "OntologyTransaction": ["postEdits"],
     "OntologyV2": ["list", "get", "getFullMetadata", "loadMetadata"],
     "OntologyValueType": ["get", "list"],
@@ -103,8 +147,10 @@ class OsdkService(BaseService):
             "osdk": {
                 "packages": [_VENDORED_OSDK_PACKAGE, _VENDORED_MAKER_PACKAGE],
                 "components": _OSDK_COMPONENTS,
-                "docs": {lang: f"https://www.palantir.com/docs{path}"
-                         for lang, path in _OSDK_DOC_PAGES.items()},
+                "docs": {
+                    lang: f"https://www.palantir.com/docs{path}"
+                    for lang, path in _OSDK_DOC_PAGES.items()
+                },
             },
             "sources": [
                 "live ontology via foundry-platform-sdk "
@@ -141,14 +187,10 @@ class OsdkService(BaseService):
         if resolution["status"] == "ok":
             ontology_info = resolution["ontology"]
             try:
-                metadata = self.service.Ontology.get_full_metadata(
-                    ontology_info["rid"]
-                )
+                metadata = self.service.Ontology.get_full_metadata(ontology_info["rid"])
                 entities = _summarize_entities(metadata, limit=entity_limit)
             except Exception as exc:
-                warnings.append(
-                    f"live entity read failed; bindings omitted: {exc}"
-                )
+                warnings.append(f"live entity read failed; bindings omitted: {exc}")
         else:
             warnings.append(
                 f"live ontology unavailable ({resolution.get('reason')}); "
@@ -263,9 +305,7 @@ def _summarize_entities(
     return summary
 
 
-def _binding_examples(
-    entities: dict[str, Any], language: str
-) -> list[dict[str, Any]]:
+def _binding_examples(entities: dict[str, Any], language: str) -> list[dict[str, Any]]:
     """Generate binding snippets from REAL live entity names.
 
     Every snippet is marked ``generated: true`` and cites the OSDK docs page

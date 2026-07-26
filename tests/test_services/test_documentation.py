@@ -14,7 +14,9 @@ from pltr.services.documentation import (
 import pytest
 
 
-def _page_html(markdown: str, title: str = "Doc title", description: str = "desc") -> str:
+def _page_html(
+    markdown: str, title: str = "Doc title", description: str = "desc"
+) -> str:
     payload = {
         "props": {
             "pageProps": {
@@ -56,11 +58,10 @@ def _fake_fetcher(pages: dict[str, str], sitemaps: dict[str, str]):
     return fetch
 
 
-def _service(pages: dict[str, str] | None = None,
-             sitemaps: dict[str, str] | None = None) -> DocumentationService:
-    return DocumentationService(
-        fetcher=_fake_fetcher(pages or {}, sitemaps or {})
-    )
+def _service(
+    pages: dict[str, str] | None = None, sitemaps: dict[str, str] | None = None
+) -> DocumentationService:
+    return DocumentationService(fetcher=_fake_fetcher(pages or {}, sitemaps or {}))
 
 
 class TestFetchPage:
@@ -106,9 +107,10 @@ class TestNormalize:
     def test_variants(self):
         assert _normalize_page_path("foundry/a/b") == "/foundry/a/b/"
         assert _normalize_page_path("/docs/foundry/a/") == "/foundry/a/"
-        assert _normalize_page_path(
-            "https://www.palantir.com/docs/foundry/a"
-        ) == "/foundry/a/"
+        assert (
+            _normalize_page_path("https://www.palantir.com/docs/foundry/a")
+            == "/foundry/a/"
+        )
         with pytest.raises(DocumentationError):
             _normalize_page_path("")
 
@@ -163,8 +165,9 @@ class TestSummaries:
             )
         }
         pages = {
-            "https://www.palantir.com/docs/foundry/transforms-python/overview/":
-                _page_html("# T\n\nLead paragraph here.\n\nMore."),
+            "https://www.palantir.com/docs/foundry/transforms-python/overview/": _page_html(
+                "# T\n\nLead paragraph here.\n\nMore."
+            ),
         }
         result = _service(pages=pages, sitemaps=sitemaps).summaries(
             section="transforms-python", with_overviews=True
@@ -184,10 +187,12 @@ class TestSearch:
             )
         }
         pages = {
-            "https://www.palantir.com/docs/foundry/transforms-python/overview/":
-                _page_html("transforms transforms transforms python"),
-            "https://www.palantir.com/docs/foundry/transforms-python/incremental-overview/":
-                _page_html("transforms once"),
+            "https://www.palantir.com/docs/foundry/transforms-python/overview/": _page_html(
+                "transforms transforms transforms python"
+            ),
+            "https://www.palantir.com/docs/foundry/transforms-python/incremental-overview/": _page_html(
+                "transforms once"
+            ),
         }
         result = _service(pages=pages, sitemaps=sitemaps).search(
             "transforms", fetch_pages=2
@@ -209,14 +214,18 @@ class TestSearch:
 
 class TestTopic:
     def test_fetches_curated_pages_and_marks_failures(self):
-        sitemaps = {path: SITEMAP_XML for path in (
-            "https://www.palantir.com/docs/sitemap.xml",
-            "https://www.palantir.com/docs/sitemap-1.xml",
-            "https://www.palantir.com/docs/sitemap-2.xml",
-        )}
+        sitemaps = {
+            path: SITEMAP_XML
+            for path in (
+                "https://www.palantir.com/docs/sitemap.xml",
+                "https://www.palantir.com/docs/sitemap-1.xml",
+                "https://www.palantir.com/docs/sitemap-2.xml",
+            )
+        }
         pages = {
-            "https://www.palantir.com/docs/foundry/transforms-python/overview/":
-                _page_html("real overview"),
+            "https://www.palantir.com/docs/foundry/transforms-python/overview/": _page_html(
+                "real overview"
+            ),
         }
         result = _service(pages=pages, sitemaps=sitemaps).topic("python-transforms")
         assert result["status"] == "partial"
@@ -233,9 +242,7 @@ class TestTopic:
 
 
 def test_extract_code_blocks():
-    blocks = extract_code_blocks(
-        "intro\n```python\nx = 1\n```\nmiddle\n```\ny\n```\n"
-    )
+    blocks = extract_code_blocks("intro\n```python\nx = 1\n```\nmiddle\n```\ny\n```\n")
     assert blocks == [
         {"language": "python", "code": "x = 1"},
         {"language": "", "code": "y"},

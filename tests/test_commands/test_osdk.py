@@ -16,7 +16,11 @@ CONTEXT = {
     "status": "ok",
     "ontology": {"rid": "ri.ontology.main.ontology.1", "api_name": "main"},
     "entities": {
-        "object_types": {"count": 2, "names": ["Restaurant", "Review"], "truncated": False},
+        "object_types": {
+            "count": 2,
+            "names": ["Restaurant", "Review"],
+            "truncated": False,
+        },
         "action_types": {"count": 1, "names": ["addReview"], "truncated": False},
         "query_types": {"count": 0, "names": [], "truncated": False},
         "interface_types": {"count": 0, "names": [], "truncated": False},

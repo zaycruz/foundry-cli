@@ -402,7 +402,7 @@ class ConnectivityService(BaseService):
 
     CREATE_WEBHOOK_CONTRACT = (
         "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
-        "0.408.0 client contract (the captured contract): "
+        "0.408.0 client contract: "
         "POST /webhooks/api/registry/v0 with {name, apiName, description, "
         "spec, executionPolicy} returned 200 {webhookRid, version}. "
         "Permission failures are resource-scoped (edit rights on the target "
@@ -410,7 +410,7 @@ class ConnectivityService(BaseService):
     )
     UPDATE_WEBHOOK_CONTRACT = (
         "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
-        "0.408.0 client contract (the captured contract): "
+        "0.408.0 client contract: "
         "publishWebhookVersion is POST /webhooks/api/registry/v0/{webhookRid} "
         'with body {"spec": <same spec shape as create>} and nothing else; '
         "it returned 200 {webhookRid, version: 2}. Quirk: httpQueryParams "
@@ -420,7 +420,7 @@ class ConnectivityService(BaseService):
     REST_SOURCE_CONTRACT = (
         "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
         "0.408.0 client contract "
-        "(the captured contract): POST "
+        ": POST "
         "/magritte-coordinator/api/source-store/source/v3 with {config, "
         "description, runtimePlatformRequest, parentRid} returned 200 with a "
         "bare-string body (the new source RID). domains[].domainId is a "

@@ -129,7 +129,7 @@ def create_branch(
 
     Backed by branch-service ``POST /branch/create`` with the contract
     verified end-to-end 2026-07-25 from ``@palantir/mcp`` client contracts on
-    a live Foundry deployment (``the captured contract``).
+    a live Foundry deployment.
     The create resolves the ontology's ``compassNamespaceRid`` from
     ontology-metadata first, then sends ``{description, displayName,
     ontologyRid, resourcesToAdd, compassNamespaceRid}`` and returns the new

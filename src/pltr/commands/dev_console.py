@@ -19,9 +19,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 osdk_app = typer.Typer(help="Inspect generated OSDK definitions", no_args_is_help=True)
-sdk_app = typer.Typer(
-    help="Generate and install SDK packages", no_args_is_help=True
-)
+sdk_app = typer.Typer(help="Generate and install SDK packages", no_args_is_help=True)
 app.add_typer(osdk_app, name="osdk")
 app.add_typer(sdk_app, name="sdk")
 
@@ -202,8 +200,7 @@ def sdk_generate(
 ) -> None:
     """Mint a new OSDK version for an app (plan-first; --apply mutates).
 
-    Backed by the contract-derived, contract-verified createSdkV2 contract
-    (the captured contract): the current
+    Backed by the contract-derived, contract-verified createSdkV2 contract: the current
     metadata.applicationVersion is read via the VERIFIED getApplication
     endpoint, then POST /application-sdks/v2/{applicationRid} with exactly
     {"applicationVersion": N, "npm": {}} mints the next SDK version.
@@ -485,8 +482,10 @@ def _render_connect(result: Mapping[str, Any], format_type: str) -> str:
         return json.dumps(result, indent=2, sort_keys=True) + "\n"
     grants = result.get("grants") or {}
     grant_text = (
-        ", ".join(f"{name}={'on' if enabled else 'off'}"
-                  for name, enabled in sorted(grants.items()))
+        ", ".join(
+            f"{name}={'on' if enabled else 'off'}"
+            for name, enabled in sorted(grants.items())
+        )
         or "none reported"
     )
     data_scope = result.get("data_scope") or {}
@@ -556,8 +555,7 @@ def _render_generate(result: Mapping[str, Any], format_type: str) -> str:
     poll = result.get("poll")
     if isinstance(poll, Mapping):
         lines.append(
-            f"Polled {poll.get('attempts')} time(s) over "
-            f"{poll.get('elapsed_seconds')}s"
+            f"Polled {poll.get('attempts')} time(s) over {poll.get('elapsed_seconds')}s"
         )
     if status == "timeout":
         lines.append(f"TIMEOUT: {result.get('reason')}")

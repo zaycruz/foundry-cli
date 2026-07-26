@@ -56,8 +56,7 @@ def test_get_sdk_latest_hits_verified_endpoint():
 
     service.client.conjure.assert_called_once_with(
         "GET",
-        "/third-party-application-service/api/application-sdks/"
-        f"{APP_RID}/latest",
+        f"/third-party-application-service/api/application-sdks/{APP_RID}/latest",
     )
     assert result["application_rid"] == APP_RID
     assert result["version"] == "1.2.3"
@@ -133,8 +132,7 @@ def test_get_sdk_repository_rid_extracts_repository_rid():
     assert service.get_sdk_repository_rid(APP_RID) == REPO_RID
     service.client.conjure.assert_called_once_with(
         "GET",
-        f"/third-party-application-service/api/application-sdks/{APP_RID}"
-        "/repository",
+        f"/third-party-application-service/api/application-sdks/{APP_RID}/repository",
     )
 
 
@@ -226,9 +224,7 @@ def test_pip_install_with_target_uses_current_interpreter_without_sudo(storage):
         )
 
     assert result["status"] == "installed"
-    pypi_calls = [
-        call for call in run.call_args_list if "-m" in call.args[0]
-    ]
+    pypi_calls = [call for call in run.call_args_list if "-m" in call.args[0]]
     assert pypi_calls, "expected a pip invocation"
     command = pypi_calls[0].args[0]
     assert command[0] == sys.executable
@@ -430,8 +426,7 @@ def test_sdk_generate_plan_resolves_version_and_never_posts():
     assert result["application_version"] == 6
     assert result["request"] == {
         "verb": "POST",
-        "path": "/third-party-application-service/api/application-sdks/v2/"
-        f"{APP_RID}",
+        "path": f"/third-party-application-service/api/application-sdks/v2/{APP_RID}",
         "body": {"applicationVersion": 6, "npm": {}},
     }
     assert "sdk-generate.md" in result["contract"]
@@ -492,7 +487,7 @@ def test_sdk_generate_apply_posts_exact_contract_body_and_polls_to_success():
     post_call = service.client.conjure.call_args_list[1]
     assert post_call.args[0] == "POST"
     assert post_call.args[1] == (
-        "/third-party-application-service/api/application-sdks/v2/" f"{APP_RID}"
+        f"/third-party-application-service/api/application-sdks/v2/{APP_RID}"
     )
     assert post_call.kwargs["json_body"] == {"applicationVersion": 6, "npm": {}}
     poll_call = service.client.conjure.call_args_list[2]
@@ -514,8 +509,11 @@ def test_sdk_generate_apply_tolerates_minted_record_missing_from_a_poll_page():
     service.client.conjure.side_effect = [
         (200, _application_version_payload(), "{}"),
         (200, _sdk_record_payload(npm_status="requested"), "{}"),
-        (200, _sdks_page(_sdk_record_payload(version="0.7.0",
-                                               npm_status="success")), "{}"),
+        (
+            200,
+            _sdks_page(_sdk_record_payload(version="0.7.0", npm_status="success")),
+            "{}",
+        ),
         (200, _sdks_page(_sdk_record_payload(npm_status="success")), "{}"),
     ]
     with (
@@ -552,9 +550,7 @@ def test_sdk_generate_apply_non_success_terminal_status_is_failed():
         (200, _sdk_record_payload(npm_status="requested"), "{}"),
         (200, _sdks_page(_sdk_record_payload(npm_status="failure")), "{}"),
     ]
-    with patch(
-        "pltr.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]
-    ):
+    with patch("pltr.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]):
         result = service.generate_sdk(APP_RID, apply=True)
 
     assert result["status"] == "failed"
@@ -589,9 +585,7 @@ def test_sdk_generate_apply_fails_loud_when_poll_page_drifts():
         (200, _sdk_record_payload(npm_status="requested"), "{}"),
         (200, {"unexpected": []}, "{}"),
     ]
-    with patch(
-        "pltr.services.dev_console.time.monotonic", side_effect=[0.0]
-    ):
+    with patch("pltr.services.dev_console.time.monotonic", side_effect=[0.0]):
         with pytest.raises(SdkDefinitionDriftError, match="'sdks' list"):
             service.generate_sdk(APP_RID, apply=True)
 
@@ -701,9 +695,7 @@ def test_scaffold_refuses_overwrite_without_force(tmp_path):
 def test_scaffold_force_overwrites(tmp_path):
     (tmp_path / "ProgramCard.tsx").write_text("old", encoding="utf-8")
 
-    result = _scaffold_service().generate_react_scaffold(
-        APP_RID, tmp_path, force=True
-    )
+    result = _scaffold_service().generate_react_scaffold(APP_RID, tmp_path, force=True)
 
     assert result["status"] == "generated"
     assert "ProgramObject" in (tmp_path / "ProgramCard.tsx").read_text()

@@ -33,7 +33,9 @@ def _install_result(status: str = "dry-run"):
         "sdk_version": "1.2.3",
         "repository_rid": REPO_RID,
         "base_url": "https://foundry.example.com",
-        "coordinates": [{"ecosystem": "pypi", "name": "my-app-sdk", "version": "1.2.3"}],
+        "coordinates": [
+            {"ecosystem": "pypi", "name": "my-app-sdk", "version": "1.2.3"}
+        ],
         "steps": [
             {
                 "ecosystem": "pypi",
@@ -196,9 +198,7 @@ def test_capabilities_flip_to_implemented_for_dev_console_commands():
 
     assert result.exit_code == 0, result.output
     manifest = json.loads(result.output)
-    by_id = {
-        entry["capability_id"]: entry for entry in manifest["capabilities"]
-    }
+    by_id = {entry["capability_id"]: entry for entry in manifest["capabilities"]}
     assert by_id["view_osdk_definition"]["status"] == "implemented"
     assert by_id["view_osdk_definition"]["command"] == "dev-console osdk definition"
     assert by_id["install_sdk_package"]["status"] == "implemented"
@@ -211,10 +211,7 @@ def test_capabilities_flip_to_implemented_for_dev_console_commands():
         == "dev-console sdk generate"
     )
     assert by_id["convert_to_osdk_react"]["status"] == "implemented"
-    assert (
-        by_id["convert_to_osdk_react"]["command"]
-        == "dev-console convert-osdk-react"
-    )
+    assert by_id["convert_to_osdk_react"]["command"] == "dev-console convert-osdk-react"
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +227,12 @@ def _connect_result():
         "client_type": "public",
         "grants": {"authorization_code": True, "refresh_token": True},
         "redirect_urls": ["https://app.example.com/auth/callback"],
-        "data_scope": {"ontology_rid": "ri.ontology.main.ontology.x",
-                       "objectTypes": 2, "linkTypes": 1, "actionTypes": 0},
+        "data_scope": {
+            "ontology_rid": "ri.ontology.main.ontology.x",
+            "objectTypes": 2,
+            "linkTypes": 1,
+            "actionTypes": 0,
+        },
         "status": "connected",
         "mode": "read-only",
         "warnings": ["headless read-only form"],
@@ -240,9 +241,7 @@ def _connect_result():
 
 def test_connect_renders_json_and_calls_service():
     with patch(SERVICE) as service:
-        service.return_value.get_connection_context.return_value = (
-            _connect_result()
-        )
+        service.return_value.get_connection_context.return_value = _connect_result()
         result = runner.invoke(
             app, ["dev-console", "connect", APP_RID, "--profile", "qa"]
         )
@@ -257,12 +256,8 @@ def test_connect_renders_json_and_calls_service():
 
 def test_connect_agent_mode_emits_single_envelope():
     with patch(SERVICE) as service:
-        service.return_value.get_connection_context.return_value = (
-            _connect_result()
-        )
-        result = runner.invoke(
-            app, ["--agent", "dev-console", "connect", APP_RID]
-        )
+        service.return_value.get_connection_context.return_value = _connect_result()
+        result = runner.invoke(app, ["--agent", "dev-console", "connect", APP_RID])
 
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.stdout)
@@ -285,9 +280,7 @@ def test_connect_drift_exits_nonzero_and_fails_loud():
 
 def test_connect_token_expired_exits_nonzero():
     with patch(SERVICE) as service:
-        service.return_value.get_connection_context.side_effect = (
-            TokenExpiredError()
-        )
+        service.return_value.get_connection_context.side_effect = TokenExpiredError()
         result = runner.invoke(app, ["dev-console", "connect", APP_RID])
 
     assert result.exit_code == 1
@@ -374,9 +367,7 @@ def test_sdk_generate_passes_apply_no_wait_and_timeout_through():
 
 def test_sdk_generate_success_renders_version_and_poll():
     with patch(SERVICE) as service:
-        service.return_value.generate_sdk.return_value = (
-            _generate_success_result()
-        )
+        service.return_value.generate_sdk.return_value = _generate_success_result()
         result = runner.invoke(
             app, ["dev-console", "sdk", "generate", APP_RID, "--apply"]
         )
@@ -441,9 +432,7 @@ def test_sdk_generate_agent_mode_carries_status_and_errors():
 
 def test_sdk_generate_agent_mode_success_has_no_errors():
     with patch(SERVICE) as service:
-        service.return_value.generate_sdk.return_value = (
-            _generate_success_result()
-        )
+        service.return_value.generate_sdk.return_value = _generate_success_result()
         result = runner.invoke(
             app, ["--agent", "dev-console", "sdk", "generate", APP_RID, "--apply"]
         )
@@ -492,9 +481,7 @@ def _convert_result(status: str = "generated"):
         "warnings": [],
     }
     if status == "unresolved":
-        result.update(
-            object_types=[], files=[], reason="data-scope-unresolved: ..."
-        )
+        result.update(object_types=[], files=[], reason="data-scope-unresolved: ...")
     if status == "conflict":
         result.update(
             files=[],
@@ -506,13 +493,16 @@ def _convert_result(status: str = "generated"):
 
 def test_convert_renders_generated_files(tmp_path):
     with patch(SERVICE) as service:
-        service.return_value.generate_react_scaffold.return_value = (
-            _convert_result()
-        )
+        service.return_value.generate_react_scaffold.return_value = _convert_result()
         result = runner.invoke(
             app,
-            ["dev-console", "convert-osdk-react", APP_RID,
-             "--output-dir", str(tmp_path)],
+            [
+                "dev-console",
+                "convert-osdk-react",
+                APP_RID,
+                "--output-dir",
+                str(tmp_path),
+            ],
         )
 
     assert result.exit_code == 0, result.output
@@ -526,31 +516,39 @@ def test_convert_renders_generated_files(tmp_path):
 
 def test_convert_passes_force_through(tmp_path):
     with patch(SERVICE) as service:
-        service.return_value.generate_react_scaffold.return_value = (
-            _convert_result()
-        )
+        service.return_value.generate_react_scaffold.return_value = _convert_result()
         result = runner.invoke(
             app,
-            ["dev-console", "convert-osdk-react", APP_RID,
-             "--output-dir", str(tmp_path), "--force"],
+            [
+                "dev-console",
+                "convert-osdk-react",
+                APP_RID,
+                "--output-dir",
+                str(tmp_path),
+                "--force",
+            ],
         )
 
     assert result.exit_code == 0, result.output
     assert (
-        service.return_value.generate_react_scaffold.call_args.kwargs["force"]
-        is True
+        service.return_value.generate_react_scaffold.call_args.kwargs["force"] is True
     )
 
 
 def test_convert_unresolved_exits_2(tmp_path):
     with patch(SERVICE) as service:
-        service.return_value.generate_react_scaffold.return_value = (
-            _convert_result("unresolved")
+        service.return_value.generate_react_scaffold.return_value = _convert_result(
+            "unresolved"
         )
         result = runner.invoke(
             app,
-            ["dev-console", "convert-osdk-react", APP_RID,
-             "--output-dir", str(tmp_path)],
+            [
+                "dev-console",
+                "convert-osdk-react",
+                APP_RID,
+                "--output-dir",
+                str(tmp_path),
+            ],
         )
 
     assert result.exit_code == 2
@@ -559,13 +557,18 @@ def test_convert_unresolved_exits_2(tmp_path):
 
 def test_convert_conflict_exits_1(tmp_path):
     with patch(SERVICE) as service:
-        service.return_value.generate_react_scaffold.return_value = (
-            _convert_result("conflict")
+        service.return_value.generate_react_scaffold.return_value = _convert_result(
+            "conflict"
         )
         result = runner.invoke(
             app,
-            ["dev-console", "convert-osdk-react", APP_RID,
-             "--output-dir", str(tmp_path)],
+            [
+                "dev-console",
+                "convert-osdk-react",
+                APP_RID,
+                "--output-dir",
+                str(tmp_path),
+            ],
         )
 
     assert result.exit_code == 1
@@ -574,13 +577,17 @@ def test_convert_conflict_exits_1(tmp_path):
 
 def test_convert_agent_mode_emits_single_envelope(tmp_path):
     with patch(SERVICE) as service:
-        service.return_value.generate_react_scaffold.return_value = (
-            _convert_result()
-        )
+        service.return_value.generate_react_scaffold.return_value = _convert_result()
         result = runner.invoke(
             app,
-            ["--agent", "dev-console", "convert-osdk-react", APP_RID,
-             "--output-dir", str(tmp_path)],
+            [
+                "--agent",
+                "dev-console",
+                "convert-osdk-react",
+                APP_RID,
+                "--output-dir",
+                str(tmp_path),
+            ],
         )
 
     assert result.exit_code == 0, result.output

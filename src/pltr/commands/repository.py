@@ -623,8 +623,7 @@ def create_python_transforms(
     """Create a Python transforms code repository (dry-run plan by default).
 
     Uses the two-call chain derived from the Palantir MCP client contract
-    2026-07-25 on a live Foundry deployment
-    (the captured contract): the folder RID is
+    2026-07-25 on a live Foundry deployment: the folder RID is
     resolved to its enclosing project and Compass path via read-only
     hierarchy batch endpoints, then POST /stemma/api/repos {"path":
     "<projectPath>/<name>"} creates the repository and POST
