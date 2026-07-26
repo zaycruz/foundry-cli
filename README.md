@@ -2,7 +2,9 @@
 
 An **agent-native** command-line interface for Palantir Foundry.
 
-`pltr-cli` wraps the official [`foundry-platform-sdk`](https://github.com/palantir/foundry-platform-python) and adds three things:
+> **Derivative work.** `foundry-cli` began as a fork of [`anjor/pltr-cli`](https://github.com/anjor/pltr-cli) by [@anjor](https://github.com/anjor), who wrote the original CLI. It has since been detached from the fork network and is maintained independently, with its own release line and distribution name. The console command is still `pltr`. MIT-licensed, same as the original — see [LICENSE](LICENSE), which carries both copyrights.
+
+`foundry-cli` wraps the official [`foundry-platform-sdk`](https://github.com/palantir/foundry-platform-python) and adds three things:
 
 1. **A stable machine contract.** Every command can emit one JSON envelope (`pltr-agent-v1`) with `--agent`, so an autonomous caller never has to parse tables or scrape text.
 2. **A read-only dependency and change-impact gate.** Before you touch a Foundry resource, `pltr dependency` tells you what breaks — with explicit coverage gaps, provenance, and a CI exit code.
@@ -39,7 +41,7 @@ Or clone for development:
 
 ```bash
 git clone https://github.com/zaycruz/foundry-cli.git
-cd pltr-cli
+cd foundry-cli
 uv sync
 uv run pltr --help
 ```
@@ -281,6 +283,6 @@ When extending the SDK surface, be exact about what Foundry exposes and preserve
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE), which retains the original copyright of [@anjor](https://github.com/anjor) alongside the current maintainer's.
 
-Built on the official [Palantir Foundry Platform Python SDK](https://github.com/palantir/foundry-platform-python).
+Derived from [`anjor/pltr-cli`](https://github.com/anjor/pltr-cli). Built on the official [Palantir Foundry Platform Python SDK](https://github.com/palantir/foundry-platform-python).
