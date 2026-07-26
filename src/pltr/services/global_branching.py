@@ -5,7 +5,7 @@ Load-by-RID reads and plan-first writes backed by the internal
 ``branch-service`` API (base ``/branch-service/api``). There is no list
 endpoint; load-by-RID only.
 
-Write contracts, verified end-to-end against a live deployment ( derived from
+Write contracts, verified end-to-end against a live deployment, derived from
 ``@palantir/mcp`` 0.408.0 client contract):
 
 - ``POST /branch/create`` takes ``{description, displayName, ontologyRid,

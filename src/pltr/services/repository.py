@@ -27,8 +27,7 @@ Pull-request reads plus contract-verified writes backed by the internal
   (both fields required; the title is read from the verified get first).
   Dry-run plan by default; the real close sits behind ``--apply --yes``.
 
-Repository context (contract-verified against a live deployment, probes retained
-under):
+Repository context (contract-verified against a live deployment):
 
 - ``GET /stemma/api/repos/{repositoryRid}`` returns ``{"rid", "sourceRid"}``.
 - ``GET /stemma/api/repos/{repositoryRid}/head`` returns
@@ -228,7 +227,7 @@ class RepositoryService(BaseService):
     # non-existent repository/pull-request RID separate "body shape
     # wrong" (400) from "body shape right" (403 semantic failure, no
     # resource created). Success paths contract-verified the same day on the
-    # probe repository with a disposable test repository pull
+    # probe repository with a disposable test pull
     # request (closed after verification). See
     # the captured contract
     # ------------------------------------------------------------------
