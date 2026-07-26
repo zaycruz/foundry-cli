@@ -2,7 +2,7 @@
 Compute Modules service wrapper.
 
 Backed by the internal gateways the Palantir MCP compute-module tools use,
-per the  published client contract against a live deployment. The MCP does NOT call the
+per the published client contract. The MCP does NOT call the
 module-group service at its own mount (``/module-group/api/...`` is
 ``Route:RouteNotMounted`` on every stack verified); everything goes
 through gateways that ARE mounted:

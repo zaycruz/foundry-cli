@@ -252,7 +252,7 @@ pltr notepad get NOTEPAD_RID [--format FORMAT] [--output-mode MODE]
 `search(title:)` is the legacy title-only operation. Path-scoped mode uses
 `searchResources` with verified server-side `pathStartsWith` filtering.
 `--page-token` accepts the prior response's `next_page_token`. Text and
-`--resource-type` constraints are applied locally to only the returned page, so
+`--type` constraints are applied locally to only the returned page, so
 the result reports `coverage` and `server_page_count`. The gateway does not
 report continuation state for legacy title search.
 
@@ -283,19 +283,19 @@ pltr resource get-by-path "/Finance/sales-data" --format json
 ### List Resources
 
 ```bash
-pltr resource list [--folder-rid RID] [--resource-type TYPE] [--page-size N]
+pltr resource list [--folder-rid RID] [--type TYPE] [--page-size N]
 
 # Example
-pltr resource list --folder-rid ri.compass.main.folder.abc123 --resource-type dataset
+pltr resource list --folder-rid ri.compass.main.folder.abc123 --type dataset
 ```
 
 ### Search Resources
 
 ```bash
-pltr resource search QUERY [--resource-type TYPE] [--folder-rid RID]
+pltr resource search QUERY [--type TYPE] [--folder-rid RID]
 
 # Example
-pltr resource search "sales data" --resource-type dataset
+pltr resource search "sales data" --type dataset
 ```
 
 ### Batch Get Resources
@@ -454,7 +454,7 @@ pltr resource-role grant "$DATASET" \
 ### Find resources
 ```bash
 # Search for datasets
-pltr resource search "sales" --resource-type dataset --format json --output sales.json
+pltr resource search "sales" --type dataset --format json --output sales.json
 
 # Get resource details
 for rid in $(cat sales.json | jq -r '.[].rid'); do

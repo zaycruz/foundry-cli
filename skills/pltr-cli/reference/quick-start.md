@@ -3,11 +3,11 @@
 ## Installation
 
 ```bash
-# From PyPI (recommended)
-pip install foundry-cli
+# Install from git (not published to PyPI)
+uv pip install "git+https://github.com/zaycruz/foundry-cli"
 
 # Or with pipx (isolated)
-pipx install pltr-cli
+pipx install "git+https://github.com/zaycruz/foundry-cli"
 
 # Verify installation
 pltr --version

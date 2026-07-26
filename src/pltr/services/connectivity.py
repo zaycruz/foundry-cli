@@ -637,7 +637,7 @@ class ConnectivityService(BaseService):
             "apiName": api_name,
             "description": description,
             "spec": spec if spec is not None else self.build_webhook_spec(source_rid),
-            # The  capture shows the MCP sending executionPolicy: {}
+            # The client contract shows the MCP sending executionPolicy: {}
             # and the server accepting it with 200.
             "executionPolicy": {},
         }
@@ -656,7 +656,7 @@ class ConnectivityService(BaseService):
         Write against the internal webhooks API ``POST /registry/v0``
         (createWebhook). The request contract and the 2xx success shape
         (``{"webhookRid": ..., "version": 1}``) are VERIFIED end-to-end via
-        the  the published client contract (see CREATE_WEBHOOK_CONTRACT).
+        the published client contract (see CREATE_WEBHOOK_CONTRACT).
         Permission failures are resource-scoped: the caller needs edit
         rights on the target source (or its parent project).
 
@@ -743,7 +743,7 @@ class ConnectivityService(BaseService):
         Write against the internal webhooks API
         ``POST /registry/v0/{webhookRid}`` (publishWebhookVersion) with body
         ``{"spec": spec}`` and nothing else -- metadata is not changed by
-        publish. VERIFIED end-to-end via the  the published client contract;
+        publish. VERIFIED end-to-end via the published client contract;
         the 2xx response is ``{"webhookRid": ..., "version": N}``.
 
         Args:

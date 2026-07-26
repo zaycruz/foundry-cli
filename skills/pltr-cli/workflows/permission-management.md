@@ -139,7 +139,7 @@ pltr admin group delete old-team --confirm
 
 ```bash
 # Search for resources
-pltr resource search "sales" --resource-type dataset --format json --output sales.json
+pltr resource search "sales" --type dataset --format json --output sales.json
 
 # Get details for each resource
 for rid in $(cat sales.json | jq -r '.[].rid'); do

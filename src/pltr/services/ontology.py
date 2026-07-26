@@ -17,7 +17,7 @@ from .base import BaseService
 # Verified request contract for OntologyModificationService.modifyOntology:
 # the captured contract (contract-verified against a live deployment).
 _MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
-# Verified live  against a live deployment: OntologyMetadataService.bulkLoadOntologyEntities
+# Verified against a live deployment: OntologyMetadataService.bulkLoadOntologyEntities
 # loads the current state of entities keyed by ObjectTypeId/LinkTypeId. The
 # response carries the full _api ObjectType used to build update modifications.
 _BULK_LOAD_ENTITIES_ENDPOINT = (

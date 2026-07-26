@@ -866,7 +866,7 @@ def update_webhook(
 
     Backed by the internal webhooks API ``POST /registry/v0/{webhookRid}``
     (publishWebhookVersion) with body ``{"spec": <spec>}`` and nothing else.
-    VERIFIED end-to-end via the  the published client contract (a live Foundry deployment).
+    VERIFIED end-to-end via the published client contract (a live Foundry deployment).
 
     The spec can be supplied verbatim (``SPEC`` / ``--spec-file``) or
     assembled from MCP tool-arg shaped pieces (``--source-rid`` +

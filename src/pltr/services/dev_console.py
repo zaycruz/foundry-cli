@@ -40,7 +40,7 @@ APPLICATION_SDKS_BASE = "/third-party-application-service/api/application-sdks"
 APPLICATIONS_BASE = "/third-party-application-service/api/applications"
 
 # SDK generation contract, derived from the vendor MCP 0.408.0 client contract and verified
-# end-to-end  against a live deployment:
+# end-to-end against a live deployment:
 # POST /application-sdks/v2/{applicationRid} with exactly
 # {"applicationVersion": <int>, "npm": {}} mints a new SDK version from that
 # app version (verified: 0.8.0 minted from applicationVersion 6). Unknown
@@ -918,7 +918,7 @@ def _extract_package_coordinates(
 # ---------------------------------------------------------------------------
 
 # Public v2 ObjectType dataType.type -> TypeScript type. Grounded in the
-# live-observed values  and the vendored OntologyIrType union in
+# live-observed values and the vendored OntologyIrType union in
 # derived from the published client contract (@osdk/client.unstable ontology-metadata
 # types); anything unrecognized becomes `unknown` with a warning instead of a
 # guessed type.

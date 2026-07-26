@@ -32,7 +32,7 @@ Write contracts, verified end-to-end against a live deployment, derived from
   ``PUT /branch/proposal/close/{proposalRid}`` take an empty body with the
   RID in the path and return ``200 {}``.
 
-Earlier  validation never
+Earlier validation never
 got the creates past ``400 Default:InvalidArgument`` because it guessed
 ``namespaceRid`` instead of ``compassNamespaceRid`` and omitted
 ``resourcesToAdd``/``mergeTo``; the MCP capture recovered the exact bodies.
