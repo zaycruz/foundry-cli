@@ -85,7 +85,11 @@ def test_the_two_commands_agree_at_runtime():
             app, ["--agent", "capabilities"], catch_exceptions=True
         )
 
-    paths = {c["path"] for c in json.loads(surface.stdout)["data"]["commands"]}
+    paths = {
+        " ".join(c["path"]) for c in json.loads(surface.stdout)["data"]["commands"]
+    }
+    assert paths <= registered_command_paths()
+    assert {"ontology object-type-list", "dataset files list"} <= paths
     caps = json.loads(scorecard.stdout)["data"]["capabilities"]
     # implemented must exist; planned must not. blocked/unsupported are exempt:
     # they may name a real fallback command (e.g. `namespace list` stands in for

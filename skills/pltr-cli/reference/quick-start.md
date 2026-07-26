@@ -95,6 +95,9 @@ pltr <command> --output file.csv # Save to file
 ## Interactive Shell
 
 ```bash
+pltr shell --profile production
+
+# Explicit equivalent:
 pltr shell start --profile production
 
 # In shell mode:
