@@ -2,7 +2,7 @@
 Compute Modules service wrapper.
 
 Backed by the internal gateways the Palantir MCP compute-module tools use,
-per the 2026-07-25 client contract against a live Foundry deployment. The MCP does NOT call the
+per the  published client contract against a live deployment. The MCP does NOT call the
 module-group service at its own mount (``/module-group/api/...`` is
 ``Route:RouteNotMounted`` on every stack verified); everything goes
 through gateways that ARE mounted:
@@ -57,7 +57,7 @@ class ComputeService(BaseService):
     """Service wrapper for Compute Module operations."""
 
     STATUS_CONTRACT = (
-        "route contract-verified on a live Foundry deployment (403 "
+        "route contract-verified against a live deployment (403 "
         "Contour:InsufficientPermission, not RouteNotMounted); success shape "
         "UNVERIFIED, passed through raw"
     )
@@ -68,26 +68,26 @@ class ComputeService(BaseService):
         "bundle-derived and NOT contract-verified"
     )
     START_CONTRACT = (
-        "route contract-verified on a live Foundry deployment: POST "
+        "route contract-verified against a live deployment: POST "
         "/build2/api/manager/submitBuild with the deployed-app RID passed as "
         "a datasets jobSpecSelection (isRequired: true) fails 400 "
         "Build2:JobSpecsForDatasetsNotFoundInGraph for an inert RID; success "
         "shape {buildRid, buildGroupRid, jobsCreated} UNVERIFIED"
     )
     STOP_CONTRACT = (
-        "route contract-verified on a live Foundry deployment: DELETE "
+        "route contract-verified against a live deployment: DELETE "
         "/build2/api/manager/builds/{buildRid} fails 400 "
         "Build2:BuildNotFound for an inert RID; success shape UNVERIFIED"
     )
     DEV_MODE_CONTRACT = (
-        "route contract-verified on a live Foundry deployment: PUT "
+        "route contract-verified against a live deployment: PUT "
         "/contour-backend-multiplexer/api/deployed-apps/{rid}/{branch}/"
         "dev-mode fails 403 Contour:InsufficientPermission "
         "(deployed-apps:edit); body {automaticUpgradesUntil: ISO-8601, max "
         "+5h}, omit the field to disable; success shape UNVERIFIED"
     )
     EXECUTE_CONTRACT = (
-        "route contract-verified on a live Foundry deployment: POST "
+        "route contract-verified against a live deployment: POST "
         "/contour-backend-multiplexer/api/module-group-multiplexer/"
         "compute-modules/jobs/execute fails 403 "
         "Contour:InsufficientPermission (deployed-apps:submit); response is "
@@ -280,7 +280,7 @@ class ComputeService(BaseService):
         """
         Read compute-module logs for one build job RID (read-only).
 
-        Two-step telemetry flow (per the 2026-07-25 capture):
+        Two-step telemetry flow (per the  capture):
 
         1. ``POST /foundry-telemetry-service/api/info/sessions/
            by-run-rids/get-batch`` with ``{"runRids": [buildJobRid]}`` to

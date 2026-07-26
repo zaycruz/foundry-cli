@@ -9,7 +9,6 @@ from rich.table import Table
 
 from ..utils.agent_output import require_confirmation, resolve_output_format
 from ..services.folder import FolderService
-from ..utils.agent_output import require_confirmation, resolve_output_format
 from ..utils.formatting import OutputFormatter
 from ..utils.progress import SpinnerProgressTracker
 from ..auth.base import ProfileNotFoundError, MissingCredentialsError

@@ -44,10 +44,10 @@ pltr repository clone ri.stemma.main.repository.abc123 ./my-repo
 ```bash
 pltr repository create-python-transforms NAME --parent-rid FOLDER_RID [--apply]
 
-# Uses the two-call chain derived from the Palantir MCP client contract
-# 2026-07-25 on a live Foundry deployment (the captured contract
-# repo-create.md), verified live on a live Foundry deployment the same day
-# (repo-create-live-verification.md):
+# Uses the two-call chain derived from the published client contract
+#  against a live deployment (the captured contract
+# the captured contract), verified live against a live deployment the same day
+# (the captured contract):
 #   1. Read-only preflight: FOLDER_RID -> enclosing project -> full Compass
 #      path via the compass hierarchy batch endpoints. The repository
 #      always lands in the project ROOT.
@@ -99,7 +99,7 @@ pltr repository pull-request create TITLE \
     [--description TEXT] [--apply] [--format FORMAT]
 
 # Default is a dry-run plan of the exact verified POST body; nothing is
-# written without --apply (contract contract-verified on a live Foundry deployment, see
+# written without --apply (contract verified against a live deployment, see
 # the captured contract)
 
 # Examples
@@ -131,7 +131,7 @@ pltr repository pull-request close PULL_REQUEST_RID [--apply] [--yes] [--format 
 
 # Closes the pull request via PUT /pulls/{rid}/update with
 # {"title": <current title>, "status": "CLOSED"} (both fields required;
-# contract contract-verified on a live Foundry deployment, see
+# contract verified against a live deployment, see
 # the captured contract). The pull request is read first to
 # obtain its title. Default is a dry-run plan of the exact PUT body; the
 # real close requires --apply --yes. An already-CLOSED pull request is

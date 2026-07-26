@@ -14,7 +14,6 @@ from io import StringIO
 from pltr.commands.dataset import app
 from pltr.utils.agent_output import flush_agent_output
 from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
-from pltr.utils.agent_output import flush_agent_output
 
 runner = CliRunner()
 

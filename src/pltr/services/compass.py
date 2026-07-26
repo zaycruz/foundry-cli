@@ -3,7 +3,7 @@
 The pinned SDK (foundry-platform-sdk 1.95.0) exposes neither a Namespace
 resource nor a project-template catalog.  Both enumerations exist on the
 internal Compass Conjure service and were verified live (read-only) on
-2026-07-24 against a live Foundry deployment:
+ against a live deployment:
 
 - ``GET /compass/api/hierarchy/v2/all-namespace-rids`` returns a JSON array
   of namespace RIDs (folder-typed RIDs; the hydrated resource carries

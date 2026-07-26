@@ -170,12 +170,12 @@ def test_build_install_plan_resolves_coordinates_and_registry_urls(storage):
     steps = {step["ecosystem"]: step for step in plan["steps"]}
     assert (
         steps["pypi"]["registry_url"]
-        == f"https://foundry.example.com/the captured contract{REPO_RID}"
+        == f"https://foundry.example.com/artifacts/api/repositories/{REPO_RID}"
         "/contents/release/pypi/simple"
     )
     assert (
         steps["npm"]["registry_url"]
-        == f"https://foundry.example.com/the captured contract{REPO_RID}"
+        == f"https://foundry.example.com/artifacts/api/repositories/{REPO_RID}"
         "/contents/release/npm"
     )
     assert steps["pypi"]["package"] == "my-app-sdk==1.2.3"
@@ -429,7 +429,7 @@ def test_sdk_generate_plan_resolves_version_and_never_posts():
         "path": f"/third-party-application-service/api/application-sdks/v2/{APP_RID}",
         "body": {"applicationVersion": 6, "npm": {}},
     }
-    assert "sdk-generate.md" in result["contract"]
+    assert "against a live deployment" in result["contract"]
 
 
 def test_sdk_generate_without_apply_is_a_dry_run():

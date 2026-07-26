@@ -5,7 +5,7 @@ Load-by-RID reads and plan-first writes backed by the internal
 ``branch-service`` API (base ``/branch-service/api``). There is no list
 endpoint; load-by-RID only.
 
-Write contracts, verified end-to-end against a live Foundry deployment (2026-07-25,, derived from
+Write contracts, verified end-to-end against a live deployment ( derived from
 ``@palantir/mcp`` 0.408.0 client contract):
 
 - ``POST /branch/create`` takes ``{description, displayName, ontologyRid,
@@ -32,7 +32,7 @@ Write contracts, verified end-to-end against a live Foundry deployment (2026-07-
   ``PUT /branch/proposal/close/{proposalRid}`` take an empty body with the
   RID in the path and return ``200 {}``.
 
-Earlier 2026-07-24 validation never
+Earlier  validation never
 got the creates past ``400 Default:InvalidArgument`` because it guessed
 ``namespaceRid`` instead of ``compassNamespaceRid`` and omitted
 ``resourcesToAdd``/``mergeTo``; the MCP capture recovered the exact bodies.
@@ -228,7 +228,7 @@ class GlobalBranchService(_BranchServiceBase):
 
     BRANCH_RID_PREFIX = "ri.branch..branch."
     CREATE_CONTRACT = (
-        "contract-verified via @palantir/mcp client contract "
+        "contract-verified via @palantir/mcp published client contract "
         ": POST "
         "/branch/create with {description, displayName, ontologyRid, "
         "resourcesToAdd, compassNamespaceRid}; compassNamespaceRid resolved "
@@ -241,7 +241,7 @@ class GlobalBranchService(_BranchServiceBase):
     )
     CLOSE_CONTRACT = (
         "contract-verified: PUT /branch/close/{branchRid}, empty "
-        "body, 200 {} (contract-verified on a live Foundry deployment)."
+        "body, 200 {} (contract-verified against a live deployment)."
     )
 
     def get_branch(self, branch_rid: str) -> Dict[str, Any]:
@@ -419,7 +419,7 @@ class GlobalProposalService(_BranchServiceBase):
     PROPOSAL_RID_PREFIX = "ri.branch..proposal."
     MERGE_TO_MAIN: Dict[str, Any] = {"main": {}, "type": "main"}
     CREATE_CONTRACT = (
-        "contract-verified via @palantir/mcp client contract "
+        "contract-verified via @palantir/mcp published client contract "
         ": POST "
         "/branch/proposal/create with {branchRid, displayName, description, "
         "mergeTo}; mergeTo is the ProposalMergeTo Conjure union with two "
@@ -432,7 +432,7 @@ class GlobalProposalService(_BranchServiceBase):
     )
     CLOSE_CONTRACT = (
         "contract-verified: PUT /branch/proposal/close/{proposalRid}, "
-        "empty body, 200 {} (contract-verified on a live Foundry deployment)."
+        "empty body, 200 {} (contract-verified against a live deployment)."
     )
 
     def get_proposal(self, proposal_rid: str) -> Dict[str, Any]:
@@ -441,7 +441,7 @@ class GlobalProposalService(_BranchServiceBase):
 
         Read-only against branch-service
         ``PUT /branch/proposal/load/{proposalRid}`` (empty-body load; contract
-        verified — there is no list endpoint, load-by-RID only).
+        contract-verified — there is no list endpoint, load-by-RID only).
 
         Args:
             proposal_rid: Global Proposal Resource Identifier

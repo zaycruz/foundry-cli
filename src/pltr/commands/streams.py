@@ -10,7 +10,6 @@ from typing import Optional
 from pathlib import Path
 from rich.console import Console
 
-from ..utils.agent_output import require_confirmation
 from ..services.streams import StreamsService
 from ..utils.formatting import OutputFormatter
 from ..utils.progress import SpinnerProgressTracker

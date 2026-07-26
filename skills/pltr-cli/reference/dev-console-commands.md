@@ -53,7 +53,7 @@ pltr dev-console sdk generate APPLICATION_RID [--apply] [--no-wait] [--timeout S
 
 # Mints a new OSDK version from the app's current applicationVersion, backed
 # by the contract-derived, contract-verified createSdkV2 contract
-# (the captured contract, 2026-07-25 on a live Foundry deployment):
+# (the captured contract,  against a live deployment):
 #   1. GET  /third-party-application-service/api/applications/{applicationRid}
 #      -> read metadata.applicationVersion
 #   2. POST /third-party-application-service/api/application-sdks/v2/{applicationRid}
@@ -64,7 +64,7 @@ pltr dev-console sdk generate APPLICATION_RID [--apply] [--no-wait] [--timeout S
 #      (requested -> inProgress -> success; ~24s observed). The MCP's
 #      /latest?sdkType=NPM&sdkStatus=REQUESTED confirmation read is NOT
 #      usable as the completion poll: it returns 204 No Content as soon as
-#      the record leaves "requested" (verified live 2026-07-25).
+#      the record leaves "requested" (contract-verified).
 #
 # Without --apply the command prints the dry-run plan (resolved version and
 # exact request body) and sends nothing mutating. --apply issues the POST and

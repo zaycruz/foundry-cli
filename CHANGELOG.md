@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `repository pull-request close` — closes a PR via `PUT /stemma-pull-request/api/pulls/{rid}/update` (fetch-then-close, plan default, `--apply --yes`, read-back verification; already-closed short-circuits, server confirmed idempotent). contract-verified: disposable test PR created, closed, and confirmed CLOSED/merged=false on a live Foundry deployment.
+- `repository pull-request close` — closes a PR via `PUT /stemma-pull-request/api/pulls/{rid}/update` (fetch-then-close, plan default, `--apply --yes`, read-back verification; already-closed short-circuits, server confirmed idempotent). Contract-verified: disposable test PR created, closed, and confirmed CLOSED/merged=false against a live deployment.
 - `global-proposal create --merge-to main|<branch-rid>` — full `ProposalMergeTo` union support (both arms evidenced from recovered generated types: `main` and `branchRid`). Invalid targets fail loud with the server's typed `Branch:InvalidMergeTo`.
 - `global-branch create --add-resource <rid>` (repeatable) — non-empty `resourcesToAdd` entries (plain ResourceRid strings; live-verified shape). Unbranchable resources surface the server's typed `Branch:ResourcesUnableToBranchError`.
 - `preview_transform` remains a documented gap; the local-dev-access preview endpoint is mounted but exposes no usable grant.
@@ -20,10 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - MCP gap-closure cycle: all six areas unblocked by the `@palantir/mcp` client-contract investigation are now real, contract-verified implementations. Scorecard: **72 implemented / 1 blocked** (only `preview_transform`, which does not exist in any published MCP version).
 - New `compute` command group: `compute info`, `compute logs`, `compute manage` (start/stop/dev-mode), `compute execute`. Compute calls route through the mounted `contour-backend-multiplexer` + `build2` + `foundry-telemetry-service` surfaces (the old `/module-group/api/*` path was the wrong prefix). Mutations are plan-first with `--apply`; success shapes our token cannot reach are passed through raw with `shape_verified: false`.
-- `dev-console sdk generate` is now real (was blocked-with-evidence): reads `applicationVersion`, POSTs `{"applicationVersion": N, "npm": {}}` to `application-sdks/v2/{rid}`, polls to terminal status. contract-verified end-to-end (real SDK versions minted on the designated disposable tutorial app).
-- `repository create-python-transforms` is now real (was blocked-with-evidence): the captured two-call chain (`POST /stemma/api/repos {"path"}` + `POST /repository-bootstrapper/api/repos/{rid}/bootstrap`). contract-verified create → content check → permanent delete.
+- `dev-console sdk generate` is now real (was blocked-with-evidence): reads `applicationVersion`, POSTs `{"applicationVersion": N, "npm": {}}` to `application-sdks/v2/{rid}`, polls to terminal status. Contract-verified end-to-end (real SDK versions minted on the designated disposable tutorial app).
+- `repository create-python-transforms` is now real (was blocked-with-evidence): the captured two-call chain (`POST /stemma/api/repos {"path"}` + `POST /repository-bootstrapper/api/repos/{rid}/bootstrap`). Contract-verified create → content check → permanent delete.
 - `connectivity webhook update` now really publishes (`{"spec": ...}` body, `queryParamsV2` array-wrap quirk, domain→domainId resolution), and `connectivity rest-source create` now really creates (the magritte `/v3` envelope). Both contract-verified with disposable entities, cleaned up.
-- `global-branch create` and `global-proposal create` upgraded from plan-only to real (`resourcesToAdd` + auto-resolved `compassNamespaceRid`; `mergeTo` union). contract-verified create → load → close cycles; everything closed.
+- `global-branch create` and `global-proposal create` upgraded from plan-only to real (`resourcesToAdd` + auto-resolved `compassNamespaceRid`; `mergeTo` union). Contract-verified create → load → close cycles; everything closed.
 
 ### Fixed
 
@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
-- Documented the release-script metadata-version fix under `docs/solutions/runtime-errors/`.
+- Documented the release-script metadata-version fix.
 
 
 ## [0.21.0] - 2026-07-23

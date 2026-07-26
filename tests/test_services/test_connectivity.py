@@ -920,7 +920,7 @@ class TestWebhookWriteService:
         assert body["spec"]["inputs"] == []
         assert body["spec"]["outputs"] == []
         assert body["spec"]["storagePolicy"] == {}
-        # The 2026-07-25 capture shows the MCP sending executionPolicy: {}.
+        # The  capture shows the MCP sending executionPolicy: {}.
         assert body["executionPolicy"] == {}
 
     def test_build_create_webhook_body_spec_override(self):

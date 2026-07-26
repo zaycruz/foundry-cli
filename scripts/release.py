@@ -78,7 +78,7 @@ def update_version_in_init_py(new_version):
         print(f"Updated src/pltr/__init__.py __version__ to {new_version}")
         return
 
-    metadata_pattern = r'__version__ = version\("pltr-cli"\)'
+    metadata_pattern = r'__version__ = version\("foundry-cli"\)'
     if re.search(metadata_pattern, content):
         print(
             "src/pltr/__init__.py derives __version__ from package metadata; "
@@ -218,7 +218,9 @@ def create_release_commit_and_tag(version, release_type, push_mode="ask"):
             run_git_command(f"git push origin {tag_name}")
             print("Pushed commit and tag to origin")
             print("GitHub Actions will now build and publish the release automatically")
-            print("Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions")
+            print(
+                "Monitor the workflow at: https://github.com/zaycruz/foundry-cli/actions"
+            )
         else:
             print("Not pushing to origin. You can push manually later with:")
             print("  git push origin HEAD")

@@ -15,9 +15,9 @@ from ..utils.pagination import PaginationConfig, PaginationResult
 from .base import BaseService
 
 # Verified request contract for OntologyModificationService.modifyOntology:
-# the captured contract (contract-verified on a live Foundry deployment).
+# the captured contract (contract-verified against a live deployment).
 _MODIFY_ENDPOINT = "/ontology-metadata/api/ontology/v2/modify"
-# Verified live 2026-07-24 on a live Foundry deployment: OntologyMetadataService.bulkLoadOntologyEntities
+# Verified live  against a live deployment: OntologyMetadataService.bulkLoadOntologyEntities
 # loads the current state of entities keyed by ObjectTypeId/LinkTypeId. The
 # response carries the full _api ObjectType used to build update modifications.
 _BULK_LOAD_ENTITIES_ENDPOINT = (
@@ -843,7 +843,7 @@ class ObjectTypeService(BaseService):
     def _load_object_type_state(client: Any, object_type_id: str) -> Mapping[str, Any]:
         """Load an object type's current state via bulkLoadEntities.
 
-        Endpoint verified live 2026-07-24 on a live Foundry deployment. Requested entities that
+        Endpoint contract-verified against a live deployment. Requested entities that
         do not exist (or are not visible) come back as null/absent entries,
         which fails the update path loudly: no state, no update.
         """
@@ -2127,7 +2127,7 @@ class ActionService(BaseService):
 
         Uses the public SDK endpoint
         GET /v2/ontologies/{ontology}/actionTypes/{actionType}/fullMetadata,
-        contract-verified on a live Foundry deployment. The endpoint is gated behind
+        contract-verified against a live deployment. The endpoint is gated behind
         the preview flag, so ``preview=True`` is always passed.
 
         Args:

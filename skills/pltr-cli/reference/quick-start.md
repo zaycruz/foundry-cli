@@ -4,7 +4,7 @@
 
 ```bash
 # From PyPI (recommended)
-pip install pltr-cli
+pip install foundry-cli
 
 # Or with pipx (isolated)
 pipx install pltr-cli

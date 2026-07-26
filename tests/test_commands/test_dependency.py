@@ -1837,15 +1837,15 @@ def test_internal_column_edge_renders_in_compact_and_json_with_transport(
     payload = analysis_result()
     payload["graph"]["nodes"].append(
         {
-            "id": "ri.foundry.main.dataset.programs#program_id",
+            "id": "ri.foundry.main.dataset.example-b#example_id",
             "kind": "dataset-column",
-            "display_name": "program_id",
+            "display_name": "example_id",
         }
     )
     payload["graph"]["edges"].append(
         {
             "id": "edge-column",
-            "source": "ri.foundry.main.dataset.programs#program_id",
+            "source": "ri.foundry.main.dataset.example-b#example_id",
             "target": "object:Employee",
             "relation_kind": "column-backs-property",
             "evidence_ids": ["ev-internal"],
@@ -1853,7 +1853,7 @@ def test_internal_column_edge_renders_in_compact_and_json_with_transport(
     )
     payload["ranked_relationships"] = [
         {
-            "readable_path": "program_id -> Employee.email",
+            "readable_path": "example_id -> Employee.email",
             "direction": "downstream",
             "relation_kind": "column-backs-property",
             "evidence_summary": {

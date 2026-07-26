@@ -3,7 +3,7 @@
 Ontology Global Branch and Global Proposal operations, backed by the
 internal `branch-service` API. There are no list endpoints; load-by-RID
 only. All contracts (loads, creates, closes) were verified end-to-end on
-a live Foundry deployment 2026-07-25 — request/response shapes derived from
+a live Foundry deployment  — request/response shapes derived from
 `@palantir/mcp` client contract ()
 and confirmed by a live create→load→proposal→close→close run
 ().

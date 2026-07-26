@@ -11,7 +11,6 @@ from ..utils.agent_output import require_confirmation
 import typer
 from rich.console import Console
 
-from ..utils.agent_output import require_confirmation
 from ..auth.base import MissingCredentialsError, ProfileNotFoundError
 from ..services.widgets import WidgetsService
 from ..utils.completion import (

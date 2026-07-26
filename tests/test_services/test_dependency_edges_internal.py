@@ -68,9 +68,9 @@ def _property_mapping_response():
                 {
                     "definition": {
                         "type": "dataset",
-                        "datasetRid": "ri.foundry.main.dataset.programs",
+                        "datasetRid": "ri.foundry.main.dataset.example-b",
                         "propertyMapping": {
-                            "programId": {"type": "column", "column": "program_id"}
+                            "programId": {"type": "column", "column": "example_id"}
                         },
                     }
                 }
@@ -241,11 +241,11 @@ def test_property_mapping_emits_exact_non_convention_column_edge():
                         "rid": "ri.ontology.main.datasource.source",
                         "definition": {
                             "type": "dataset",
-                            "datasetRid": "ri.foundry.main.dataset.programs",
+                            "datasetRid": "ri.foundry.main.dataset.example-b",
                             "propertyMapping": {
                                 "programId": {
                                     "type": "column",
-                                    "column": "program_id",
+                                    "column": "example_id",
                                 }
                             },
                         },
@@ -256,7 +256,7 @@ def test_property_mapping_emits_exact_non_convention_column_edge():
         )
     )
 
-    column_id = "ri.foundry.main.dataset.programs#program_id"
+    column_id = "ri.foundry.main.dataset.example-b#example_id"
     edges = [
         edge
         for edge in result["graph"]["edges"]
@@ -315,11 +315,11 @@ def test_object_type_target_maps_only_sdk_known_properties():
                 {
                     "definition": {
                         "type": "dataset",
-                        "datasetRid": "ri.foundry.main.dataset.programs",
+                        "datasetRid": "ri.foundry.main.dataset.example-b",
                         "propertyMapping": {
                             "programId": {
                                 "type": "column",
-                                "column": "program_id",
+                                "column": "example_id",
                             },
                             "internalOnly": {
                                 "type": "column",
@@ -386,7 +386,7 @@ def test_missing_property_mapping_is_shape_drift_and_keeps_sdk_structure():
                     {
                         "definition": {
                             "type": "dataset",
-                            "datasetRid": "ri.foundry.main.dataset.programs",
+                            "datasetRid": "ri.foundry.main.dataset.example-b",
                         }
                     }
                 ]
@@ -420,11 +420,11 @@ def test_shape_drift_keeps_valid_mappings_from_the_same_response():
                     {
                         "definition": {
                             "type": "dataset",
-                            "datasetRid": "ri.foundry.main.dataset.programs",
+                            "datasetRid": "ri.foundry.main.dataset.example-b",
                             "propertyMapping": {
                                 "programId": {
                                     "type": "column",
-                                    "column": "program_id",
+                                    "column": "example_id",
                                 }
                             },
                         }
@@ -442,7 +442,7 @@ def test_shape_drift_keeps_valid_mappings_from_the_same_response():
     )
 
     assert any(
-        edge["source"] == "ri.foundry.main.dataset.programs#program_id"
+        edge["source"] == "ri.foundry.main.dataset.example-b#example_id"
         and edge["target"] == result["target"]["node_id"]
         and edge["relation_kind"] == "column-backs-property"
         for edge in result["graph"]["edges"]

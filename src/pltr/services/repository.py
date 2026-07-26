@@ -3,7 +3,7 @@ Code repository service wrapper.
 
 Pull-request reads plus contract-verified writes backed by the internal
 ``stemma-pull-request`` API, which the 2026-07-22 gap analysis catalogues
-(29 endpoints) and which was contract-verified on a live Foundry deployment:
+(29 endpoints) and which was contract-verified against a live deployment:
 
 - ``GET /stemma-pull-request/api/pulls`` returns ``{"values": [...]}``. The
   gap analysis noted a live PR read was UNVERIFIED without a repository
@@ -27,7 +27,7 @@ Pull-request reads plus contract-verified writes backed by the internal
   (both fields required; the title is read from the verified get first).
   Dry-run plan by default; the real close sits behind ``--apply --yes``.
 
-Repository context (contract-verified on a live Foundry deployment, probes retained
+Repository context (contract-verified against a live deployment, probes retained
 under):
 
 - ``GET /stemma/api/repos/{repositoryRid}`` returns ``{"rid", "sourceRid"}``.
@@ -52,8 +52,8 @@ rc 128). Bearer-token auth via ``http.extraHeader`` passed through
 written into the clone's config, never printed.
 
 Python transforms repository creation (contract derived from Palantir MCP
-the client contract 2026-07-25 on a live Foundry deployment, see and the pltr live
-verification in ``repo-create-live-verification.md``): the folder RID is
+the client contract  against a live deployment, see the pltr live
+verification in ``the captured contract``): the folder RID is
 resolved to its enclosing project and the project's Compass path via the
 read-PUT batch endpoints ``PUT /compass/api/hierarchy/v2/batch/resources/
 projects`` and ``PUT /compass/api/hierarchy/v2/batch/projects-v3``
@@ -116,7 +116,7 @@ class RepositoryService(BaseService):
         List pull requests, optionally filtered to one repository.
 
         Read-only against GET /stemma-pull-request/api/pulls. The server does
-        not honor a repository query parameter (verified: it is
+        not honor a repository query parameter (contract-verified: it is
         silently ignored), so when ``repository_rid`` is given the filtering
         happens client-side on the verified ``baseRepositoryRid`` /
         ``headRepositoryRid`` fields.
@@ -176,7 +176,7 @@ class RepositoryService(BaseService):
         Get one pull request by RID.
 
         Read-only against GET /stemma-pull-request/api/pulls/{pullRequestRid}
-        (shape contract-verified on a live Foundry deployment).
+        (shape contract-verified against a live deployment).
 
         Args:
             pull_request_rid: Pull request Resource Identifier
@@ -221,7 +221,7 @@ class RepositoryService(BaseService):
     # ------------------------------------------------------------------
     # Pull-request creation + global comments
     #
-    # Request contracts verified on a live Foundry deployment via
+    # Request contracts contract-verified against a live deployment via
     # strict-deserialization checks that stop short of any 200 (a 200
     # creates): the server strictly rejects unknown and missing fields
     # with 400 Default:InvalidArgument, so candidate bodies carrying a
@@ -235,8 +235,8 @@ class RepositoryService(BaseService):
 
     #: Evidence for the POST /pulls request contract.
     PULL_REQUEST_CREATE_CONTRACT_EVIDENCE = (
-        "POST /stemma-pull-request/api/pulls contract contract-verified "
-        "2026-07-24 on a live Foundry deployment: "
+        "POST /stemma-pull-request/api/pulls contract verified"
+        " against a live deployment: "
         "strict deserialization (400 Default:InvalidArgument on empty "
         "body, bogus keys, and headBranchName-style variants); "
         "{title, baseRepositoryRid, headRepositoryRid, baseBranchName, "
@@ -254,8 +254,8 @@ class RepositoryService(BaseService):
     #: Evidence for the POST /pulls/{rid}/comments/global request contract.
     PULL_REQUEST_COMMENT_CONTRACT_EVIDENCE = (
         "POST /stemma-pull-request/api/pulls/{pullRequestRid}/comments/"
-        "global contract contract-verified on a live Foundry deployment "
-        ": strict deserialization (400 "
+        "global contract verified against a live deployment: "
+        "strict deserialization (400 "
         "Default:InvalidArgument on empty body, bogus keys, and "
         "text/body/markdown variants); {content} passed deserialization "
         "and failed only semantically (403 "
@@ -421,7 +421,7 @@ class RepositoryService(BaseService):
     # ------------------------------------------------------------------
     # Pull-request close
     #
-    # Contract contract-verified on a live Foundry deployment during the
+    # Contract contract-verified against a live deployment during the
     # pr-write cleanup: PUT
     # /stemma-pull-request/api/pulls/{pullRequestRid}/update with
     # {"title": <current title>, "status": "CLOSED"} -> 200; probes with
@@ -433,8 +433,8 @@ class RepositoryService(BaseService):
     #: Evidence for the PUT /pulls/{rid}/update close contract.
     PULL_REQUEST_CLOSE_CONTRACT_EVIDENCE = (
         "PUT /stemma-pull-request/api/pulls/{pullRequestRid}/update close "
-        "contract contract-verified on a live Foundry deployment "
-        ": probes with {}, "
+        "contract verified against a live deployment: "
+        "probes with {}, "
         '{"status": "CLOSED"} alone, and {"title": ...} alone all failed '
         "deserialization with 400 Default:InvalidArgument; "
         '{"title": <current title>, "status": "CLOSED"} returned 200 and '
@@ -571,7 +571,7 @@ class RepositoryService(BaseService):
         }
 
     # ------------------------------------------------------------------
-    # Repository context (read-only, contract-verified on a live Foundry deployment)
+    # Repository context (read-only, contract-verified against a live deployment)
     # ------------------------------------------------------------------
 
     def get_repository(self, repository_rid: str) -> Dict[str, Any]:
@@ -580,7 +580,7 @@ class RepositoryService(BaseService):
 
         Read-only against GET /stemma/api/repos/{repositoryRid} and
         GET /compass/api/resources/{repositoryRid}?decoration=path (both
-        contract-verified on a live Foundry deployment).
+        contract-verified against a live deployment).
 
         Raises:
             RepositoryNotFoundError: If no repository exists for the RID
@@ -705,7 +705,7 @@ class RepositoryService(BaseService):
 
         Read-only against GET /stemma/api/repos/{repositoryRid}/tags, which
         returns a bare array of ``{"name", "commitHash", ...}`` objects
-        (verified).
+        (contract-verified).
         """
         client = self._internal_client()
         try:
@@ -739,7 +739,7 @@ class RepositoryService(BaseService):
         Get the recursive file tree at ``path``.
 
         Read-only against GET /stemma/api/repos/{rid}/paths/tree/{path},
-        which returns ``{"metadata": {path: entry}}`` (verified).
+        which returns ``{"metadata": {path: entry}}`` (contract-verified).
 
         A ``ref`` is forwarded as the ``?ref=`` query parameter, but verified
         2026-07-24 the server silently falls back to the default-branch tree
@@ -800,7 +800,7 @@ class RepositoryService(BaseService):
         Returns a dict with ``repository``, ``default_branch``, ``refs`` and
         (optionally) ``tree``. ``tree.requested_ref`` records what was asked
         for; stemma silently falls back to the default branch for
-        unresolvable refs (verified), so the note is carried in
+        unresolvable refs (contract-verified), so the note is carried in
         ``tree.ref_note`` rather than hidden.
         """
         repository = self.get_repository(repository_rid)
@@ -821,7 +821,7 @@ class RepositoryService(BaseService):
                 "requested_ref": tree_ref,
                 "ref_note": (
                     "stemma silently falls back to the default-branch tree "
-                    "for unresolvable ?ref= values (verified); "
+                    "for unresolvable ?ref= values (contract-verified); "
                     "honoring of valid refs is not distinguishable on the "
                     "verified stack"
                 ),
@@ -830,7 +830,7 @@ class RepositoryService(BaseService):
         return context
 
     # ------------------------------------------------------------------
-    # Local clone (git smart-HTTP endpoint verified on a live Foundry deployment)
+    # Local clone (git smart-HTTP endpoint contract-verified against a live deployment)
     # ------------------------------------------------------------------
 
     def resolve_clone_plan(
@@ -970,14 +970,14 @@ class RepositoryService(BaseService):
     # Python transforms repository creation
     #
     # Contract derived from the Palantir MCP client contract
-    # (@palantir/mcp 0.408.0) traffic on a live Foundry deployment
+    # (@palantir/mcp 0.408.0) client contract
     #: the MCP resolves
     # the folder RID to its enclosing project, reads the project's Compass
     # path, creates the repository with a single {"path": ...} stemma
     # body, and applies the Python transforms template with a second
-    # repository-bootstrapper call. contract-verified end-to-end by pltr the
+    # repository-bootstrapper call. Contract-verified end-to-end by pltr the
     # same day (the captured contract
-    # repo-create-live-verification.md). Both stemma and
+    # the captured contract). Both stemma and
     # repository-bootstrapper are internal APIs catalogued from observed
     # traffic, not public-v2 contracts.
     # ------------------------------------------------------------------
@@ -992,8 +992,8 @@ class RepositoryService(BaseService):
     #: Evidence for the repository creation contract.
     CREATE_CONTRACT_EVIDENCE = (
         "Repository creation contract derived from the Palantir MCP client contract "
-        "(@palantir/mcp 0.408.0) traffic 2026-07-25 on a live Foundry deployment "
-        ": folder RID -> "
+        "(@palantir/mcp 0.408.0) traffic  against a live deployment: "
+        "folder RID -> "
         "enclosing project via PUT /compass/api/hierarchy/v2/batch/"
         "resources/projects; project Compass path via PUT /compass/api/"
         'hierarchy/v2/batch/projects-v3 (decorations ["path"]); '
@@ -1001,7 +1001,7 @@ class RepositoryService(BaseService):
         '{"rid", "sourceRid"}; POST /repository-bootstrapper/api/'
         'repos/<rid>/bootstrap {"parentTemplateId": "transforms", '
         '"childTemplateIdsByPath": {"transforms-python": "python"}, '
-        '"templateTokens": {}} -> 204. contract-verified end-to-end by pltr '
+        '"templateTokens": {}} -> 204. Contract-verified end-to-end by pltr '
         "the same day on a disposable repository (master branch + 0.0.1 "
         "tag materialized, then compass trash + permanent delete); see "
         "the captured contract "
@@ -1013,7 +1013,7 @@ class RepositoryService(BaseService):
     CREATE_CLEANUP_POLICY = (
         "created repositories are trashed with `pltr resource delete "
         "--force` and permanently removed with `pltr resource "
-        "permanently-delete --force` (both verified on a live Foundry deployment "
+        "permanently-delete --force` (both contract-verified against a live deployment "
         "against ri.stemma.main.repository RIDs); disposable test "
         "repositories are always deleted after verification"
     )

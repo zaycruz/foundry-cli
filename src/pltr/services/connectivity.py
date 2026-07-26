@@ -401,7 +401,7 @@ class ConnectivityService(BaseService):
         return dict(payload)
 
     CREATE_WEBHOOK_CONTRACT = (
-        "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
+        "VERIFIED end-to-end against a live deployment via an @palantir/mcp "
         "0.408.0 client contract: "
         "POST /webhooks/api/registry/v0 with {name, apiName, description, "
         "spec, executionPolicy} returned 200 {webhookRid, version}. "
@@ -409,7 +409,7 @@ class ConnectivityService(BaseService):
         "source's project), not token-scoped."
     )
     UPDATE_WEBHOOK_CONTRACT = (
-        "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
+        "VERIFIED end-to-end against a live deployment via an @palantir/mcp "
         "0.408.0 client contract: "
         "publishWebhookVersion is POST /webhooks/api/registry/v0/{webhookRid} "
         'with body {"spec": <same spec shape as create>} and nothing else; '
@@ -418,7 +418,7 @@ class ConnectivityService(BaseService):
         '({"realm": [[{...}]]}); headers are not wrapped.'
     )
     REST_SOURCE_CONTRACT = (
-        "VERIFIED end-to-end 2026-07-25 on a live Foundry deployment via an @palantir/mcp "
+        "VERIFIED end-to-end against a live deployment via an @palantir/mcp "
         "0.408.0 client contract "
         ": POST "
         "/magritte-coordinator/api/source-store/source/v3 with {config, "
@@ -559,7 +559,7 @@ class ConnectivityService(BaseService):
         """Resolve a domain host string to its domainId on a magritte source.
 
         Read-only against ``GET /magritte-coordinator/api/source-store/
-        source/{fullSourceRid}/config`` (verified: the full RID
+        source/{fullSourceRid}/config`` (contract-verified: the full RID
         must be in the path; the bare-UUID variant 400s).
 
         Args:
@@ -637,7 +637,7 @@ class ConnectivityService(BaseService):
             "apiName": api_name,
             "description": description,
             "spec": spec if spec is not None else self.build_webhook_spec(source_rid),
-            # The 2026-07-25 capture shows the MCP sending executionPolicy: {}
+            # The  capture shows the MCP sending executionPolicy: {}
             # and the server accepting it with 200.
             "executionPolicy": {},
         }
@@ -656,7 +656,7 @@ class ConnectivityService(BaseService):
         Write against the internal webhooks API ``POST /registry/v0``
         (createWebhook). The request contract and the 2xx success shape
         (``{"webhookRid": ..., "version": 1}``) are VERIFIED end-to-end via
-        the 2026-07-25 MCP client contract (see CREATE_WEBHOOK_CONTRACT).
+        the  the published client contract (see CREATE_WEBHOOK_CONTRACT).
         Permission failures are resource-scoped: the caller needs edit
         rights on the target source (or its parent project).
 
@@ -743,7 +743,7 @@ class ConnectivityService(BaseService):
         Write against the internal webhooks API
         ``POST /registry/v0/{webhookRid}`` (publishWebhookVersion) with body
         ``{"spec": spec}`` and nothing else -- metadata is not changed by
-        publish. VERIFIED end-to-end via the 2026-07-25 MCP client contract;
+        publish. VERIFIED end-to-end via the  the published client contract;
         the 2xx response is ``{"webhookRid": ..., "version": N}``.
 
         Args:
@@ -801,7 +801,7 @@ class ConnectivityService(BaseService):
     ) -> Dict[str, Any]:
         """Assemble the VERIFIED addSourceV3 request body.
 
-        Mirrors the 2026-07-25 MCP capture exactly: ``domains[].domainId``
+        Mirrors the  MCP capture exactly: ``domains[].domainId``
         is a client-generated random UUID per call, name/description live in
         a ``description`` object, egress policy RIDs are wrapped in the
         ``runtimePlatformRequest`` cloud union, and the target folder is
@@ -969,7 +969,7 @@ class ConnectivityService(BaseService):
 
         READ-ONLY "ensure": this implements the read half of the MCP
         ``get_or_create_network_egress_policy`` tool against the internal
-        resource-policy-manager API (verified on a live Foundry deployment):
+        resource-policy-manager API (contract-verified against a live deployment):
 
         - ``POST /network-egress-policies/get-all-policies`` (read-POST;
           returns a map of policy RID -> summary, values may be null)

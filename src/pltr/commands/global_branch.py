@@ -55,7 +55,7 @@ def get_branch(
     Reads the internal branch-service API (PUT /branch/load/{branchRid}, an
     empty-body load). There is no list endpoint; load-by-RID only. The
     success response shape (``{"branchRecord": {...}}``) was contract-verified
-    on a live Foundry deployment 2026-07-25 and is passed through raw.
+    against a live deployment 2026-07-25 and is passed through raw.
     """
     try:
         cache_rid(branch_rid)
@@ -128,7 +128,7 @@ def create_branch(
     """Create a Global Branch (plan-first; --apply issues the real mutation).
 
     Backed by branch-service ``POST /branch/create`` with the contract
-    verified end-to-end 2026-07-25 from ``@palantir/mcp`` client contracts on
+    contract-verified from ``@palantir/mcp`` published client contracts on
     a live Foundry deployment.
     The create resolves the ontology's ``compassNamespaceRid`` from
     ontology-metadata first, then sends ``{description, displayName,
@@ -225,7 +225,7 @@ def close_branch(
     """Close a Global Branch (DESTRUCTIVE; plan-first).
 
     Backed by branch-service ``PUT /branch/close/{branchRid}`` (empty-body
-    write returning ``200 {}``; contract-verified on a live Foundry deployment 2026-07-25).
+    write returning ``200 {}``; contract-verified against a live deployment 2026-07-25).
     Without ``--apply`` the command prints the dry-run plan and issues no
     network request. The real close requires both ``--apply`` and ``--yes``.
     """

@@ -558,7 +558,7 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
 # the CLI (see _spec_status) — it only replaces the generic "official-catalog"
 # evidence string with the concrete SDK path when one is known.
 _DOCS_SITE_EVIDENCE = (
-    "public Palantir docs site (verified): verbatim markdown from "
+    "public Palantir docs site (contract-verified): verbatim markdown from "
     "__NEXT_DATA__ + XML sitemap corpus; stack-side /documentation API is "
     "NOT VERIFIED and deliberately not guessed"
 )
@@ -638,7 +638,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "/stemma-pull-request/api/pulls/{pullRequestRid}"
     ),
     "create_code_repository_pull_request": (
-        "internal stemma-pull-request (contract-verified on a live Foundry deployment, "
+        "internal stemma-pull-request (contract-verified against a live deployment, "
         "the captured contract): POST /pulls with {title, "
         "baseRepositoryRid, headRepositoryRid, baseBranchName, "
         "headCommitish} (+ optional description); strict deserialization"
@@ -650,7 +650,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "PUT /pulls/{rid}/update {title, status: CLOSED})"
     ),
     "create_code_repository_pull_request_comment": (
-        "internal stemma-pull-request (contract-verified on a live Foundry deployment, "
+        "internal stemma-pull-request (contract-verified against a live deployment, "
         "the captured contract): POST "
         "/pulls/{pullRequestRid}/comments/global with {content}; strict "
         "strict deserialization (400 on text/body/markdown variants, 403 "
@@ -667,7 +667,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "create_global_branch": (
         "internal branch-service: POST /branch-service/api/branch/create; "
-        "plan-first command (dry-run default). 2026-07-24 contract-recovery "
+        "plan-first command (dry-run default).  contract-recovery "
         "validation identified "
         "{displayName, description, ontologyRid} but the request never "
         "progressed past 400 Default:InvalidArgument, so --apply refuses "
@@ -676,14 +676,14 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "close_global_branch": (
         "internal branch-service (contract-verified): PUT "
         "/branch-service/api/branch/close/{branchRid} (empty-body write; "
-        "error contract contract-verified — 403 Branch:PermissionDeniedError "
+        "error contract verified — 403 Branch:PermissionDeniedError "
         "naming branch:edit-branch; success shape UNVERIFIED). Plan-first: "
         "real close requires --apply --yes"
     ),
     "create_global_proposal": (
         "internal branch-service: POST "
         "/branch-service/api/branch/proposal/create; plan-first command "
-        "(dry-run default). 2026-07-24 validation identified {branchRid, "
+        "(dry-run default).  validation identified {branchRid, "
         "description, displayName} but the request never progressed past "
         "400 Default:InvalidArgument, so --apply refuses with an "
         "unverified-write-contract error instead of guessing"
@@ -691,12 +691,12 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "close_global_proposal": (
         "internal branch-service (contract-verified): PUT "
         "/branch-service/api/branch/proposal/close/{proposalRid} (empty-body "
-        "write; error contract contract-verified — 403 "
+        "write; error contract verified — 403 "
         "Branch:PermissionDeniedError naming branch:edit-proposal; success "
         "shape UNVERIFIED). Plan-first: real close requires --apply --yes"
     ),
     "create_foundry_rest_api_data_source_webhook": (
-        "internal webhooks API (request contract contract-verified "
+        "internal webhooks API (request contract verified "
         "up to the permission boundary): POST /webhooks/api/registry/v0 "
         "(createWebhook) with {name, apiName, description, spec, "
         "executionPolicy} — the full body passed server-side validation on "
@@ -707,18 +707,18 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "update_foundry_rest_api_data_source_webhook": (
         "internal webhooks API: POST /webhooks/api/registry/v0/{webhookRid} "
         "(publishWebhookVersion); plan-first command (dry-run default). "
-        "2026-07-24 validation confirmed only the 'spec' request key; "
+        " validation confirmed only the 'spec' request key; "
         "the full body is UNVERIFIED (webhook creation is "
-        "permission-blocked on a live Foundry deployment), so --apply refuses with an "
+        "permission-blocked against a live deployment), so --apply refuses with an "
         "unverified-write-contract error instead of guessing"
     ),
     "create_foundry_rest_api_data_source": (
         "internal magritte-coordinator: POST "
         "/magritte-coordinator/api/source-store/source/v2 (addSourceV2/V3); "
-        "plan-only command. 2026-07-24 validation could NOT recover the write "
+        "plan-only command.  validation could NOT recover the write "
         "contract — the service drops unknown keys leniently (defeating the "
         "field validation) and every candidate envelope failed 400; the printed "
-        "candidate body models the live REDACTED config shape with dummy "
+        "candidate body models the live target config shape with dummy "
         "values and is never sent. --apply refuses. The CLI never calls "
         "getSourceConfigWithPlaintextSecretValues"
     ),
@@ -729,14 +729,14 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "a live Foundry deployment, responses passed through raw)"
     ),
     "get_or_create_network_egress_policy": (
-        "internal resource-policy-manager (read-verified): POST "
+        "internal resource-policy-manager (read-contract-verified): POST "
         "/network-egress-policies/get-all-policies + get-batch (read-POSTs); "
         "read-only ensure — the CLI never creates a policy and fails loudly "
         "with a 'would create' message when no policy matches"
     ),
     "get_compute_modules_info": (
         "internal contour-backend-multiplexer (routes contract-verified "
-        "on a live Foundry deployment): GET "
+        "against a live deployment): GET "
         "/contour-backend-multiplexer/api/deployed-apps/{rid}/{branch}/status "
         "+ GET /contour-backend-multiplexer/api/deployed-apps/{rid}/v2; "
         "mounts proved by 403 Contour:InsufficientPermission (not "
@@ -745,16 +745,16 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "get_compute_modules_logs": (
         "internal foundry-telemetry-service (the captured contract"
-        "compute.md): POST /foundry-telemetry-service/api/info/sessions/"
-        "by-run-rids/get-batch (contract-verified 200 on a live Foundry deployment) then POST "
+        "the captured contract): POST /foundry-telemetry-service/api/info/sessions/"
+        "by-run-rids/get-batch (contract-verified 200 against a live deployment) then POST "
         "/foundry-telemetry-service/api/containers/{containerRid}/sessions/"
         "{sessionId}/logs/read/v3 with microsecond timestamps; step 2 shape "
         "is bundle-derived and NOT contract-verified (shape_verified: false), "
         "response passed through raw"
     ),
     "manage_compute_modules": (
-        "internal build2 + contour-backend-multiplexer (routes contract-verified "
-        "2026-07-25 on a live Foundry deployment): start "
+        "internal build2 + contour-backend-multiplexer (routes contract-verified"
+        " against a live deployment): start "
         "= POST /build2/api/manager/submitBuild with the deployed-app RID as "
         "a datasets jobSpecSelection (isRequired: true) — 400 "
         "Build2:JobSpecsForDatasetsNotFoundInGraph proves the contract; stop "
@@ -767,7 +767,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "execute_compute_modules_function": (
         "internal contour-backend-multiplexer (route contract-verified "
-        "on a live Foundry deployment): POST "
+        "against a live deployment): POST "
         "/contour-backend-multiplexer/api/module-group-multiplexer/"
         "compute-modules/jobs/execute — 403 Contour:InsufficientPermission "
         "(deployed-apps:submit) proves the mount; response is a raw "
@@ -796,7 +796,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "generate_new_ontology_sdk_version": (
         "internal third-party-application-service ("
-        "contract-verified end-to-end 2026-07-25 on a live Foundry deployment, "
+        "contract-verified against a live deployment, "
         "the captured contract): GET "
         "/third-party-application-service/api/applications/{applicationRid} "
         "for metadata.applicationVersion, then POST "
@@ -838,9 +838,9 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "create_python_transforms_code_repository": (
         "internal stemma + repository-bootstrapper (contract derived from "
-        "@palantir/mcp 0.408.0 traffic 2026-07-25 on a live Foundry deployment, "
+        "@palantir/mcp 0.408.0 traffic  against a live deployment, "
         "the captured contract; pltr contract-verified "
-        "the same day, repo-create-live-verification.md): folder -> project "
+        "the same day, the captured contract): folder -> project "
         "-> Compass path via compass hierarchy batch reads, POST "
         "/stemma/api/repos {path}, then POST /repository-bootstrapper/api/"
         "repos/{rid}/bootstrap (transforms + transforms-python). Plan-first: "

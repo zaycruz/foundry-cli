@@ -32,7 +32,7 @@ CONTEXT = {
             {
                 "name": "@osdk/foundry.ontologies",
                 "version": "2.69.0",
-                "provenance": "the captured contract",
+                "provenance": "contract-verified",
             }
         ],
         "components": {"OntologyV2": ["list", "get"]},

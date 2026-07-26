@@ -668,7 +668,7 @@ class TestCreatePythonTransforms:
             "templateTokens": {},
         }
         assert plan["contract"] == "VERIFIED"
-        assert "repo-create.md" in plan["evidence"]
+        assert "against a live deployment" in plan["evidence"]
         resolve_call, path_call = mock_client.conjure.call_args_list
         assert resolve_call.args[0] == "PUT"
         assert resolve_call.args[1] == (
@@ -860,7 +860,7 @@ class TestCreatePullRequest:
             "headCommitish": "refs/heads/feat/x",
         }
         assert plan["contract"] == "VERIFIED"
-        assert "pr-write-probes.jsonl" in plan["evidence"]
+        assert "against a live deployment" in plan["evidence"]
 
     def test_plan_forwards_optional_fields(self):
         """Test head repository, base branch, and description reach the body."""
@@ -970,7 +970,7 @@ class TestCreatePullRequestComment:
         )
         assert plan["intended_body"] == {"content": "hello"}
         assert plan["contract"] == "VERIFIED"
-        assert "pr-write-probes.jsonl" in plan["evidence"]
+        assert "against a live deployment" in plan["evidence"]
 
     @patch("pltr.services.repository.FoundryInternalClient")
     def test_comment_posts_verified_body(self, mock_client_class):
@@ -1070,7 +1070,7 @@ class TestClosePullRequest:
             "status": "CLOSED",
         }
         assert plan["contract"] == "VERIFIED"
-        assert "pr-write-verification.md" in plan["evidence"]
+        assert "against a live deployment" in plan["evidence"]
         mock_client.conjure.assert_called_once_with(
             "GET", f"stemma-pull-request/api/pulls/{PR_RID}"
         )

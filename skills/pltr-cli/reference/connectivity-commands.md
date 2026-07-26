@@ -164,7 +164,7 @@ pltr connectivity egress ensure api.example.com
 
 Backed by the internal webhooks registry API (`/webhooks/api/registry/v0`).
 Create and update are VERIFIED end-to-end via an `@palantir/mcp` 0.408.0
-client contract (2026-07-25, a live Foundry deployment; evidence:). Write commands are plan-first:
+client contract (verified against a live Foundry deployment). Write commands are plan-first:
 they print the exact request body by default and only mutate with `--apply`.
 Permission failures are resource-scoped -- the caller needs edit rights on
 the target source (or its parent project); a 403 means the target is not
@@ -237,7 +237,7 @@ pltr connectivity webhook update ri.webhooks.main.webhook.abc123 \
 
 Backed by magritte-coordinator `POST /source-store/source/v3` (addSourceV3),
 VERIFIED end-to-end via an the 0.408.0 client's observed behaviour
-(2026-07-25, a live Foundry deployment; evidence:). The command is plan-first:
+(verified against a live Foundry deployment). The command is plan-first:
 it prints the exact request body by default and only mutates with `--apply`.
 
 ### Create REST API Data Source (plan-first)

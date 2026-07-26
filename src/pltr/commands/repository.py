@@ -207,7 +207,7 @@ def create_pull_request(
     """Create a code repository pull request (dry-run plan by default).
 
     Writes the internal stemma-pull-request API (POST /pulls) whose request
-    contract was verified on a live Foundry deployment (strict
+    contract was contract-verified against a live deployment (strict
     strict deserialization; the captured contract). Without
     --apply the command prints the exact intended write and changes
     nothing; with --apply it posts that body verbatim and passes the
@@ -292,7 +292,7 @@ def comment_pull_request(
 
     Writes the internal stemma-pull-request API (POST
     /pulls/{pullRequestRid}/comments/global) whose request contract was
-    verified on a live Foundry deployment (strict deserialization;
+    contract-verified against a live deployment (strict deserialization;
     the captured contract). Without --apply the command prints
     the exact intended write and changes nothing; with --apply it posts
     that body verbatim and passes the created comment through raw.
@@ -366,7 +366,7 @@ def close_pull_request(
 
     Writes the internal stemma-pull-request API (PUT
     /pulls/{pullRequestRid}/update) whose close contract was contract-verified
-    2026-07-24 on a live Foundry deployment: the body is {"title": <current title>,
+     against a live deployment: the body is {"title": <current title>,
     "status": "CLOSED"} with both fields required, so the pull request is
     read first to obtain its title. Without --apply the command prints the
     exact intended write and changes nothing; the real close requires both
@@ -622,8 +622,8 @@ def create_python_transforms(
 ):
     """Create a Python transforms code repository (dry-run plan by default).
 
-    Uses the two-call chain derived from the Palantir MCP client contract
-    2026-07-25 on a live Foundry deployment: the folder RID is
+    Uses the two-call chain derived from the published client contract
+     against a live deployment: the folder RID is
     resolved to its enclosing project and Compass path via read-only
     hierarchy batch endpoints, then POST /stemma/api/repos {"path":
     "<projectPath>/<name>"} creates the repository and POST

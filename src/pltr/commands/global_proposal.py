@@ -55,7 +55,7 @@ def get_proposal(
     Reads the internal branch-service API
     (PUT /branch/proposal/load/{proposalRid}, an empty-body load). There is no
     list endpoint; load-by-RID only. The success response shape was
-    contract-verified on a live Foundry deployment 2026-07-25 and is passed through raw.
+    contract-verified against a live deployment 2026-07-25 and is passed through raw.
     """
     try:
         cache_rid(proposal_rid)
@@ -128,8 +128,8 @@ def create_proposal(
     """Create an Ontology Global Proposal (plan-first; --apply issues the real mutation).
 
     Backed by branch-service ``POST /branch/proposal/create`` with the
-    contract verified
-    against a live deployment on a live Foundry deployment. The create sends
+    contract verified from ``@palantir/mcp`` client
+    contract against a live deployment. The create sends
     ``{branchRid, displayName, description, mergeTo}`` where ``mergeTo`` is
     the ``ProposalMergeTo`` Conjure union with two arms (generated
     ``@palantir/branch-service-api`` evidence): ``--merge-to main`` sends
@@ -225,7 +225,7 @@ def close_proposal(
     """Close an Ontology Global Proposal (DESTRUCTIVE; plan-first).
 
     Backed by branch-service ``PUT /branch/proposal/close/{proposalRid}``
-    (empty-body write returning ``200 {}``; contract-verified on a live Foundry deployment
+    (empty-body write returning ``200 {}``; contract-verified against a live deployment
     2026-07-25). Without ``--apply`` the
     command prints the dry-run plan and issues no network request. The real
     close requires both ``--apply`` and ``--yes``.

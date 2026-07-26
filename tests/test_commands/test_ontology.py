@@ -1138,7 +1138,7 @@ def test_link_type_upsert_command(mock_services):
             "--api-name",
             "exampleObjectOwner",
             "--from-object-type-id",
-            "ns0abcde.tm-owner",
+            "ns0abcde.example-owner",
             "--to-object-type-id",
             "ns0abcde.example-object",
             "--display-name",
@@ -1154,7 +1154,7 @@ def test_link_type_upsert_command(mock_services):
     mock_instance.upsert_link_type.assert_called_once_with(
         ontology_rid="ri.ontology.main.ontology.test",
         api_name="exampleObjectOwner",
-        one_side_object_type_id="ns0abcde.tm-owner",
+        one_side_object_type_id="ns0abcde.example-owner",
         many_side_object_type_id="ns0abcde.example-object",
         display_name="Example owner",
         reverse_api_name=None,

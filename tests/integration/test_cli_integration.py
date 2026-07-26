@@ -61,7 +61,7 @@ class TestCLIIntegration:
         """Test version display."""
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert result.output == f"pltr {version('pltr-cli')}\n"
+        assert result.output == f"pltr {version('foundry-cli')}\n"
 
     @pytest.mark.skip(
         reason="Requires real credentials and network access - skipped in CI"

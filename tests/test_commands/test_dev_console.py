@@ -41,7 +41,7 @@ def _install_result(status: str = "dry-run"):
                 "ecosystem": "pypi",
                 "package": "my-app-sdk==1.2.3",
                 "registry_url": (
-                    f"https://foundry.example.com/the captured contract"
+                    f"https://foundry.example.com/artifacts/api/repositories/"
                     f"{REPO_RID}/contents/release/pypi/simple"
                 ),
                 "command": ["python", "-m", "pip", "install", "my-app-sdk==1.2.3"],
@@ -303,7 +303,7 @@ def _generate_plan_result():
             f"{APP_RID}",
             "body": {"applicationVersion": 6, "npm": {}},
         },
-        "contract": "contract-verified on a live Foundry deployment",
+        "contract": "contract-verified against a live deployment",
         "warnings": [],
     }
 

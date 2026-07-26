@@ -43,8 +43,8 @@ pltr dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --depth 3 \
   --output-mode agent \
   --format json \
-  --graph-output ./the captured contract \
-  --output ./the captured contract
+  --graph-output ./change-impact.json \
+  --output ./change-impact-agent.json
 ```
 
 Allowed change types:
@@ -102,9 +102,9 @@ pltr dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --change-type rename \
   --direction both \
   --depth 3 \
-  --compare-artifact ./the captured contract \
+  --compare-artifact ./change-impact.json \
   --output-mode ci \
-  --graph-output ./the captured contract
+  --graph-output ./change-impact.json
 ```
 
 CI exit contract:

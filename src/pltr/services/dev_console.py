@@ -40,7 +40,7 @@ APPLICATION_SDKS_BASE = "/third-party-application-service/api/application-sdks"
 APPLICATIONS_BASE = "/third-party-application-service/api/applications"
 
 # SDK generation contract, derived from the vendor MCP 0.408.0 client contract and verified
-# end-to-end 2026-07-25 on a live Foundry deployment:
+# end-to-end  against a live deployment:
 # POST /application-sdks/v2/{applicationRid} with exactly
 # {"applicationVersion": <int>, "npm": {}} mints a new SDK version from that
 # app version (verified: 0.8.0 minted from applicationVersion 6). Unknown
@@ -48,8 +48,8 @@ APPLICATIONS_BASE = "/third-party-application-service/api/applications"
 # allowed field set is exactly {applicationVersion, npm}. Generation is async
 # server-side; npm.status.type flips requested -> success (~24s observed).
 SDK_GENERATE_CONTRACT = (
-    "contract-verified on a live Foundry deployment "
-    ": POST "
+    "contract-verified against a live deployment: "
+    "POST "
     "/third-party-application-service/api/application-sdks/v2/{applicationRid} "
     'with exactly {"applicationVersion": <int>, "npm": {}}; unknown top-level '
     "keys -> 422 Conjure:UnprocessableEntity. The MCP's scope-patch PUT is "
@@ -75,7 +75,7 @@ CONNECT_READ_ONLY_DIVERGENCE = (
 # the parity milestone scope; NOT verified end-to-end against a live stack, so
 # every plan that emits these URLs carries a warning instead of pretending the
 # install path is proven.
-ARTIFACTS_RELEASE_PATH = "/the captured contract{repository_rid}/contents/release"
+ARTIFACTS_RELEASE_PATH = "/artifacts/api/repositories/{repository_rid}/contents/release"
 
 _ECOSYSTEM_ALIASES = {
     "npm": "npm",
@@ -89,7 +89,7 @@ _ECOSYSTEM_ALIASES = {
 # extracted only from explicitly recognized shapes.
 REGISTRY_UNVERIFIED_WARNING = (
     "Artifacts registry URLs follow the documented "
-    "/the captured contract{repoRid}/contents/release/{npm|pypi} pattern "
+    "/artifacts/api/repositories/{repoRid}/contents/release/{npm|pypi} pattern "
     "but have not been verified end-to-end against a live stack."
 )
 COORDINATES_UNRESOLVED_REASON = (
@@ -223,7 +223,7 @@ class DeveloperConsoleService:
         READ-ONLY: uses the VERIFIED ``getApplication`` endpoint. Fails loud
         on drift: the payload must carry an ``application`` object with
         string ``rid``/``name``; everything else is extracted only when it
-        matches the live-observed shape (2026-07-24, a live Foundry deployment).
+        matches the live-observed shape (verified against a live Foundry deployment).
         """
 
         application = self._get_application(application_rid)
@@ -919,7 +919,7 @@ def _extract_package_coordinates(
 
 # Public v2 ObjectType dataType.type -> TypeScript type. Grounded in the
 # live-observed values (2026-07-24) and the vendored OntologyIrType union in
-# the captured contract (@osdk/client.unstable ontology-metadata
+# derived from the published client contract (@osdk/client.unstable ontology-metadata
 # types); anything unrecognized becomes `unknown` with a warning instead of a
 # guessed type.
 _TS_TYPE_MAP = {

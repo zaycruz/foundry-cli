@@ -10,7 +10,6 @@ from ..utils.agent_output import require_confirmation
 import typer
 from rich.console import Console
 
-from ..utils.agent_output import require_confirmation
 from ..services.admin import AdminService
 from ..utils.formatting import OutputFormatter
 from ..utils.progress import SpinnerProgressTracker

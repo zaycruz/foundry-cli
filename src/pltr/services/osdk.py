@@ -33,7 +33,7 @@ _VENDORED_OSDK_PACKAGE = {
 _VENDORED_MAKER_PACKAGE = {
     "name": "@osdk/maker",
     "version": "0.51.0",
-    "provenance": "the captured contract",
+    "provenance": "contract-verified",
 }
 _OSDK_COMPONENTS: dict[str, list[str]] = {
     "Action": [
@@ -318,7 +318,7 @@ def _binding_examples(entities: dict[str, Any], language: str) -> list[dict[str,
     docs_url = f"https://www.palantir.com/docs{_OSDK_DOC_PAGES[language]}"
     examples: list[dict[str, Any]] = []
     if language == "typescript":
-        # Patterns verified against the verbatim code blocks of the
+        # Patterns contract-verified against the verbatim code blocks of the
         # official TypeScript OSDK docs page (see pattern_reference).
         for name in object_names:
             examples.append(
@@ -346,7 +346,7 @@ def _binding_examples(entities: dict[str, Any], language: str) -> list[dict[str,
             )
     else:
         # The official Python OSDK docs page only demonstrates object access
-        # (verified); action/query bindings are not generated for
+        # (contract-verified); action/query bindings are not generated for
         # python because their API shape is unverified locally.
         for name in object_names:
             examples.append(

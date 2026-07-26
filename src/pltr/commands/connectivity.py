@@ -729,7 +729,7 @@ def create_webhook(
 
     Backed by the internal webhooks API ``POST /registry/v0``
     (createWebhook). The contract is VERIFIED end-to-end via the
-    2026-07-25 MCP client contract (a live Foundry deployment): the exact body returned
+     the published client contract (a live Foundry deployment): the exact body returned
     ``200 {"webhookRid": ..., "version": 1}``. Permission failures are
     resource-scoped -- the caller needs edit rights on the target source
     (or its parent project); a 403 means the target is not editable by
@@ -866,7 +866,7 @@ def update_webhook(
 
     Backed by the internal webhooks API ``POST /registry/v0/{webhookRid}``
     (publishWebhookVersion) with body ``{"spec": <spec>}`` and nothing else.
-    VERIFIED end-to-end via the 2026-07-25 MCP client contract (a live Foundry deployment).
+    VERIFIED end-to-end via the  the published client contract (a live Foundry deployment).
 
     The spec can be supplied verbatim (``SPEC`` / ``--spec-file``) or
     assembled from MCP tool-arg shaped pieces (``--source-rid`` +
@@ -1019,7 +1019,7 @@ def create_rest_source(
 
     Backed by magritte-coordinator ``POST /source-store/source/v3``
     (addSourceV3). The contract is VERIFIED end-to-end via the 2026-07-25
-    MCP client contract (a live Foundry deployment): the envelope {config, description,
+    the published client contract (a live Foundry deployment): the envelope {config, description,
     runtimePlatformRequest, parentRid} returned 200 with a bare-string body
     (the new source RID). ``domains[].domainId`` is a client-generated
     random UUID per call.

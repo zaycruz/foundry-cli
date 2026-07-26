@@ -37,7 +37,7 @@ DOMAINS = {
 }
 REQUIRED_PILOT_DOMAINS = DOMAINS - {"generic-tool-use"}
 DIFFICULTIES = {"easy", "medium", "hard"}
-CONTAMINATION_CLASSES = {"private-derived", "public-answerable", "generic-control"}
+CONTAMINATION_CLASSES = {"internal-derived", "public-answerable", "generic-control"}
 PROVENANCE_CONFIDENCE = {"low", "medium", "high"}
 EXECUTION_MODES = {"offline", "live-readonly", "live-mutation"}
 APPROVAL_POLICIES = {"not-required", "required", "refusal-allowed"}
@@ -67,8 +67,8 @@ GRADER_FIELDS = {
 }
 SIGNATURE_FIELDS = {"command_path", "required_tokens"}
 SOURCE_REF_RE = re.compile(r"^[0-9a-f]{12}$")
-EXPECTED_CLI_VERSION = "0.28.0"
-EXPECTED_CLI_CONTRACT = f"pltr-cli {EXPECTED_CLI_VERSION}"
+EXPECTED_CLI_VERSION = "0.29.0"
+EXPECTED_CLI_CONTRACT = f"foundry-cli {EXPECTED_CLI_VERSION}"
 ABSOLUTE_PATH_RE = re.compile(
     r"(?<![A-Za-z0-9_.-])/(?:[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_.-]+)*|[A-Za-z]:\\"
 )
@@ -103,11 +103,9 @@ FORBIDDEN_TERMS = tuple(
     for term in os.environ.get("PLTR_BENCH_FORBIDDEN_TERMS", "example-internal").split(",")
     if term.strip()
 )
-"""Proprietary terms the corpus must never contain.
+"""Terms the corpus must not contain.
 
-Set ``PLTR_BENCH_FORBIDDEN_TERMS`` to a comma-separated list. The real names are
-deliberately not committed — naming them here would leak exactly what the gate
-exists to keep out of a public repository.
+Configure with ``PLTR_BENCH_FORBIDDEN_TERMS`` as a comma-separated list.
 """
 
 

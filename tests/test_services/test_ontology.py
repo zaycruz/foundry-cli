@@ -364,7 +364,9 @@ def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
             200,
             {
                 "createdObjectTypes": {
-                    "ns0abcde.example-object": ("ri.ontology.main.object-type.example-object")
+                    "ns0abcde.example-object": (
+                        "ri.ontology.main.object-type.example-object"
+                    )
                 }
             },
             '{"createdObjectTypes":{}}',
@@ -531,7 +533,7 @@ def _bulk_load_response(
     primary_key: str = "id",
     dataset_rid: str = "ri.foundry.main.dataset.example",
 ) -> tuple[int, dict, str]:
-    """Loaded-state response mirroring bulkLoadEntities on a live Foundry deployment."""
+    """Loaded-state response mirroring bulkLoadEntities against a live deployment."""
     property_rid = "ri.ontology.main.property.id"
     display_metadata: dict = {
         "displayName": display_name,
@@ -980,7 +982,7 @@ def test_upsert_link_type_builds_verified_one_to_many_shape(
         result = service.upsert_link_type(
             ontology_rid="ri.ontology.main.ontology.test",
             api_name="exampleObjectOwner",
-            one_side_object_type_id="ns0abcde.tm-owner",
+            one_side_object_type_id="ns0abcde.example-owner",
             many_side_object_type_id="ns0abcde.example-object",
             display_name="Example owner",
             one_side_primary_key="owner_id",
@@ -992,18 +994,22 @@ def test_upsert_link_type_builds_verified_one_to_many_shape(
     modification_request = mock_client.conjure.call_args_list[1].kwargs["json_body"][
         "modificationRequest"
     ]
-    create = modification_request["linkTypes"]["ns0abcde.example-object-owner"]["create"]
+    create = modification_request["linkTypes"]["ns0abcde.example-object-owner"][
+        "create"
+    ]
     link_type = create["linkType"]
     assert link_type["linkTypeId"] == "ns0abcde.example-object-owner"
     one_to_many = link_type["definition"]["oneToMany"]
     assert one_to_many["cardinalityHint"] == "ONE_TO_MANY"
-    assert one_to_many["objectTypeIdOneSide"] == "ns0abcde.tm-owner"
+    assert one_to_many["objectTypeIdOneSide"] == "ns0abcde.example-owner"
     assert one_to_many["objectTypeIdManySide"] == "ns0abcde.example-object"
     assert one_to_many["oneSidePrimaryKeyToManySidePropertyMapping"] == {
         "owner_id": "owner_ref"
     }
     assert one_to_many["oneToManyLinkMetadata"]["apiName"] == "exampleObjectOwner"
-    assert one_to_many["manyToOneLinkMetadata"]["apiName"] == "exampleObjectOwnerReverse"
+    assert (
+        one_to_many["manyToOneLinkMetadata"]["apiName"] == "exampleObjectOwnerReverse"
+    )
     assert create["markings"] == []
 
 
@@ -1030,7 +1036,7 @@ def test_upsert_link_type_apply_verifies_via_dry_run(mock_object_type_service):
         result = service.upsert_link_type(
             ontology_rid="ri.ontology.main.ontology.test",
             api_name="tmLink",
-            one_side_object_type_id="ns0abcde.tm-owner",
+            one_side_object_type_id="ns0abcde.example-owner",
             many_side_object_type_id="ns0abcde.example-object",
             apply=True,
         )
@@ -1795,9 +1801,7 @@ def test_get_action_type(mock_action_type_full_metadata_service):
     service, mock_metadata_class = mock_action_type_full_metadata_service
     mock_metadata_class.get.return_value = _sample_action_type_metadata()
 
-    result = service.get_action_type(
-        "ri.ontology.main.ontology.test", "modify-example"
-    )
+    result = service.get_action_type("ri.ontology.main.ontology.test", "modify-example")
 
     assert result["rid"].startswith("ri.actions.main.action-type.")
     assert result["api_name"] == "modify-example"

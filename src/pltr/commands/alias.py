@@ -10,7 +10,6 @@ from rich import print as rprint
 from ..utils.agent_output import (
     agent_mode_enabled,
     buffer_agent_payload,
-    require_confirmation,
 )
 from pltr.config.aliases import AliasManager
 from pltr.utils.completion import complete_alias_names
