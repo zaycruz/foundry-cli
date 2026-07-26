@@ -88,6 +88,8 @@ def _stable_id(path: tuple[str, ...]) -> str:
 
 
 def _parameter_type(parameter: click.Parameter) -> str:
+    if isinstance(parameter, click.Option) and parameter.is_flag:
+        return "boolean"
     if isinstance(parameter.type, click.types.IntParamType):
         return "integer"
     if isinstance(parameter.type, click.types.FloatParamType):
@@ -118,14 +120,36 @@ def _parameter_manifest(
     if parameter.nargs != 1:
         return None
     if isinstance(parameter, click.Option):
-        if parameter.is_flag:
-            return None
-        long_names = _long_option_names(parameter)
+        option_names = (
+            list(parameter.opts) if parameter.is_flag else _parameter_names(parameter)
+        )
+        long_names = [name for name in option_names if name.startswith("--")]
         if not long_names:
             return None
         argv = long_names[0]
-        aliases = [name for name in _supported_option_names(parameter) if name != argv]
-        mapping: dict[str, Any] = {"kind": "option", "argv": argv, "aliases": aliases}
+        aliases = [
+            name
+            for name in option_names
+            if (
+                name.startswith("--")
+                or (len(name) == 2 and name.startswith("-") and name[1].isalpha())
+            )
+            and name != argv
+        ]
+        if parameter.is_flag:
+            if not isinstance(parameter.flag_value, bool) or (
+                parameter.default is not None
+                and not isinstance(parameter.default, bool)
+            ):
+                return None
+            mapping: dict[str, Any] = {
+                "kind": "flag",
+                "argv": argv,
+                "aliases": aliases,
+                "activeWhen": parameter.flag_value,
+            }
+        else:
+            mapping = {"kind": "option", "argv": argv, "aliases": aliases}
     else:
         if positional_index is None:
             raise ValueError("positional arguments require an index")
@@ -146,7 +170,9 @@ def _parameter_manifest(
         "help": help_text,
         "type": _parameter_type(parameter),
         "required": parameter.required,
-        "default": None,
+        "default": parameter.default
+        if isinstance(parameter, click.Option) and parameter.is_flag
+        else None,
         "enum": enum,
         "repeatable": parameter.multiple,
         "nargs": 1,
