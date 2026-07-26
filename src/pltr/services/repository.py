@@ -52,7 +52,7 @@ rc 128). Bearer-token auth via ``http.extraHeader`` passed through
 written into the clone's config, never printed.
 
 Python transforms repository creation (contract derived from Palantir MCP
-the client contract  against a live deployment, see the pltr live
+client contract, see the pltr live
 verification in ``the captured contract``): the folder RID is
 resolved to its enclosing project and the project's Compass path via the
 read-PUT batch endpoints ``PUT /compass/api/hierarchy/v2/batch/resources/
@@ -977,7 +977,7 @@ class RepositoryService(BaseService):
     # same day (the captured contract
     # the captured contract). Both stemma and
     # repository-bootstrapper are internal APIs catalogued from observed
-    # traffic, not public-v2 contracts.
+    # client contract, not public-v2 contracts.
     # ------------------------------------------------------------------
 
     #: Bootstrapper body that materializes the Python transforms template.
@@ -990,7 +990,7 @@ class RepositoryService(BaseService):
     #: Evidence for the repository creation contract.
     CREATE_CONTRACT_EVIDENCE = (
         "Repository creation contract derived from the Palantir MCP client contract "
-        "(@palantir/mcp 0.408.0) traffic  against a live deployment: "
+        "(@palantir/mcp 0.408.0) client contract  against a live deployment: "
         "folder RID -> "
         "enclosing project via PUT /compass/api/hierarchy/v2/batch/"
         "resources/projects; project Compass path via PUT /compass/api/"

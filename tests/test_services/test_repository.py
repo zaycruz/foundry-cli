@@ -871,13 +871,13 @@ class TestCreatePullRequest:
             head_commitish="refs/heads/feat/x",
             head_repository_rid=OTHER_REPO_RID,
             base_branch_name="refs/heads/main",
-            description="disposable",
+            description="disposable test",
         )
 
         body = plan["intended_body"]
         assert body["headRepositoryRid"] == OTHER_REPO_RID
         assert body["baseBranchName"] == "refs/heads/main"
-        assert body["description"] == "disposable"
+        assert body["description"] == "disposable test"
 
     @patch("pltr.services.repository.FoundryInternalClient")
     def test_create_posts_plan_body_verbatim(self, mock_client_class):

@@ -382,7 +382,7 @@ class TestCreatePythonTransformsCommand:
                 {"endpoint": "POST /stemma/api/repos", "body": {"path": "/p/x"}}
             ],
             "contract": "VERIFIED",
-            "evidence": "derived from the client contract 2026-07-25",
+            "evidence": "contract-verified",
         }
 
         result = self.runner.invoke(
@@ -415,7 +415,7 @@ class TestCreatePythonTransformsCommand:
             "repository": {"rid": REPO_RID, "sourceRid": None},
             "verification": {"bootstrap_verified": True},
             "contract": "VERIFIED",
-            "evidence": "derived from the client contract 2026-07-25",
+            "evidence": "contract-verified",
         }
 
         result = self.runner.invoke(
@@ -550,7 +550,7 @@ class TestPullRequestCreateCommand:
                 "--base-branch",
                 "refs/heads/main",
                 "--description",
-                "disposable",
+                "disposable test",
                 "--apply",
                 "--format",
                 "json",
@@ -565,7 +565,7 @@ class TestPullRequestCreateCommand:
             head_commitish="refs/heads/feat/x",
             head_repository_rid=REPO_RID,
             base_branch_name="refs/heads/main",
-            description="disposable",
+            description="disposable test",
         )
         mock_service.create_pull_request_plan.assert_not_called()
 

@@ -667,7 +667,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "create_global_branch": (
         "internal branch-service: POST /branch-service/api/branch/create; "
-        "plan-first command (dry-run default).  contract-recovery "
+        "plan-first command (dry-run default). Contract-recovery "
         "validation identified "
         "{displayName, description, ontologyRid} but the request never "
         "progressed past 400 Default:InvalidArgument, so --apply refuses "
@@ -683,7 +683,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "create_global_proposal": (
         "internal branch-service: POST "
         "/branch-service/api/branch/proposal/create; plan-first command "
-        "(dry-run default).  validation identified {branchRid, "
+        "(dry-run default). Validation identified {branchRid, "
         "description, displayName} but the request never progressed past "
         "400 Default:InvalidArgument, so --apply refuses with an "
         "unverified-write-contract error instead of guessing"
@@ -715,7 +715,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "create_foundry_rest_api_data_source": (
         "internal magritte-coordinator: POST "
         "/magritte-coordinator/api/source-store/source/v2 (addSourceV2/V3); "
-        "plan-only command.  validation could NOT recover the write "
+        "plan-only command. Validation could NOT recover the write "
         "contract — the service drops unknown keys leniently (defeating the "
         "field validation) and every candidate envelope failed 400; the printed "
         "candidate body models the live target config shape with dummy "
@@ -838,7 +838,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "create_python_transforms_code_repository": (
         "internal stemma + repository-bootstrapper (contract derived from "
-        "@palantir/mcp 0.408.0 traffic  against a live deployment, "
+        "the @palantir/mcp 0.408.0 client contract, "
         "the captured contract; pltr contract-verified "
         "the same day, the captured contract): folder -> project "
         "-> Compass path via compass hierarchy batch reads, POST "
