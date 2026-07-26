@@ -419,8 +419,7 @@ class ConnectivityService(BaseService):
     )
     REST_SOURCE_CONTRACT = (
         "VERIFIED end-to-end against a live deployment via an @palantir/mcp "
-        "0.408.0 client contract "
-        ": POST "
+        "0.408.0 client contract: POST "
         "/magritte-coordinator/api/source-store/source/v3 with {config, "
         "description, runtimePlatformRequest, parentRid} returned 200 with a "
         "bare-string body (the new source RID). domains[].domainId is a "

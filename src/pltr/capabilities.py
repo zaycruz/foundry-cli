@@ -745,7 +745,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     ),
     "get_compute_modules_logs": (
         "internal foundry-telemetry-service (the captured contract"
-        "the captured contract): POST /foundry-telemetry-service/api/info/sessions/"
+        "): POST /foundry-telemetry-service/api/info/sessions/"
         "by-run-rids/get-batch (contract-verified 200 against a live deployment) then POST "
         "/foundry-telemetry-service/api/containers/{containerRid}/sessions/"
         "{sessionId}/logs/read/v3 with microsecond timestamps; step 2 shape "

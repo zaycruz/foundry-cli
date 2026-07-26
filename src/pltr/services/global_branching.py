@@ -228,8 +228,7 @@ class GlobalBranchService(_BranchServiceBase):
 
     BRANCH_RID_PREFIX = "ri.branch..branch."
     CREATE_CONTRACT = (
-        "contract-verified via @palantir/mcp published client contract "
-        ": POST "
+        "contract-verified via @palantir/mcp published client contract: POST "
         "/branch/create with {description, displayName, ontologyRid, "
         "resourcesToAdd, compassNamespaceRid}; compassNamespaceRid resolved "
         "from POST /ontology-metadata/api/ontology/v2/load/all. Success "
@@ -419,8 +418,7 @@ class GlobalProposalService(_BranchServiceBase):
     PROPOSAL_RID_PREFIX = "ri.branch..proposal."
     MERGE_TO_MAIN: Dict[str, Any] = {"main": {}, "type": "main"}
     CREATE_CONTRACT = (
-        "contract-verified via @palantir/mcp published client contract "
-        ": POST "
+        "contract-verified via @palantir/mcp published client contract: POST "
         "/branch/proposal/create with {branchRid, displayName, description, "
         "mergeTo}; mergeTo is the ProposalMergeTo Conjure union with two "
         'arms: {"main": {}, "type": "main"} (contract-verified 200) and '
