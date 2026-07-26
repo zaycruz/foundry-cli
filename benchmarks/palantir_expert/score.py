@@ -9,6 +9,7 @@ from contextlib import redirect_stderr, redirect_stdout
 import io
 import ipaddress
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -97,14 +98,17 @@ SECRET_RE = re.compile(
     r"-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----)",
     re.IGNORECASE,
 )
-FORBIDDEN_TERMS = (
-    "term-a",
-    "term-b",
-    "term-c",
-    "term-d",
-    "example",
-    "term-e",
+FORBIDDEN_TERMS = tuple(
+    term.strip().lower()
+    for term in os.environ.get("PLTR_BENCH_FORBIDDEN_TERMS", "example-internal").split(",")
+    if term.strip()
 )
+"""Proprietary terms the corpus must never contain.
+
+Set ``PLTR_BENCH_FORBIDDEN_TERMS`` to a comma-separated list. The real names are
+deliberately not committed — naming them here would leak exactly what the gate
+exists to keep out of a public repository.
+"""
 
 
 class CorpusValidationError(ValueError):

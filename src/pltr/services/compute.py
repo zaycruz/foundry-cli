@@ -5,7 +5,7 @@ Backed by the internal gateways the Palantir MCP compute-module tools use,
 per the 2026-07-25 client contract against a live Foundry deployment
 (``the captured contract``). The MCP does NOT call the
 module-group service at its own mount (``/module-group/api/...`` is
-``Route:RouteNotMounted`` on a live Foundry deployment, example, and example); everything goes
+``Route:RouteNotMounted`` on every stack verified); everything goes
 through gateways that ARE mounted:
 
 - ``contour-backend-multiplexer/api/...`` (DeployedAppsService and

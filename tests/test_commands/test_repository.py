@@ -176,7 +176,7 @@ def _sample_context():
         "repository": {
             "rid": REPO_RID,
             "sourceRid": None,
-            "compass": {"name": "example_repo", "path": "/example/Apps/example_repo"},
+            "compass": {"name": "example_repo", "path": "/Example/Apps/example_repo"},
         },
         "default_branch": {"commitish": "refs/heads/master"},
         "refs": {"branches": [], "tags": []},

@@ -224,7 +224,7 @@ class TestGetPullRequest:
 
 
 REPO_GET = {"rid": REPO_RID, "sourceRid": None}
-COMPASS_GET = {"rid": REPO_RID, "name": "example_repo", "path": "/example/Apps/example_repo"}
+COMPASS_GET = {"rid": REPO_RID, "name": "example_repo", "path": "/Example/Apps/example_repo"}
 HEAD_GET = {
     "commitish": "refs/heads/master",
     "peeledCommitHash": "1c4aa0d9eb1fbbe1da28cece1eac08434432467c",
@@ -575,7 +575,7 @@ class TestCloneRepository:
 
 FOLDER_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000011"
 PROJECT_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000009"
-PROJECT_PATH = "/example-111111/Shared Ontology"
+PROJECT_PATH = "/Example-000000/Shared Ontology"
 NEW_REPO_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000010"
 
 RESOLVE_PROJECT = (200, {FOLDER_RID: PROJECT_RID}, "{}")

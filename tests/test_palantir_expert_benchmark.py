@@ -106,7 +106,7 @@ def test_valid_corpus_passes_all_contract_gates() -> None:
         ("task_prompt", "Connect to 10.20.30.40", "IPv4 address"),
         ("task_prompt", "Connect to 2001:db8::1", "IPv6 address"),
         ("task_prompt", "Connect to tenant.example.cloud", "hostname"),
-        ("task_prompt", "Inspect the example workspace", "forbidden proprietary term"),
+        ("task_prompt", "Inspect the example-internal workspace", "forbidden proprietary term"),
     ],
 )
 def test_privacy_leak_fixtures_fail(field: str, value: str, diagnostic: str) -> None:

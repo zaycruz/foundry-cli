@@ -662,8 +662,8 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
     "view_global_branch": (
         "internal branch-service (contract-verified): PUT "
         "/branch-service/api/branch/load/{branchRid} (empty-body load; "
-        "success shape UNVERIFIED — branch-service is unused on the a live Foundry deployment "
-        "stack, responses passed through raw)"
+        "success shape UNVERIFIED — branch-service is unused on the "
+        "a live Foundry deployment, responses passed through raw)"
     ),
     "create_global_branch": (
         "internal branch-service: POST /branch-service/api/branch/create; "
