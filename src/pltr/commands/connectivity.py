@@ -1018,7 +1018,7 @@ def create_rest_source(
     """Create a REST API data source (plan-first).
 
     Backed by magritte-coordinator ``POST /source-store/source/v3``
-    (addSourceV3). The contract is VERIFIED end-to-end via the 2026-07-25
+    (addSourceV3). The contract is VERIFIED end-to-end via the
     the published client contract (a live Foundry deployment): the envelope {config, description,
     runtimePlatformRequest, parentRid} returned 200 with a bare-string body
     (the new source RID). ``domains[].domainId`` is a client-generated

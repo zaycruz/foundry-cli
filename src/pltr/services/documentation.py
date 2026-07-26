@@ -47,7 +47,7 @@ _FENCE_RE = re.compile(r"```([^\n`]*)\n(.*?)```", re.S)
 _REQUEST_TIMEOUT = 20
 
 # Curated, sitemap-verified page families for the topic commands. Every path
-# below was confirmed present in the public docs sitemap on 2026-07-24.
+# below was confirmed present in the public docs sitemap on .
 TOPICS: dict[str, dict[str, Any]] = {
     "python-transforms": {
         "title": "Python transforms",

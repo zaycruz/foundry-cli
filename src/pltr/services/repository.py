@@ -2,7 +2,7 @@
 Code repository service wrapper.
 
 Pull-request reads plus contract-verified writes backed by the internal
-``stemma-pull-request`` API, which the 2026-07-22 gap analysis catalogues
+``stemma-pull-request`` API, which the gap analysis catalogues
 (29 endpoints) and which was contract-verified against a live deployment:
 
 - ``GET /stemma-pull-request/api/pulls`` returns ``{"values": [...]}``. The
@@ -440,8 +440,8 @@ class RepositoryService(BaseService):
         '{"title": <current title>, "status": "CLOSED"} returned 200 and '
         "the read-back confirmed currentRecord.status=CLOSED, "
         "merged=false, closeAttribution set on disposable test PR "
-        "ri.pull-request.main.pull-request.00000000-0000-0000-0000-"
-        "000000000030 (never merged)"
+        "ri.pull-request.main.pull-request."
+        "00000000-0000-0000-0000-000000000030 (never merged)"
     )
 
     @staticmethod
@@ -642,8 +642,7 @@ class RepositoryService(BaseService):
         Get the default branch (HEAD) of one repository.
 
         Read-only against GET /stemma/api/repos/{repositoryRid}/head, which
-        returns ``{"commitish": ..., "peeledCommitHash": ...}`` (verified
-        2026-07-24).
+        returns ``{"commitish": ..., "peeledCommitHash": ...}`` (verified).
         """
         client = self._internal_client()
         try:
@@ -668,8 +667,7 @@ class RepositoryService(BaseService):
         List branch refs of one repository.
 
         Read-only against GET /stemma/api/repos/{repositoryRid}/v2/branches,
-        which returns ``{"values": [{"name", "commitHash", ...}]}`` (verified
-        2026-07-24).
+        which returns ``{"values": [{"name", "commitHash", ...}]}`` (verified).
         """
         client = self._internal_client()
         try:
@@ -741,8 +739,8 @@ class RepositoryService(BaseService):
         Read-only against GET /stemma/api/repos/{rid}/paths/tree/{path},
         which returns ``{"metadata": {path: entry}}`` (contract-verified).
 
-        A ``ref`` is forwarded as the ``?ref=`` query parameter, but verified
-        2026-07-24 the server silently falls back to the default-branch tree
+        A ``ref`` is forwarded as the ``?ref=`` query parameter, but the
+        server was verified to silently fall back to the default-branch tree
         for unresolvable refs instead of erroring. Callers must therefore
         treat the returned tree as "the tree stemma served", not proof the
         requested ref was honored.
@@ -841,7 +839,7 @@ class RepositoryService(BaseService):
 
         Verifies the repository exists (stemma get + head), then constructs
         the git URL ``https://<host>/stemma/git/<repositoryRid>`` — the exact
-        form contract-verified with ``git ls-remote`` 2026-07-24 (a ``.git``
+        form contract-verified with ``git ls-remote`` (a ``.git``
         suffix is rejected by the server).
         """
         repository = self.get_repository(repository_rid)

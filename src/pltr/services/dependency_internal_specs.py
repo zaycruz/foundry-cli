@@ -40,7 +40,7 @@ class InternalOperationSpec:
     page_boundary: int | None = None
 
 
-_PINS = {"mcp": "0.397.0", }
+_PINS = {"mcp": "0.397.0"}
 
 ACP_05_DEPENDENTS_PAGE_BOUNDARY = 50
 

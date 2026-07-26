@@ -349,7 +349,7 @@ class ConnectivityService(BaseService):
         """
         Get a data-source webhook definition from the webhook registry.
 
-        Read-only against the internal webhooks API, which the 2026-07-22 gap
+        Read-only against the internal webhooks API, which the gap
         analysis marks VERIFIED: GET /webhooks/api/registry/v0/{webhookRid}/latest
         and GET /webhooks/api/registry/v0/{webhookRid}/version/{version}.
 

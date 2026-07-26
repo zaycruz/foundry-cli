@@ -2,7 +2,7 @@
 Compute Module commands (reads; plan-first writes).
 
 Backed by the internal gateways used by the Palantir MCP compute-module
-tools on 2026-07-25:
+tools:
 ``contour-backend-multiplexer`` for info/dev-mode/execute, ``build2`` for
 start/stop, and ``foundry-telemetry-service`` for logs. The unmounted
 ``/module-group/api/...`` prefix is deliberately never called.

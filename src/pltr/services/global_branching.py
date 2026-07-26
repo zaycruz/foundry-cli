@@ -574,8 +574,8 @@ class GlobalProposalService(_BranchServiceBase):
         Close one Ontology Global Proposal (DESTRUCTIVE).
 
         Contract-verified empty-body write against branch-service
-        ``PUT /branch/proposal/close/{proposalRid}`` (200 {} contract-verified
-        2026-07-25), passed through raw with strict shape-checking.
+        ``PUT /branch/proposal/close/{proposalRid}`` (200 {} contract-verified),
+        passed through raw with strict shape-checking.
 
         Args:
             proposal_rid: Global Proposal Resource Identifier

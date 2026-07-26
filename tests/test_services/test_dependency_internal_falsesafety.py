@@ -2,7 +2,6 @@
 
 import ast
 from dataclasses import replace
-from datetime import date
 import inspect
 import re
 import textwrap
@@ -501,14 +500,8 @@ def test_acp_registry_is_complete_and_matches_collector_references():
     assert collector_acp_ids == set(specs)
     for acp_id, spec in specs.items():
         assert spec.acp_id == acp_id
-        assert spec.contract_pins == {
-            "mcp": "0.397.0",
-            
-        }
+        assert spec.contract_pins == {"mcp": "0.397.0"}
         assert re.fullmatch(r"\d+\.\d+\.\d+", spec.contract_pins["mcp"])
-        assert date.fromisoformat(spec.contract_pins["verified_on"]) == date(
-            2026, 7, 21
-        )
         assert isinstance(spec.shape_descriptor, dict)
         assert "required" in spec.shape_descriptor
         assert callable(spec.positive_control)

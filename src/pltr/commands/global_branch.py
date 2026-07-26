@@ -55,7 +55,7 @@ def get_branch(
     Reads the internal branch-service API (PUT /branch/load/{branchRid}, an
     empty-body load). There is no list endpoint; load-by-RID only. The
     success response shape (``{"branchRecord": {...}}``) was contract-verified
-    against a live deployment 2026-07-25 and is passed through raw.
+    against a live deployment and is passed through raw.
     """
     try:
         cache_rid(branch_rid)
@@ -225,7 +225,7 @@ def close_branch(
     """Close a Global Branch (DESTRUCTIVE; plan-first).
 
     Backed by branch-service ``PUT /branch/close/{branchRid}`` (empty-body
-    write returning ``200 {}``; contract-verified against a live deployment 2026-07-25).
+    write returning ``200 {}``; contract-verified against a live deployment).
     Without ``--apply`` the command prints the dry-run plan and issues no
     network request. The real close requires both ``--apply`` and ``--yes``.
     """

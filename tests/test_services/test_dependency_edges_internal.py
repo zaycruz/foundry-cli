@@ -586,10 +586,7 @@ def test_object_dependents_emit_typed_consumers_and_merge_declared_link_evidence
         if item["acp_id"]
     }
     assert operations["ACP-05"]["transport"] == "graphql-sse"
-    assert operations["ACP-05"]["contract_pins"] == {
-        "mcp": "0.397.0",
-        
-    }
+    assert operations["ACP-05"]["contract_pins"] == {"mcp": "0.397.0"}
     assert operations["ACP-06"]["path"] == "/monocle/api/links/graphV3"
 
 

@@ -10,7 +10,7 @@ the internal capability analysis:
 - ``GET /third-party-application-service/api/application-sdks/{applicationRid}/repository``
 
 SDK generation uses the contract-derived, contract-verified createSdkV2 contract
-(, 2026-07-25):
+():
 ``POST /third-party-application-service/api/application-sdks/v2/{applicationRid}``
 with exactly ``{"applicationVersion": <int>, "npm": {}}``, after reading
 ``metadata.applicationVersion`` from the getApplication endpoint.
@@ -60,7 +60,7 @@ SDK_GENERATE_TIMEOUT_REASON = (
     "polling deadline; the SDK version was minted server-side but generation "
     "did not finish in time."
 )
-# Observed live 2026-07-25: npm.status.type walks requested -> inProgress ->
+# Observed live: npm.status.type walks requested -> inProgress ->
 # success; the /latest?sdkStatus=REQUESTED confirmation read 204s as soon as
 # the record leaves "requested", so polling tracks listSdks instead.
 _SDK_GENERATION_PENDING_STATUSES = frozenset({"requested", "inProgress"})
@@ -397,7 +397,7 @@ class DeveloperConsoleService:
         The ``/latest?sdkType=NPM&sdkStatus=REQUESTED`` confirmation read
         from the MCP capture cannot be used as the completion poll: it
         returns 204 No Content the moment the record leaves ``requested``
-        (observed live 2026-07-25; the status union includes an
+        (observed live; the status union includes an
         ``inProgress`` intermediate state). So this polls the VERIFIED
         listSdks endpoint and tracks the minted ``sdk_version`` instead.
         Non-terminal statuses are ``requested`` and ``inProgress``; any
@@ -524,7 +524,7 @@ class DeveloperConsoleService:
         Reads the app's data scope (VERIFIED ``getApplication``) and the
         ontology's object types (public ``GET
         /api/v2/ontologies/{ontologyRid}/objectTypes``, contract-verified
-        2026-07-24), then writes one ``<ApiName>Card.tsx`` per in-scope
+        ), then writes one ``<ApiName>Card.tsx`` per in-scope
         object type plus an ``index.ts`` barrel into ``output_dir``.
         Never overwrites existing files without ``force``; all-or-nothing.
         """
@@ -918,7 +918,7 @@ def _extract_package_coordinates(
 # ---------------------------------------------------------------------------
 
 # Public v2 ObjectType dataType.type -> TypeScript type. Grounded in the
-# live-observed values (2026-07-24) and the vendored OntologyIrType union in
+# live-observed values  and the vendored OntologyIrType union in
 # derived from the published client contract (@osdk/client.unstable ontology-metadata
 # types); anything unrecognized becomes `unknown` with a warning instead of a
 # guessed type.

@@ -613,14 +613,14 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "--yes gate; verified by post-delete dry-run NotFound read-back"
     ),
     "create_or_update_foundry_action_type": (
-        "internal ontology-metadata (contract-verified dry-run 2026-07-24, "
+        "internal ontology-metadata (contract-verified dry-run, "
         "the captured contract): POST "
         "/ontology-metadata/api/ontology/v2/modify actionTypesToCreate "
         "with UUID map keys; dry-run-first with --apply gate and SDK "
         "full-metadata read-back; create-only"
     ),
     "delete_foundry_action_type": (
-        "internal ontology-metadata (contract-verified dry-run 2026-07-24, "
+        "internal ontology-metadata (contract-verified dry-run, "
         "the captured contract): POST "
         "/ontology-metadata/api/ontology/v2/modify actionTypesToDelete by "
         "action type RID resolved via SDK full-metadata; dry-run preview + "
@@ -853,7 +853,7 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
 # Foundry control-plane operations. They are reported so the parity picture
 # is complete, marked unsupported (with a reason) rather than dangled as
 # "planned" work this CLI intends to build.
-# (Empty as of the parity milestone, 2026-07-24: the workspace trio — repository
+# (Empty as of the parity milestone: the workspace trio — repository
 # context, local clone, python-transforms creation — was re-scoped in and
 # implemented against the internal stemma API.)
 _UNSUPPORTED: dict[str, str] = {}
@@ -918,7 +918,7 @@ _U3_BLOCKED: dict[str, str] = {
     "preview_transform": (
         "foundry-platform-sdk==1.95.0 exposes no transform preview or dry-run "
         "operation in its orchestration module (its 'preview' flag only gates "
-        "preview API features), and the 2026-07-22 gap analysis catalogues no "
+        "preview API features), and the gap analysis catalogues no "
         "VERIFIED internal transform-preview endpoint; implementing one would "
         "require guessing an unverified request contract"
     ),

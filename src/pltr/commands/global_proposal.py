@@ -55,7 +55,7 @@ def get_proposal(
     Reads the internal branch-service API
     (PUT /branch/proposal/load/{proposalRid}, an empty-body load). There is no
     list endpoint; load-by-RID only. The success response shape was
-    contract-verified against a live deployment 2026-07-25 and is passed through raw.
+    contract-verified against a live deployment and is passed through raw.
     """
     try:
         cache_rid(proposal_rid)
@@ -225,8 +225,7 @@ def close_proposal(
     """Close an Ontology Global Proposal (DESTRUCTIVE; plan-first).
 
     Backed by branch-service ``PUT /branch/proposal/close/{proposalRid}``
-    (empty-body write returning ``200 {}``; contract-verified against a live deployment
-    2026-07-25). Without ``--apply`` the
+    (empty-body write returning ``200 {}``; contract-verified against a live deployment). Without ``--apply`` the
     command prints the dry-run plan and issues no network request. The real
     close requires both ``--apply`` and ``--yes``.
     """
