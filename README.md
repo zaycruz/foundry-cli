@@ -255,7 +255,7 @@ pltr <command> --profile <name>   # use a specific profile for one command
 Install the extra and set all three variables to trace command paths, redacted arguments, duration, and exit codes. Tracing is a no-op when the variables are absent, and a tracing failure never changes the command result.
 
 ```bash
-uv pip install "pltr[langfuse] @ git+https://github.com/zaycruz/foundry-cli"
+uv pip install "foundry-cli[langfuse] @ git+https://github.com/zaycruz/foundry-cli"
 export LANGFUSE_HOST="https://cloud.langfuse.com"
 export LANGFUSE_PUBLIC_KEY="pk-lf-..."
 export LANGFUSE_SECRET_KEY="sk-lf-..."
