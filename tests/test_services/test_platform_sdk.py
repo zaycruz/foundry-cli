@@ -64,9 +64,9 @@ class GadgetClient:
 def _fake_sdk(tmp_path: Path) -> Path:
     demo = tmp_path / "v2" / "demo"
     demo.mkdir(parents=True)
-    (demo / "_client.py").write_text(CLIENT_PY)
-    (demo / "widget.py").write_text(WIDGET_PY)
-    (demo / "gadget.py").write_text(GADGET_PY)
+    (demo / "_client.py").write_text(CLIENT_PY, encoding="utf-8")
+    (demo / "widget.py").write_text(WIDGET_PY, encoding="utf-8")
+    (demo / "gadget.py").write_text(GADGET_PY, encoding="utf-8")
     (tmp_path / "v2" / "core").mkdir()  # no _client.py: skipped
     return tmp_path / "v2"
 

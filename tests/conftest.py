@@ -2,16 +2,50 @@
 Pytest configuration and fixtures for pltr tests.
 """
 
-import pytest
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch
-from typing import Generator
+import os
 
-from pltr.auth.storage import CredentialStorage
-from pltr.config.settings import Settings
-from pltr.config.profiles import ProfileManager
-from pltr.utils.agent_output import configure_agent_settings
+# Neutralise forced colour before anything imports typer or pltr. Two separate
+# mechanisms make a fixture too late, so this has to run in the module body:
+#
+#   1. ``typer.rich_utils`` computes FORCE_TERMINAL from these variables at
+#      *module import*. Clearing them afterwards does nothing.
+#   2. ``src/pltr/commands/*`` construct module-level ``Console()`` objects at
+#      *collection* time, and ``Console.__init__`` caches the colour system.
+#
+# Under forced colour Rich's option highlighter splits flags into ANSI-separated
+# fragments -- ``--parent-rid`` becomes ``\x1b[1;36m-\x1b[0m\x1b[1;36m-parent...``
+# -- so any assertion on a literal flag string fails. GITHUB_ACTIONS is always
+# set on hosted runners, which is why CI diverged from local runs.
+for _colour_var in ("GITHUB_ACTIONS", "FORCE_COLOR", "PY_COLORS"):
+    os.environ.pop(_colour_var, None)
+
+import typer.rich_utils as _typer_rich_utils  # noqa: E402
+
+# Belt and braces: the clear above only works while typer imports rich_utils
+# lazily. Pin the attribute too, so a typer patch release that hoists that
+# import cannot silently re-arm the failure.
+_typer_rich_utils.FORCE_TERMINAL = None
+
+import pytest  # noqa: E402
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+from unittest.mock import Mock, patch  # noqa: E402
+from typing import Generator  # noqa: E402
+
+from pltr.auth.storage import CredentialStorage  # noqa: E402
+from pltr.config.settings import Settings  # noqa: E402
+from pltr.config.profiles import ProfileManager  # noqa: E402
+from pltr.utils.agent_output import configure_agent_settings  # noqa: E402
+
+
+def test_colour_is_neutralised_for_the_session() -> None:
+    """The conftest colour clear must actually reach typer's console.
+
+    Asserting on pass counts would be a tautology -- it cannot fail once the
+    two environments are equalised. Assert the mechanism instead.
+    """
+    assert _typer_rich_utils.FORCE_TERMINAL is None
+    assert _typer_rich_utils._get_rich_console().is_terminal is False
 
 
 @pytest.fixture(autouse=True)
