@@ -5,16 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REFERENCE_DIR = PROJECT_ROOT / "skills" / "pltr-cli" / "reference"
-MANIFEST_COMMAND = ("uv", "run", "pltr", "agent-manifest")
 TOKEN_RE = re.compile(r""""[^"]*"|'[^']*'|`[^`]*`|[^\s]+""")
 PLTR_RE = re.compile(r"(?<![\w-])pltr\b(?P<rest>[^\n`]*)")
 COMMAND_TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -39,6 +37,26 @@ class DriftReport:
         return bool(self.reference_only or self.manifest_only)
 
 
+def _manifest_paths(payload: Mapping[str, Any]) -> frozenset[str]:
+    """Normalize legacy string paths and typed manifest path segments."""
+    commands = payload["commands"]
+    paths: set[str] = set()
+    for command in commands:
+        path = command["path"]
+        if isinstance(path, str):
+            normalized_path = path
+        elif isinstance(path, list) and all(
+            isinstance(segment, str) and segment for segment in path
+        ):
+            normalized_path = " ".join(path)
+        else:
+            raise TypeError(f"invalid command path: {path!r}")
+        if not normalized_path:
+            raise TypeError("command path must not be empty")
+        paths.add(normalized_path)
+    return frozenset(paths)
+
+
 def load_manifest(path: Path) -> frozenset[str]:
     """Load command paths from a JSON manifest file."""
     if not path.is_file():
@@ -49,8 +67,7 @@ def load_manifest(path: Path) -> frozenset[str]:
 
     try:
         payload = json.loads(path.read_text())
-        commands = payload["commands"]
-        paths = frozenset(command["path"] for command in commands)
+        paths = _manifest_paths(payload)
     except (OSError, KeyError, TypeError, ValueError) as error:
         raise DriftCheckError(f"Invalid command manifest {path}: {error}") from error
 
@@ -60,35 +77,21 @@ def load_manifest(path: Path) -> frozenset[str]:
 
 
 def load_manifest_from_cli(project_root: Path = PROJECT_ROOT) -> frozenset[str]:
-    """Run the authoritative CLI command and load its JSON output."""
-    result = subprocess.run(
-        MANIFEST_COMMAND,
-        cwd=project_root,
-        capture_output=True,
-        text=True,
-        check=False,
+    """Load every visible executable command from the live CLI tree.
+
+    `pltr agent-manifest` contains only typed commands that are safe for
+    dynamic agent-tool registration. The skill reference covers the complete
+    CLI, so its drift gate must inspect the complete Click surface instead.
+    """
+    _ = project_root
+    from typer.main import get_command
+
+    from pltr.cli import app
+    from pltr.commands.agent_manifest import iter_executable_commands
+
+    return frozenset(
+        path for path, _ in iter_executable_commands(get_command(app))
     )
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise DriftCheckError(
-            "Unable to run `uv run pltr agent-manifest`"
-            f" (exit {result.returncode}): {detail}"
-        )
-
-    try:
-        payload = json.loads(result.stdout)
-        paths = frozenset(command["path"] for command in payload["commands"])
-    except (KeyError, TypeError, ValueError) as error:
-        raise DriftCheckError(
-            "`uv run pltr agent-manifest` did not return a valid JSON manifest: "
-            f"{error}"
-        ) from error
-
-    if not all(isinstance(path, str) and path for path in paths):
-        raise DriftCheckError(
-            "`uv run pltr agent-manifest` returned invalid command paths"
-        )
-    return paths
 
 
 def _tokens_after_pltr(line: str) -> list[str]:
@@ -213,7 +216,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--manifest",
         type=Path,
-        help="Use a JSON manifest fixture instead of invoking uv run pltr agent-manifest.",
+        help="Use a JSON manifest fixture instead of the live CLI command surface.",
     )
     return parser.parse_args(argv)
 

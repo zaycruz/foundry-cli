@@ -944,22 +944,14 @@ def registered_command_paths() -> frozenset[str]:
     fully assembled. This is the same surface `pltr agent-manifest` emits, so a
     capability marked implemented is guaranteed to name a command that exists.
     """
-    import click
     from typer.main import get_command
 
     from pltr.cli import app
+    from pltr.commands.agent_manifest import iter_executable_commands
 
-    paths: set[str] = set()
-
-    def _walk(command: click.Command, prefix: tuple[str, ...] = ()) -> None:
-        if isinstance(command, click.Group):
-            for name, sub in command.commands.items():
-                _walk(sub, (*prefix, name))
-        elif prefix:
-            paths.add(" ".join(prefix))
-
-    _walk(get_command(app))
-    return frozenset(paths)
+    return frozenset(
+        path for path, _ in iter_executable_commands(get_command(app))
+    )
 
 
 def _spec_status(
