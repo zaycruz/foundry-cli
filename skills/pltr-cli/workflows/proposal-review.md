@@ -4,9 +4,9 @@ Reviewing and merging changes through Foundry proposals: code repository pull re
 
 Capability reality of this install:
 
-- The unified `pltr proposal` group is fail-closed. The pinned `foundry-platform-sdk` exposes no Code Repositories or Global Proposal client, so every `pltr proposal` action returns an explicit `unsupported-capability` error (exit code 6) instead of guessing. This includes `create`, `list`, `get`, `comment`, `approve`, `request-changes`, `merge`, `accept`, and `close`. Valid proposal types are `code-pr` and `global-proposal`.
-- The working paths are the type-specific groups: `pltr repository pull-request` for code PRs and `pltr global-proposal` / `pltr global-branch` for Ontology Global Proposals.
-- Code PR approve, request-changes, and merge, and Global Proposal accept, exist ONLY in the fail-closed `pltr proposal` group and are therefore unavailable today. Document these as gaps; never claim such an action succeeded.
+- The unified `pltr proposal` group works for code-pr `create`/`list`/`get`/`comment`/`close` (via `RepositoryService`) and global-proposal `create`/`get`/`close` (via `GlobalProposalService`). `create` and `comment` are dry-run plan by default; `--apply` executes.
+- The type-specific groups (`pltr repository pull-request`, `pltr global-proposal`, `pltr global-branch`) expose the same operations plus extras (repository context/clone, branch management) and remain the better path for deep inspection.
+- Still fail-closed with exit 6 `unsupported-capability`: code-pr `approve`/`request-changes`/`merge`, and global-proposal `list`/`comment`/`approve`/`request-changes`/`merge`/`accept`. Document these as gaps; never claim such an action succeeded. Leads for unblocking them are tracked in `tickets/`.
 
 ## Contract
 
@@ -36,11 +36,12 @@ pltr global-proposal get ri.branch..proposal.00000000-0000-0000-0000-00000000002
   --profile "$PROFILE"
 ```
 
-The unified facade exists but currently returns `unsupported-capability` for every action; do not build a review on it:
+The unified facade works for reads (the type-specific group is still preferred for inspection depth):
 
 ```bash
+pltr proposal list code-pr ri.stemma.main.repository.abc123 \
+  --profile "$PROFILE" --format json
 pltr proposal get code-pr 123 --parent-rid ri.stemma.main.repository.abc123
-# -> error.category: unsupported-capability (pinned SDK exposes no client)
 ```
 
 ## Phase 2: Inspect the changes (read-only)
