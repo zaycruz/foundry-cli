@@ -81,24 +81,35 @@ def create_proposal(
     description: Optional[str] = typer.Option(
         None, "--description", help="Proposal description"
     ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real create mutation (default: dry-run plan only)",
+    ),
     profile: Optional[str] = _profile_option(),
     format: str = _format_option(),
 ) -> None:
-    """Create a proposal when the pinned client exposes the operation."""
+    """Create a proposal (dry-run plan by default; --apply issues the write).
 
-    _run(
-        proposal_type,
-        profile,
-        format,
-        lambda service, kind: service.create(
+    code-pr maps --parent-rid to the base repository, --source-ref to the
+    head commitish and --target-ref to the base branch (default
+    refs/heads/master). global-proposal maps --source-ref to the Global
+    Branch RID and --target-ref to the merge target (default main);
+    --parent-rid is unused by the branch-service create contract.
+    """
+
+    def operation(service: ProposalService, kind: ProposalType) -> Any:
+        method = service.create if apply else service.create_plan
+        return method(
             kind,
             parent_rid=parent_rid,
             title=title,
             source_ref=source_ref,
             target_ref=target_ref,
             description=description,
-        ),
-    )
+        )
+
+    _run(proposal_type, profile, format, operation)
 
 
 @app.command("list")
@@ -146,19 +157,21 @@ def comment_on_proposal(
     parent_rid: Optional[str] = typer.Option(
         None, "--parent-rid", help="Repository or ontology RID"
     ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real comment mutation (default: dry-run plan only)",
+    ),
     profile: Optional[str] = _profile_option(),
     format: str = _format_option(),
 ) -> None:
-    """Add a proposal comment when supported."""
+    """Add a proposal comment (code-pr only; dry-run plan by default)."""
 
-    _run(
-        proposal_type,
-        profile,
-        format,
-        lambda service, kind: service.comment(
-            kind, proposal_id, message, parent_rid=parent_rid
-        ),
-    )
+    def operation(service: ProposalService, kind: ProposalType) -> Any:
+        method = service.comment if apply else service.comment_plan
+        return method(kind, proposal_id, message, parent_rid=parent_rid)
+
+    _run(proposal_type, profile, format, operation)
 
 
 def _decision_command(

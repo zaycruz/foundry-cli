@@ -43,6 +43,7 @@ def test_create_routes_explicit_type_payload_and_profile(proposal_service):
             "feature",
             "--target-ref",
             "main",
+            "--apply",
             "--profile",
             "work",
             "--format",
@@ -61,6 +62,41 @@ def test_create_routes_explicit_type_payload_and_profile(proposal_service):
         target_ref="main",
         description=None,
     )
+    service.create_plan.assert_not_called()
+
+
+def test_create_defaults_to_dry_run_plan(proposal_service):
+    service, _ = proposal_service
+    service.create_plan.return_value = {"status": "dry-run"}
+
+    result = runner.invoke(
+        app,
+        [
+            "proposal",
+            "create",
+            "code-pr",
+            "--parent-rid",
+            "repo-rid",
+            "--title",
+            "Add feature",
+            "--source-ref",
+            "feature",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {"status": "dry-run"}
+    service.create_plan.assert_called_once_with(
+        ProposalType.CODE_PR,
+        parent_rid="repo-rid",
+        title="Add feature",
+        source_ref="feature",
+        target_ref=None,
+        description=None,
+    )
+    service.create.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -77,7 +113,7 @@ def test_create_routes_explicit_type_payload_and_profile(proposal_service):
             call(ProposalType.GLOBAL_PROPOSAL, "gp-1", parent_rid="ontology"),
         ),
         (
-            ["comment", "code-pr", "12", "Looks good", "--parent-rid", "repo"],
+            ["comment", "code-pr", "12", "Looks good", "--parent-rid", "repo", "--apply"],
             "comment",
             call(ProposalType.CODE_PR, "12", "Looks good", parent_rid="repo"),
         ),
@@ -96,6 +132,23 @@ def test_safe_commands_route_supported_service_results_as_json(
     assert result.stdout.lstrip().startswith("{")
     assert result.stdout.rstrip().endswith("}")
     assert getattr(service, method_name).call_args == expected_call
+
+
+def test_comment_defaults_to_dry_run_plan(proposal_service):
+    service, _ = proposal_service
+    service.comment_plan.return_value = {"status": "dry-run"}
+
+    result = runner.invoke(
+        app,
+        ["proposal", "comment", "code-pr", "12", "Looks good", "--format", "json"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout) == {"status": "dry-run"}
+    service.comment_plan.assert_called_once_with(
+        ProposalType.CODE_PR, "12", "Looks good", parent_rid=None
+    )
+    service.comment.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -125,6 +178,10 @@ def test_unsupported_verbs_return_clean_typed_json(
         getattr(service, method_name).side_effect = UnsupportedProposalCapabilityError(
             ProposalType(proposal_type), action
         )
+        if verb == "comment":
+            service.comment_plan.side_effect = UnsupportedProposalCapabilityError(
+                ProposalType(proposal_type), action
+            )
     arguments = ["proposal", verb, proposal_type]
     if verb == "list":
         arguments.append("parent")
@@ -290,21 +347,9 @@ def test_proposal_group_is_registered():
 @pytest.mark.parametrize(
     ("arguments", "action"),
     [
-        (
-            [
-                "create",
-                "code-pr",
-                "--parent-rid",
-                "repo",
-                "--title",
-                "Title",
-                "--source-ref",
-                "feature",
-            ],
-            "create",
-        ),
-        (["get", "global-proposal", "gp-1"], "get"),
-        (["close", "global-proposal", "gp-1", "--yes"], "close"),
+        (["merge", "code-pr", "pr-1"], "merge"),
+        (["list", "global-proposal", "ontology"], "list"),
+        (["accept", "global-proposal", "gp-1", "--yes"], "accept"),
     ],
 )
 def test_real_service_denial_is_json_only_and_pre_auth(arguments, action):
