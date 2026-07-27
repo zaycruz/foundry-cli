@@ -1062,10 +1062,16 @@ class ObjectTypeService(BaseService):
         datasource_update: Optional[Dict[str, Any]] = None
         chosen_dataset_rid: Optional[str] = None
         if backing_column is not None:
-            rid_to_id = {
-                rid: prop.get("id")
+            # The loaded payload is untyped, so narrow both halves here rather
+            # than handing Any through: the callee keys a wire mapping by these
+            # values and a non-string id would produce an unusable request.
+            rid_to_id: Dict[str, str] = {
+                rid: property_id_value
                 for rid, prop in loaded_properties.items()
-                if isinstance(prop, Mapping) and prop.get("id")
+                if isinstance(prop, Mapping)
+                and isinstance(rid, str)
+                and isinstance(property_id_value := prop.get("id"), str)
+                and property_id_value
             }
             datasource_update, chosen_dataset_rid = (
                 self._build_datasource_column_update(
@@ -2957,15 +2963,16 @@ class ActionService(BaseService):
             )
 
         if action_type.startswith("ri."):
-            rid: Optional[str] = action_type
+            rid = action_type
         else:
             metadata = self.get_action_type(ontology_rid, action_type, branch=branch)
-            rid = metadata.get("rid")
-            if not isinstance(rid, str) or not rid:
+            resolved = metadata.get("rid")
+            if not isinstance(resolved, str) or not resolved:
                 raise RuntimeError(
                     f"Could not resolve a RID for action type {action_type}; "
                     "the update path requires the action type RID"
                 )
+            rid = resolved
 
         client = _internal_client(self)
         loaded = self._load_action_type_state(client, rid=rid)
