@@ -120,4 +120,4 @@ def test_project_templates_list_error_returns_nonzero() -> None:
         result = runner.invoke(app, ["templates", "list"])
 
     assert result.exit_code == 1
-    assert "HTTP 500" in result.stdout
+    assert "HTTP 500" in result.stderr

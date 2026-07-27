@@ -8,6 +8,7 @@ import pytest
 import requests
 from unittest.mock import Mock, patch
 
+from pltr.services.errors import FoundryApiError
 from pltr.services.ontology import (
     OntologyService,
     ObjectTypeService,
@@ -1996,3 +1997,955 @@ def test_delete_object_type_dependent_link_types_include_reverse_order_hint(
     assert hint.startswith("hint (step 3 of the required publication order)")
     assert "reverse publication order" in hint
     assert "link-type-delete (step 4)" in hint
+
+
+# object-type-add-property tests
+
+
+def _bulk_load_response_with_tail_number() -> tuple[int, dict, str]:
+    """Loaded state after the tailNumber property was added."""
+    status, payload, raw = _bulk_load_response()
+    entry = payload["objectTypes"][0]
+    property_rid = "ri.ontology.main.property.tail-number"
+    entry["objectType"]["propertyTypes"][property_rid] = {
+        "rid": property_rid,
+        "id": "tail_number",
+        "apiName": "tailNumber",
+        "displayMetadata": {"displayName": "tailNumber", "visibility": "NORMAL"},
+        "indexedForSearch": False,
+        "typeClasses": [],
+        "type": {
+            "type": "string",
+            "string": {"isLongText": False, "supportsExactMatching": True},
+        },
+        "status": {"type": "active", "active": {}},
+    }
+    entry["datasources"][0]["datasource"]["dataset"]["propertyMapping"][
+        property_rid
+    ] = "tail_number"
+    return (status, payload, raw)
+
+
+def test_add_property_dry_run_request_shape(mock_object_type_service):
+    """The dry-run body matches the contract: propertyTypes add + columnMapping."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _bulk_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="tailNumber",
+            property_type="STRING",
+            backing_column="tail_number",
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["validation"] == {"status": "success", "errors": []}
+    assert result["propertyTypeId"] == "tail_number"
+    assert result["objectTypeId"] == "ns0abcde.example-object"
+    assert result["objectTypeRid"] == "ri.ontology.main.object-type.example-object"
+    assert result["backingDataset"] == "ri.foundry.main.dataset.example"
+
+    load_call, dry_run_call = mock_client.conjure.call_args_list
+    assert "/ontology/ontology/bulkLoadEntities" in load_call.args[1]
+    identifier = load_call.kwargs["json_body"]["objectTypes"][0]["identifier"]
+    assert identifier == {
+        "type": "objectTypeRid",
+        "objectTypeRid": "ri.ontology.main.object-type.example-object",
+    }
+
+    body = dry_run_call.kwargs["json_body"]["modificationRequest"]
+    variant = body["objectTypes"]["ns0abcde.example-object"]
+    assert variant["type"] == "update"
+    new_property = variant["update"]["objectType"]["propertyTypes"]["tail_number"]
+    assert new_property["apiName"] == "tailNumber"
+    assert new_property["type"] == {
+        "type": "string",
+        "string": {"isLongText": False, "supportsExactMatching": True},
+    }
+    # Loaded property carried over with its rid translated to the id.
+    assert "id" in variant["update"]["objectType"]["propertyTypes"]
+
+    (datasource_update,) = body["objectTypeDatasources"]["ns0abcde.example-object"]
+    assert datasource_update["type"] == "update"
+    assert datasource_update["update"]["rid"] == "ri.ontology.main.datasource.tm"
+    assert datasource_update["update"]["objectTypeDatasourceDefinition"] == {
+        "type": "dataset",
+        "dataset": {
+            "datasetRid": "ri.foundry.main.dataset.example",
+            "propertyMapping": {"id": "id", "tail_number": "tail_number"},
+        },
+    }
+    # Load + dry-run only; the real modify endpoint is never called.
+    assert mock_client.conjure.call_count == 2
+    assert "/modify?" not in dry_run_call.args[1]
+
+
+def test_add_property_apply_verifies_read_back(mock_object_type_service):
+    """An applied add reads the created property and mapping back."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _bulk_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+        _bulk_load_response_with_tail_number(),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="tailNumber",
+            property_type="STRING",
+            backing_column="tail_number",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["propertyRid"] == "ri.ontology.main.property.tail-number"
+    assert result["verification"]["status"] == "verified"
+    modify_call = mock_client.conjure.call_args_list[2]
+    assert "/modify?" in modify_call.args[1]
+    assert "modificationRequest" not in modify_call.kwargs["json_body"]
+    assert mock_client.conjure.call_count == 4
+
+
+def test_add_property_branch_rid_passthrough(mock_object_type_service):
+    """--branch-rid lands in the request-level ontologyBranchRid field."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _bulk_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="tailNumber",
+            property_type="INTEGER",
+            branch_rid="ri.ontology.main.branch.feature",
+        )
+
+    assert result["ontologyBranchRid"] == "ri.ontology.main.branch.feature"
+    body = mock_client.conjure.call_args.kwargs["json_body"]["modificationRequest"]
+    assert body["ontologyBranchRid"] == "ri.ontology.main.branch.feature"
+    # Without --backing-column no datasource update is sent.
+    assert "objectTypeDatasources" not in body
+
+
+def test_add_property_branch_unsupported_is_typed(mock_object_type_service):
+    """A branch rejection surfaces as a typed FoundryApiError with details."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _bulk_load_response(),
+        _validation_error_response("BranchUnsupported"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(FoundryApiError) as exc_info,
+    ):
+        service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="tailNumber",
+            property_type="STRING",
+            branch_rid="ri.ontology.main.branch.feature",
+        )
+
+    assert exc_info.value.error_name == "OntologyMetadata:BranchUnsupported"
+    assert exc_info.value.validation_details
+    # The typed error stops the flow before any real modify.
+    assert mock_client.conjure.call_count == 2
+
+
+def test_add_property_refuses_interfaces(mock_object_type_service):
+    """Interface-implementing object types are refused, not dropped."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    status, payload, raw = _bulk_load_response()
+    payload["objectTypes"][0]["objectType"]["implementsInterfaces2"] = [
+        {"interfaceTypeRid": "ri.ontology.main.interface-type.x"}
+    ]
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [(status, payload, raw)]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(RuntimeError, match="implements"),
+    ):
+        service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="tailNumber",
+            property_type="STRING",
+        )
+
+
+def test_add_property_refuses_shared_property_types(mock_object_type_service):
+    """Shared property types are refused, not dropped."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    status, payload, raw = _bulk_load_response()
+    prop = payload["objectTypes"][0]["objectType"]["propertyTypes"][
+        "ri.ontology.main.property.id"
+    ]
+    prop["sharedPropertyTypeRid"] = "ri.ontology.main.shared-property.x"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [(status, payload, raw)]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(RuntimeError, match="shared property types"),
+    ):
+        service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="tailNumber",
+            property_type="STRING",
+        )
+
+
+def test_add_property_refuses_existing_property(mock_object_type_service):
+    """Re-adding an existing property API name fails before any modify."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_bulk_load_response()]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(RuntimeError, match="already has a property"),
+    ):
+        service.add_property_to_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="id",
+            property_type="STRING",
+        )
+
+    assert mock_client.conjure.call_count == 1
+
+
+# resolve tests
+def test_resolve_object_type_by_api_name(mock_object_type_service):
+    """object-type resolution returns both the rid and the internal id."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_bulk_load_response()]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.resolve_object_type(
+            "ri.ontology.main.ontology.test", api_name="ExampleObject"
+        )
+
+    assert result == {
+        "kind": "object-type",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "rid": "ri.ontology.main.object-type.example-object",
+        "id": "ns0abcde.example-object",
+        "apiName": "ExampleObject",
+        "displayName": "Example Object",
+        "status": "active",
+    }
+    identifier = mock_client.conjure.call_args.kwargs["json_body"]["objectTypes"][0][
+        "identifier"
+    ]
+    assert identifier == {
+        "type": "objectTypeRid",
+        "objectTypeRid": "ri.ontology.main.object-type.example-object",
+    }
+
+
+def test_resolve_object_type_by_rid(mock_object_type_service):
+    """A rid input resolves through the objectTypeRid identifier."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_bulk_load_response()]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.resolve_object_type(
+            "ri.ontology.main.ontology.test",
+            rid="ri.ontology.main.object-type.example-object",
+        )
+
+    assert result["id"] == "ns0abcde.example-object"
+    identifier = mock_client.conjure.call_args.kwargs["json_body"]["objectTypes"][0][
+        "identifier"
+    ]
+    assert identifier == {
+        "type": "objectTypeRid",
+        "objectTypeRid": "ri.ontology.main.object-type.example-object",
+    }
+
+
+def test_resolve_property(mock_object_type_service):
+    """property resolution returns the property rid and internal id."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_bulk_load_response()]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.resolve_property(
+            "ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="id",
+        )
+
+    assert result["kind"] == "property"
+    assert result["rid"] == "ri.ontology.main.property.id"
+    assert result["id"] == "id"
+    assert result["status"] == "active"
+    assert result["objectType"] == {
+        "rid": "ri.ontology.main.object-type.example-object",
+        "id": "ns0abcde.example-object",
+        "apiName": "ExampleObject",
+    }
+
+
+def test_resolve_property_missing(mock_object_type_service):
+    """An unknown property API name fails loudly."""
+    service, mock_object_type_class = mock_object_type_service
+    mock_object_type_class.get.return_value = Mock(
+        rid="ri.ontology.main.object-type.example-object"
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_bulk_load_response()]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        pytest.raises(RuntimeError, match="has no property"),
+    ):
+        service.resolve_property(
+            "ri.ontology.main.ontology.test",
+            object_type="ExampleObject",
+            api_name="unknown",
+        )
+
+
+# action-type-update tests
+def _action_type_load_response() -> tuple[int, dict, str]:
+    """bulkLoadEntities response for one action type (delete-contact shape)."""
+    entry = {
+        "actionType": {
+            "actionTypeLogic": {
+                "logic": {
+                    "rules": [
+                        {
+                            "type": "deleteObjectRule",
+                            "deleteObjectRule": {"objectToDelete": "Contact"},
+                        }
+                    ],
+                    "actionLogRule": None,
+                },
+                "validation": {
+                    "actionTypeLevelValidation": {
+                        "rules": {
+                            "ri.actions.main.validation-rule.v1": {
+                                "condition": {"type": "true", "true": {}},
+                                "displayMetadata": {
+                                    "failureMessage": "x",
+                                    "typeClasses": [],
+                                },
+                            }
+                        },
+                        "ordering": ["ri.actions.main.validation-rule.v1"],
+                        "writeAuthorization": None,
+                        "readAuthorization": None,
+                    },
+                    "parameterValidations": {},
+                    "sectionValidations": {},
+                    "actionEditsValidation": None,
+                },
+                "revert": None,
+                "webhooks": None,
+                "notifications": [],
+                "effects": None,
+            },
+            "metadata": {
+                "rid": "ri.actions.main.action-type.1234",
+                "apiName": "delete-contact",
+                "displayMetadata": {
+                    "displayName": "Delete Contact",
+                    "description": "",
+                    "typeClasses": [],
+                },
+                "parameters": {
+                    "Contact": {
+                        "id": "Contact",
+                        "rid": "ri.actions.main.parameter.p1",
+                        "type": {
+                            "type": "objectReference",
+                            "objectReference": {"objectTypeId": "ns0abcde.contact"},
+                        },
+                        "displayMetadata": {
+                            "displayName": "Contact",
+                            "description": "",
+                            "structFields": {},
+                            "structFieldsV2": [],
+                            "typeClasses": [],
+                        },
+                    }
+                },
+                "sections": {},
+                "parameterOrdering": ["Contact"],
+                "formContentOrdering": [
+                    {"type": "parameterId", "parameterId": "Contact"}
+                ],
+                "status": {"type": "experimental", "experimental": {}},
+                "entities": {
+                    "affectedObjectTypes": ["ns0abcde.contact"],
+                    "affectedLinkTypes": [],
+                    "affectedInterfaceTypes": [],
+                    "typeGroups": [],
+                },
+            },
+        },
+        "ontologyRid": "ri.ontology.main.ontology.test",
+    }
+    return (200, {"actionTypes": [entry]}, "[]")
+
+
+def _update_dry_run_body(mock_client) -> dict:
+    return mock_client.conjure.call_args.kwargs["json_body"]["modificationRequest"]
+
+
+def test_update_action_type_dry_run_merges_status_and_display(
+    mock_action_service,
+):
+    """A status flip + displayMetadata merge builds a full ActionTypeUpdate."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _action_type_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+    ):
+        result = service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={
+                "status": "ACTIVE",
+                "displayMetadata": {"description": "updated"},
+            },
+        )
+
+    assert result["mode"] == "dry-run"
+    assert result["changedFields"] == ["displayMetadata", "status"]
+    assert result["rid"] == "ri.actions.main.action-type.1234"
+    body = _update_dry_run_body(mock_client)
+    (rid,) = body["actionTypesToUpdate"].keys()
+    assert rid == "ri.actions.main.action-type.1234"
+    update = body["actionTypesToUpdate"][rid]
+    assert update["apiName"] == "delete-contact"
+    assert update["status"] == {"type": "active", "active": {}}
+    assert update["displayMetadata"]["description"] == "updated"
+    assert update["displayMetadata"]["displayName"] == "Delete Contact"
+    # Loaded logic and validations carried over unchanged.
+    assert update["logic"] == {
+        "rules": [
+            {
+                "type": "deleteObjectRule",
+                "deleteObjectRule": {"objectToDelete": "Contact"},
+            }
+        ]
+    }
+    assert update["validationsOrdering"] == [
+        {"type": "rid", "rid": "ri.actions.main.validation-rule.v1"}
+    ]
+    assert update["parametersToCreate"] == {}
+    assert update["parametersToDelete"] == []
+    assert "writeAuthorization" not in update
+    # Load + dry-run only; never the real modify endpoint.
+    assert mock_client.conjure.call_count == 2
+    assert "/modify?" not in mock_client.conjure.call_args.args[1]
+
+
+def test_update_action_type_replaces_rules_with_function_rule(
+    mock_action_service,
+):
+    """A logic patch swaps object-edit rules for a function rule, with a
+    currentUser-bound input passed through per the vendor types."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _action_type_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+    function_rule = {
+        "type": "functionRule",
+        "functionRule": {
+            "functionRid": "ri.function-registry.main.function.abc",
+            "functionVersion": "1.0.0",
+            "functionInputValues": {
+                "submitter": {"type": "currentUser", "currentUser": {}},
+                "target": {"type": "parameterId", "parameterId": "Contact"},
+            },
+        },
+    }
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+    ):
+        result = service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"logic": {"rules": [function_rule]}},
+        )
+
+    assert result["changedFields"] == ["logic"]
+    update = _update_dry_run_body(mock_client)["actionTypesToUpdate"][
+        "ri.actions.main.action-type.1234"
+    ]
+    assert update["logic"] == {"rules": [function_rule]}
+
+
+def test_update_action_type_function_rule_requires_rid_and_version(
+    mock_action_service,
+):
+    """Function rules without rid/version are rejected client-side."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_action_type_load_response()]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+        pytest.raises(RuntimeError, match="functionRid"),
+    ):
+        service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"logic": {"rules": [{"type": "functionRule", "functionRule": {}}]}},
+        )
+
+
+def _parameter_add_spec() -> dict:
+    return {
+        "displayMetadata": {
+            "displayName": "Notes",
+            "description": "",
+            "structFields": {},
+            "structFieldsV2": [],
+            "typeClasses": [],
+        },
+        "type": {"type": "string", "string": {}},
+        "validation": {
+            "conditionalOverrides": [],
+            "defaultValidation": {
+                "display": {
+                    "visibility": {"type": "editable", "editable": {}},
+                    "renderHint": {"type": "textInput", "textInput": {}},
+                },
+                "validation": {
+                    "required": {"type": "optional", "optional": {}},
+                    "allowedValues": {"type": "any", "any": {}},
+                },
+            },
+            "structFieldValidations": {},
+        },
+    }
+
+
+def test_update_action_type_parameter_add(mock_action_service):
+    """A parameters.add lands in parametersToCreate and both orderings."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _action_type_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+    ):
+        result = service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"parameters": {"add": {"Notes": _parameter_add_spec()}}},
+        )
+
+    assert result["changedFields"] == ["parameters"]
+    update = _update_dry_run_body(mock_client)["actionTypesToUpdate"][
+        "ri.actions.main.action-type.1234"
+    ]
+    assert update["parametersToCreate"]["Notes"]["type"] == {
+        "type": "string",
+        "string": {},
+    }
+    assert update["parameterOrdering"] == ["Contact", "Notes"]
+    assert update["formContentOrdering"] == [
+        {"type": "parameterId", "parameterId": "Contact"},
+        {"type": "parameterId", "parameterId": "Notes"},
+    ]
+
+
+def test_update_action_type_parameter_remove_and_reorder(mock_action_service):
+    """parameters.remove resolves to rids; ordering replaces the order."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    status, payload, raw = _action_type_load_response()
+    metadata = payload["actionTypes"][0]["actionType"]["metadata"]
+    metadata["parameters"]["Notes"] = {
+        "id": "Notes",
+        "rid": "ri.actions.main.parameter.p2",
+        "type": {"type": "string", "string": {}},
+        "displayMetadata": {"displayName": "Notes"},
+    }
+    metadata["parameterOrdering"] = ["Contact", "Notes"]
+    metadata["formContentOrdering"] = [
+        {"type": "parameterId", "parameterId": "Contact"},
+        {"type": "parameterId", "parameterId": "Notes"},
+    ]
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        (status, payload, raw),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+    ):
+        result = service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"parameters": {"remove": ["Notes"]}},
+        )
+
+    assert result["changedFields"] == ["parameters"]
+    update = _update_dry_run_body(mock_client)["actionTypesToUpdate"][
+        "ri.actions.main.action-type.1234"
+    ]
+    assert update["parametersToDelete"] == ["ri.actions.main.parameter.p2"]
+    assert update["parameterOrdering"] == ["Contact"]
+    assert update["formContentOrdering"] == [
+        {"type": "parameterId", "parameterId": "Contact"}
+    ]
+
+
+def test_update_action_type_validations_add_remove(mock_action_service):
+    """validations.add keys are UUID-normalized; removes resolve to rids."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _action_type_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+    ):
+        result = service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={
+                "validations": {
+                    "add": {
+                        "must-be-admin": {
+                            "condition": {"type": "true", "true": {}},
+                            "displayMetadata": {
+                                "failureMessage": "admin only",
+                                "typeClasses": [],
+                            },
+                        }
+                    },
+                    "remove": ["ri.actions.main.validation-rule.v1"],
+                }
+            },
+        )
+
+    assert result["changedFields"] == ["validations"]
+    update = _update_dry_run_body(mock_client)["actionTypesToUpdate"][
+        "ri.actions.main.action-type.1234"
+    ]
+    assert update["validationsToDelete"] == ["ri.actions.main.validation-rule.v1"]
+    (new_key,) = update["validationsToCreate"].keys()
+    uuid.UUID(new_key)  # create keys must be UUID strings on the wire
+    assert update["validationsOrdering"] == [
+        {"type": "validationRuleIdInRequest", "validationRuleIdInRequest": new_key}
+    ]
+
+
+def test_update_action_type_validations_cannot_remove_all(mock_action_service):
+    """Removing every action-type-level validation is rejected client-side."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_action_type_load_response()]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+        pytest.raises(RuntimeError, match="at least one"),
+    ):
+        service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"validations": {"remove": ["ri.actions.main.validation-rule.v1"]}},
+        )
+
+
+def test_update_action_type_unknown_patch_keys(mock_action_service):
+    """Unknown patch keys fail client-side with the supported set."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+
+    with pytest.raises(FoundryApiError, match="supported keys"):
+        service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"logicc": {"rules": []}},
+        )
+
+
+def test_update_action_type_apply_verifies_read_back(mock_action_service):
+    """An applied update reads the action type back through the SDK."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _action_type_load_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+        (200, {}, "{}"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={
+                "rid": "ri.actions.main.action-type.1234",
+                "api_name": "delete-contact",
+                "status": "ACTIVE",
+            },
+        ) as mock_get,
+    ):
+        result = service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"status": "ACTIVE"},
+            branch="feature-branch",
+            branch_rid="ri.ontology.main.branch.feature",
+            apply=True,
+        )
+
+    assert result["mode"] == "applied"
+    assert result["verification"]["status"] == "verified"
+    assert result["metadata"]["status"] == "ACTIVE"
+    assert result["ontologyBranchRid"] == "ri.ontology.main.branch.feature"
+    # Resolution + read-back both went through the branch-aware SDK get.
+    assert mock_get.call_count == 2
+    assert mock_get.call_args.kwargs["branch"] == "feature-branch"
+    modify_call = mock_client.conjure.call_args_list[2]
+    assert "/modify?" in modify_call.args[1]
+    body = modify_call.kwargs["json_body"]
+    assert body["ontologyBranchRid"] == "ri.ontology.main.branch.feature"
+    assert "modificationRequest" not in body
+
+
+def test_update_action_type_dry_run_blocks_apply_on_error(mock_action_service):
+    """A failed dry-run raises on apply instead of issuing the modify."""
+    service, _ = mock_action_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _action_type_load_response(),
+        _validation_error_response("ActionTypesNotFound"),
+    ]
+
+    with (
+        patch(
+            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch.object(
+            ActionService,
+            "get_action_type",
+            return_value={"rid": "ri.actions.main.action-type.1234"},
+        ),
+        pytest.raises(RuntimeError, match="dry-run validation failed"),
+    ):
+        service.update_action_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            action_type="delete-contact",
+            patch={"status": "ACTIVE"},
+            apply=True,
+        )
+
+    assert mock_client.conjure.call_count == 2
+
+
+def test_resolve_action_type_by_api_name(mock_action_service):
+    """action-type resolution returns rid, apiName, displayName, status."""
+    service, _ = mock_action_service
+    service.service.ActionTypeFullMetadata.get.return_value = Mock(
+        action_type=Mock(
+            rid="ri.actions.main.action-type.1234", parameters={}, operations=[]
+        ),
+        full_logic_rules=[],
+    )
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [_action_type_load_response()]
+
+    with patch(
+        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.resolve_action_type(
+            "ri.ontology.main.ontology.test", api_name="delete-contact"
+        )
+
+    assert result == {
+        "kind": "action-type",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "rid": "ri.actions.main.action-type.1234",
+        "apiName": "delete-contact",
+        "displayName": "Delete Contact",
+        "status": "experimental",
+    }
+    load_entry = mock_client.conjure.call_args.kwargs["json_body"]["actionTypes"][0]
+    assert load_entry == {"rid": "ri.actions.main.action-type.1234"}

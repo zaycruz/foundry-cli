@@ -126,3 +126,68 @@ def test_manifest_emission_failure_exits_nonzero(monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "Error emitting agent manifest: serialization failed" in result.output
+
+
+def test_manifest_exposes_new_ontology_commands() -> None:
+    payload = _manifest(runner.invoke(app, ["agent-manifest"]))
+    commands = {command["stableId"]: command for command in payload["commands"]}
+
+    for stable_id in (
+        "ontology_object_type_add_property",
+        "ontology_action_type_update",
+        "ontology_resolve",
+    ):
+        assert stable_id in commands, f"{stable_id} missing from manifest"
+
+    resolve = commands["ontology_resolve"]
+    assert resolve["risk"] == "read"
+    assert resolve["path"] == ["ontology", "resolve"]
+    resolve_params = {p["name"]: p for p in resolve["parameters"]}
+    assert resolve_params["kind"]["enum"] == [
+        "object-type",
+        "property",
+        "action-type",
+        "function",
+    ]
+    assert resolve_params["kind"]["mapping"] == {
+        "kind": "option",
+        "argv": "--kind",
+        "aliases": [],
+    }
+    assert resolve_params["rid"]["mapping"]["argv"] == "--rid"
+    assert resolve_params["object_type"]["mapping"]["argv"] == "--object-type"
+
+    add_property = commands["ontology_object_type_add_property"]
+    assert add_property["risk"] == "unknown"
+    add_params = {p["name"]: p for p in add_property["parameters"]}
+    assert add_params["apply"]["type"] == "boolean"
+    assert add_params["apply"]["mapping"] == {
+        "kind": "flag",
+        "argv": "--apply",
+        "aliases": [],
+        "activeWhen": True,
+    }
+    assert add_params["backing_column"]["mapping"]["argv"] == "--backing-column"
+    assert add_params["backing_dataset"]["mapping"]["argv"] == "--backing-dataset"
+    assert add_params["branch_rid"]["mapping"]["argv"] == "--branch-rid"
+    assert add_params["property_type"]["mapping"]["argv"] == "--type"
+    assert add_params["property_type"]["enum"] == [
+        "STRING",
+        "INTEGER",
+        "LONG",
+        "DOUBLE",
+        "BOOLEAN",
+        "TIMESTAMP",
+        "DATE",
+    ]
+
+    action_update = commands["ontology_action_type_update"]
+    assert action_update["risk"] == "unknown"
+    update_params = {p["name"]: p for p in action_update["parameters"]}
+    assert update_params["apply"]["type"] == "boolean"
+    assert update_params["apply"]["mapping"]["argv"] == "--apply"
+    assert update_params["action_type"]["mapping"]["argv"] == "--action-type"
+    assert update_params["definition"]["mapping"]["argv"] == "--definition"
+    assert update_params["branch"]["mapping"]["argv"] == "--branch"
+    assert update_params["branch"]["mapping"]["aliases"] == ["-b"]
+    assert update_params["branch_rid"]["mapping"]["argv"] == "--branch-rid"

@@ -74,7 +74,7 @@ def test_create_folder(runner, mock_folder_service, sample_folder):
     )
 
     assert result.exit_code == 0
-    assert "Successfully created folder 'Test Folder'" in result.stdout
+    assert "Successfully created folder 'Test Folder'" in result.stderr
     assert "ri.compass.main.folder.test-folder" in result.stdout
 
     mock_folder_service.create_folder.assert_called_once_with(
@@ -112,7 +112,7 @@ def test_create_folder_json_output(runner, mock_folder_service, sample_folder):
     )
 
     assert result.exit_code == 0
-    assert "Successfully created folder 'Test Folder'" in result.stdout
+    assert "Successfully created folder 'Test Folder'" in result.stderr
 
 
 def test_get_folder(runner, mock_folder_service, sample_folder):
@@ -165,7 +165,7 @@ def test_move_folder(runner, mock_folder_service, sample_folder):
     )
 
     assert result.exit_code == 0
-    assert "Successfully moved folder" in result.stdout
+    assert "Successfully moved folder" in result.stderr
     assert "Renamed Folder" in result.stdout
     assert "ri.compass.main.folder.new-parent" in result.stdout
     mock_folder_service.move_folder.assert_called_once_with(
@@ -202,7 +202,7 @@ def test_move_folder_cancelled_before_service_creation(runner):
         )
 
     assert result.exit_code == 0
-    assert "Folder move cancelled" in result.stdout
+    assert "Folder move cancelled" in result.stderr
     mock_service_class.assert_not_called()
 
 
@@ -228,7 +228,7 @@ def test_move_folder_structured_output(
     )
 
     assert result.exit_code == 0
-    assert "Successfully moved folder" in result.stdout
+    assert "Successfully moved folder" in result.stderr
     assert "ri.compass.main.folder.test-folder" in result.stdout
     mock_folder_service.move_folder.assert_called_once_with(
         folder_rid="ri.compass.main.folder.test-folder",
@@ -297,7 +297,7 @@ def test_move_folder_error(runner, mock_folder_service):
     )
 
     assert result.exit_code == 1
-    assert "Failed to move folder: SDK move failed" in result.stdout
+    assert "Failed to move folder: SDK move failed" in result.stderr
 
 
 def test_list_children(runner, mock_folder_service, sample_children):
@@ -323,7 +323,7 @@ def test_list_children_empty(runner, mock_folder_service):
     result = runner.invoke(app, ["folder", "list", "ri.compass.main.folder.empty"])
 
     assert result.exit_code == 0
-    assert "No children found in this folder" in result.stdout
+    assert "No children found in this folder" in result.stderr
 
 
 def test_list_children_with_pagination(runner, mock_folder_service, sample_children):
@@ -381,7 +381,7 @@ def test_create_folder_auth_error(runner, mock_folder_service):
     )
 
     assert result.exit_code == 1
-    assert "Authentication error" in result.stdout
+    assert "Authentication error" in result.stderr
 
 
 def test_create_folder_missing_credentials(runner, mock_folder_service):
@@ -402,7 +402,7 @@ def test_create_folder_missing_credentials(runner, mock_folder_service):
     )
 
     assert result.exit_code == 1
-    assert "Authentication error" in result.stdout
+    assert "Authentication error" in result.stderr
 
 
 def test_create_folder_general_error(runner, mock_folder_service):
@@ -421,7 +421,7 @@ def test_create_folder_general_error(runner, mock_folder_service):
     )
 
     assert result.exit_code == 1
-    assert "Failed to create folder" in result.stdout
+    assert "Failed to create folder" in result.stderr
 
 
 def test_get_folder_error(runner, mock_folder_service):
@@ -431,7 +431,7 @@ def test_get_folder_error(runner, mock_folder_service):
     result = runner.invoke(app, ["folder", "get", "ri.compass.main.folder.nonexistent"])
 
     assert result.exit_code == 1
-    assert "Failed to get folder" in result.stdout
+    assert "Failed to get folder" in result.stderr
 
 
 def test_list_children_error(runner, mock_folder_service):
@@ -441,7 +441,7 @@ def test_list_children_error(runner, mock_folder_service):
     result = runner.invoke(app, ["folder", "list", "ri.compass.main.folder.restricted"])
 
     assert result.exit_code == 1
-    assert "Failed to list folder children" in result.stdout
+    assert "Failed to list folder children" in result.stderr
 
 
 def test_batch_get_value_error(runner, mock_folder_service):
@@ -453,7 +453,7 @@ def test_batch_get_value_error(runner, mock_folder_service):
     )
 
     assert result.exit_code == 1
-    assert "Invalid request" in result.stdout
+    assert "Invalid request" in result.stderr
 
 
 def test_batch_get_general_error(runner, mock_folder_service):
@@ -465,7 +465,7 @@ def test_batch_get_general_error(runner, mock_folder_service):
     )
 
     assert result.exit_code == 1
-    assert "Failed to get folders batch" in result.stdout
+    assert "Failed to get folders batch" in result.stderr
 
 
 def test_create_folder_with_profile(runner, mock_folder_service, sample_folder):
@@ -486,7 +486,7 @@ def test_create_folder_with_profile(runner, mock_folder_service, sample_folder):
     )
 
     assert result.exit_code == 0
-    assert "Successfully created folder 'Test Folder'" in result.stdout
+    assert "Successfully created folder 'Test Folder'" in result.stderr
 
 
 def test_get_folder_with_output_file(runner, mock_folder_service, sample_folder):
@@ -507,7 +507,7 @@ def test_get_folder_with_output_file(runner, mock_folder_service, sample_folder)
     )
 
     assert result.exit_code == 0
-    assert "Folder information saved to folder_info.json" in result.stdout
+    assert "Folder information saved to folder_info.json" in result.stderr
 
 
 def test_list_children_with_output_file(runner, mock_folder_service, sample_children):
@@ -528,7 +528,7 @@ def test_list_children_with_output_file(runner, mock_folder_service, sample_chil
     )
 
     assert result.exit_code == 0
-    assert "Folder children saved to children.csv" in result.stdout
+    assert "Folder children saved to children.csv" in result.stderr
 
 
 def test_batch_get_with_output_file(runner, mock_folder_service, sample_folder):
@@ -549,4 +549,4 @@ def test_batch_get_with_output_file(runner, mock_folder_service, sample_folder):
     )
 
     assert result.exit_code == 0
-    assert "Folders information saved to folders.json" in result.stdout
+    assert "Folders information saved to folders.json" in result.stderr

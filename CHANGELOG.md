@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dataset schema update` — intentional additive schema migration: `--add-field name:TYPE[:nullable[:default]]` / `--fields-json`, `--branch`, client-side optimistic concurrency via `--expected-schema-version`, dry-run default with `--apply`, authoritative schema read-back. Additive-only: type changes on existing fields are rejected.
+- `dataset schema set` is now manifest-visible (`--format`/`--output`) and accepts `--expected-schema-version`.
+- `ontology object-type-add-property` — add a property to an existing object type with backing-column mapping via modifyOntology; dry-run default, `--branch-rid` targets a non-default ontology branch, read-back returns the created property RID.
+- `ontology action-type-update` — evolve an existing action type (function rules, parameter add/remove/reorder, protected `currentUser` binding, submission criteria, write authorization, status EXPERIMENTAL→ACTIVE); dry-run default, full-metadata read-back on apply.
+- `ontology resolve` (risk `read`) — typed identifier resolver: API name ↔ RID ↔ internal IDs for object types, properties, action types, and functions.
+- `pltr.services.errors.FoundryApiError` — typed API errors preserving Foundry's `errorName`/`errorCode`/`errorInstanceId`/safe parameters/validation details through to the agent envelope (`buffer_agent_exception`).
+- Value-level credential redaction in the agent envelope: URL userinfo (git remotes, registry URLs), Bearer/Basic headers, `_authToken` registry lines, argv-style `--token` flags, and `KEY=value` env dumps are scrubbed before output reaches the model or logs.
+
+### Fixed
+
+- `ontology resolve` / `object-type-add-property` / `action-type-update` API-name paths: the bulk-load `ObjectTypeIdentifier`/`ActionTypeIdentifier` unions have no API-name variant (leniently dropped server-side, yielding null entries or 400s); API names are now resolved to RIDs through the SDK before loading. Contract-verified against a live deployment.
+- `action-type-update` wire encoding: `validationsOrdering` entries are emitted as the `ValidationRuleIdentifier` union (`{"type":"rid",...}` / `{"type":"validationRuleIdInRequest",...}` — plain strings 422), and loaded `logicRuleRid` maps to `logicRuleIdentifier` so rules keep their identity. Dry-run contract-verified against a live deployment, including an EXPERIMENTAL→ACTIVE status transition.
+- `--output FILE` in agent mode no longer strands the result: the payload is buffered, so the single stdout envelope carries the data (previously surfaced as an `unstructured` error — the harness `invalid_json` false positives).
+- Status chatter (`print_success`/`print_error`/...) moves to stderr when stdout is piped, keeping `--format json` stdout parseable.
+
 ### Removed
 - The `palantir_expert` benchmark corpus, scorer, and tests. The CLI is the subject
   of that benchmark, not its owner; it now lives with the rest of the evaluation
@@ -28,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commit travels through a pull request. `RELEASE.md` describes the real flow.
 - Capability and service descriptions no longer cite documents this package does
   not ship, and no longer name a credential-reading endpoint the CLI never calls.
+
 
 ## [0.28.0] - 2026-07-25
 

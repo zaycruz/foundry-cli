@@ -42,9 +42,9 @@ Ontology contract changes must be published in this order:
 
 1. Modify backing dataset schemas.
 2. Implement transaction functions.
-3. `object-type-upsert` — create or change object types.
+3. `object-type-upsert` — create object types; `object-type-add-property` — add properties (with column mappings) to existing object types.
 4. `link-type-upsert` — create link types between existing object types.
-5. `action-type-upsert` — create action types referencing existing object/link types.
+5. `action-type-upsert` — create action types; `action-type-update` — evolve existing action types (function rules, parameters, status).
 6. Validate actions and re-read test objects.
 7. Regenerate OSDK.
 8. Enable the corresponding application controls.
@@ -122,6 +122,67 @@ pltr ontology object-type-delete ONTOLOGY_RID OBJECT_TYPE_ID [--apply] [--yes]
 # Example
 pltr ontology object-type-delete ri.ontology.main.ontology.abc123 \
     ri.ontology.main.object-type.abc123 --apply --yes
+```
+
+### Add Property to Existing Object Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology object-type-add-property ONTOLOGY_RID \
+    --object-type OBJECT_TYPE_API_NAME_OR_RID \
+    --api-name PROPERTY_API_NAME --type TYPE \
+    [--display-name NAME] [--description TEXT] [--status STATUS] \
+    [--visibility NORMAL|HIDDEN|PROMINENT] \
+    [--backing-column COLUMN] [--backing-dataset DATASET_RID] \
+    [--branch-rid ONTOLOGY_BRANCH_RID] [--apply]
+
+# Default is a dry-run plan; nothing is written without --apply.
+# Maps the new property to a backing dataset column (the column must exist:
+# migrate the dataset schema first -- step 1 of the publication order).
+# On --apply the property is read back and its RID returned.
+# --branch-rid targets a non-default ontology branch (ontologyBranchRid).
+
+# Example
+pltr ontology object-type-add-property ri.ontology.main.ontology.abc123 \
+    --object-type Cohort --api-name capacity --type INTEGER \
+    --backing-column capacity --apply
+```
+
+### Update Existing Action Type (modifyOntology, plan-first)
+
+```bash
+pltr ontology action-type-update ONTOLOGY_RID \
+    --action-type ACTION_TYPE_API_NAME_OR_RID \
+    --definition PATCH_JSON_FILE   # or '-' for stdin \
+    [--branch BRANCH] [--branch-rid ONTOLOGY_BRANCH_RID] [--apply]
+
+# Partial patch over the existing action type. Supported keys: logic
+# (including replacing object-edit rules with a function rule), parameters
+# (add/remove/reorder; bind a parameter to the protected currentUser value),
+# validations (submission criteria), write authorization, status
+# (EXPERIMENTAL -> ACTIVE), displayMetadata. Unknown keys fail loudly.
+# Default is a dry-run; on --apply the full metadata is read back and
+# returned. Step 5 of the required publication order.
+
+# Example
+pltr ontology action-type-update ri.ontology.main.ontology.abc123 \
+    --action-type create-cohort --definition patch.json --apply
+```
+
+### Resolve Identifiers (read-only)
+
+```bash
+pltr ontology resolve ONTOLOGY_RID --kind KIND \
+    [--api-name API_NAME | --rid RID] [--object-type OBJECT_TYPE] [--version V]
+
+# KIND: object-type | property | action-type | function.
+# Returns the RID AND the internal ID (e.g. ObjectTypeId "ns0abcde.cohort")
+# so you never probe internal bulk-load endpoints by hand.
+# Property resolution is scoped with --object-type.
+
+# Examples
+pltr ontology resolve ri.ontology.main.ontology.abc123 --kind object-type --api-name Cohort
+pltr ontology resolve ri.ontology.main.ontology.abc123 --kind action-type --api-name create-cohort
+pltr ontology resolve ri.ontology.main.ontology.abc123 --kind property --object-type Cohort --api-name capacity
 ```
 
 ## Object Commands

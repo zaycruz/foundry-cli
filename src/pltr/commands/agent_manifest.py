@@ -26,6 +26,7 @@ READ_ONLY_VERBS = frozenset(
         "get",
         "info",
         "list",
+        "resolve",
         "search",
         "show",
         "status",

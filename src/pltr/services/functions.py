@@ -86,6 +86,92 @@ class FunctionsService(BaseService):
         type_name = resource.get("type")
         return isinstance(type_name, str) and "function" in type_name.casefold()
 
+    # ===== Function Resolution =====
+
+    def resolve_function(
+        self,
+        api_name: Optional[str] = None,
+        rid: Optional[str] = None,
+        version: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Resolve a function API name (and optional version) to its RID.
+
+        Goes through the same fail-safe GraphQL title search as
+        :meth:`search_functions` and matches the returned page for an exact
+        title match. Never treats absence as empty: unresolved lookups come
+        back ``status: "inconclusive"`` with the reason, mirroring the
+        search contract. The gateway exposes no per-version RIDs, so
+        ``version`` is recorded but not resolved. A directly-passed ``rid``
+        is echoed without a lookup.
+        """
+        if (api_name is None) == (rid is None):
+            raise RuntimeError(
+                "resolve_function requires exactly one of api_name or rid"
+            )
+        if rid is not None:
+            return {
+                "status": "ok",
+                "reason": None,
+                "kind": "function",
+                "rid": rid,
+                "apiName": None,
+                "version": version,
+                "source": "argument",
+                "note": "RID passed directly; no lookup performed",
+            }
+
+        search_result = self.search_functions(str(api_name), limit=25)
+        base: Dict[str, Any] = {
+            "kind": "function",
+            "apiName": api_name,
+            "version": version,
+            "status": search_result.get("status"),
+            "reason": search_result.get("reason"),
+            "version_note": (
+                "the search gateway exposes no per-version RIDs; "
+                "--version is recorded but not resolved"
+            ),
+        }
+        if search_result.get("status") != "ok":
+            return base
+
+        results = search_result.get("results") or []
+        rids = sorted(
+            {
+                resource["rid"]
+                for resource in results
+                if isinstance(resource, Mapping)
+                and resource.get("name") == api_name
+                and isinstance(resource.get("rid"), str)
+            }
+        )
+        if len(rids) == 1:
+            return {**base, "rid": rids[0]}
+        if not rids:
+            return {
+                **base,
+                "status": "inconclusive",
+                "reason": (
+                    f"no function titled exactly {api_name!r} on the "
+                    "returned page; the gateway caps results and does not "
+                    "report further matches"
+                ),
+                "candidates": [
+                    resource.get("name")
+                    for resource in results
+                    if isinstance(resource, Mapping)
+                ],
+            }
+        return {
+            **base,
+            "status": "inconclusive",
+            "reason": (
+                f"multiple functions titled {api_name!r} on the returned "
+                "page; resolve by rid instead"
+            ),
+            "rids": rids,
+        }
+
     # ===== Query Operations =====
 
     def get_query(
