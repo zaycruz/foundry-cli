@@ -8,7 +8,7 @@ Work with Foundry ontologies, object types, objects, actions, and queries.
 ## List Ontologies
 
 ```bash
-pltr ontology list [--page-size N] [--format FORMAT] [--output FILE]
+pltr ontology list [--format FORMAT] [--output FILE]
 
 # Example
 pltr ontology list --format table
@@ -40,7 +40,7 @@ pltr ontology rid
 
 Ontology contract changes must be published in this order:
 
-1. Modify backing dataset schemas.
+1. Modify backing dataset schemas (`pltr dataset schema update` / `pltr dataset schema set`; see dataset-commands.md).
 2. Implement transaction functions.
 3. `object-type-upsert` — create object types; `object-type-add-property` — add properties (with column mappings) to existing object types.
 4. `link-type-upsert` — create link types between existing object types.
@@ -81,8 +81,11 @@ pltr ontology object-type-get ri.ontology.main.ontology.abc123 Employee
 
 ```bash
 pltr ontology object-type-create ONTOLOGY_RID \
-    --api-name API_NAME [--display-name NAME] [--primary-key FIELD] \
-    [--backing-dataset DATASET_RID] [--description TEXT]
+    --api-name API_NAME --display-name NAME --primary-key FIELD \
+    --backing-dataset DATASET_RID [--description TEXT]
+
+# All of --api-name, --display-name, --primary-key and --backing-dataset
+# are required.
 
 # Example
 pltr ontology object-type-create ri.ontology.main.ontology.abc123 \
@@ -94,19 +97,22 @@ pltr ontology object-type-create ri.ontology.main.ontology.abc123 \
 
 ```bash
 pltr ontology object-type-upsert ONTOLOGY_RID \
-    --api-name API_NAME [--display-name NAME] [--primary-key FIELD] \
-    [--backing-dataset DATASET_RID] [--description TEXT] [--apply]
+    --api-name API_NAME --display-name NAME --primary-key FIELD \
+    --backing-dataset DATASET_RID [--description TEXT] [--apply]
 
 # Default is a dry-run plan of the modifyOntology write; nothing is written
-# without --apply. Existing object types are NOT updated yet -- the create
-# validation reports that case explicitly instead of attempting a
-# delete-and-recreate. Step 3 of the required publication order (see
-# "Required Publication Order" above); steps 1-2 (backing dataset schema,
-# transaction functions) must be done first.
+# without --apply. --display-name, --primary-key and --backing-dataset are
+# all required. When the object type already exists, the command switches to
+# the update path: it loads the type's current state, merges the provided
+# display name / description onto it, and issues an update modification --
+# primary key and backing dataset must match the existing type, and the
+# result reports the changed fields. Step 3 of the required publication
+# order (see "Required Publication Order" above); steps 1-2 (backing
+# dataset schema, transaction functions) must be done first.
 
 # Example
 pltr ontology object-type-upsert ri.ontology.main.ontology.abc123 \
-    --api-name Employee --primary-key employeeId \
+    --api-name Employee --display-name "Employee" --primary-key employeeId \
     --backing-dataset ri.foundry.main.dataset.abc123 --apply
 ```
 
@@ -116,12 +122,15 @@ pltr ontology object-type-upsert ri.ontology.main.ontology.abc123 \
 pltr ontology object-type-delete ONTOLOGY_RID OBJECT_TYPE_ID [--apply] [--yes]
 
 # DESTRUCTIVE. Default is a dry-run plan; the real delete requires both
-# --apply and --yes. Deletes run in reverse publication order: remove
-# dependent action types (step 5) and link types (step 4) first.
+# --apply and --yes. OBJECT_TYPE_ID is the internal ObjectTypeId
+# (e.g. 'ns1exmpl.employee'), not the API name or RID -- resolve it via
+# `pltr ontology resolve` (see "Resolve Identifiers" below). Deletes run in
+# reverse publication order: remove dependent action types (step 5) and
+# link types (step 4) first.
 
 # Example
 pltr ontology object-type-delete ri.ontology.main.ontology.abc123 \
-    ri.ontology.main.object-type.abc123 --apply --yes
+    ns1exmpl.employee --apply --yes
 ```
 
 ### Add Property to Existing Object Type (modifyOntology, plan-first)
@@ -177,7 +186,8 @@ pltr ontology resolve ONTOLOGY_RID --kind KIND \
 # KIND: object-type | property | action-type | function.
 # Returns the RID AND the internal ID (e.g. ObjectTypeId "ns0abcde.cohort")
 # so you never probe internal bulk-load endpoints by hand.
-# Property resolution is scoped with --object-type.
+# Property resolution is scoped with --object-type. --version is recorded
+# but not resolved (the search gateway exposes no per-version RIDs).
 
 # Examples
 pltr ontology resolve ri.ontology.main.ontology.abc123 --kind object-type --api-name Cohort
@@ -194,6 +204,9 @@ pltr ontology object-list ONTOLOGY_RID OBJECT_TYPE [OPTIONS]
 
 # Options:
 #   --page-size INTEGER    Results per page
+#   --max-pages INTEGER    Maximum number of pages to fetch (default: 1)
+#   --page-token TEXT      Page token to resume from a previous response
+#   --all                  Fetch all available pages (overrides --max-pages)
 #   --properties TEXT      Comma-separated properties to include
 
 # Example
@@ -245,7 +258,7 @@ pltr ontology object-count ri.ontology.main.ontology.abc123 Employee
 ### Search Objects
 
 ```bash
-pltr ontology object-search ONTOLOGY_RID OBJECT_TYPE [--query TEXT] \
+pltr ontology object-search ONTOLOGY_RID OBJECT_TYPE --query TEXT \
     [--properties TEXT] [--page-size N] [--branch BRANCH]
 
 # Example
@@ -288,15 +301,18 @@ pltr ontology link-type-upsert ONTOLOGY_RID \
     [--description TEXT] [--apply]
 
 # Creates a one-to-many link type. Default is a dry-run plan; nothing is
-# written without --apply. Existing link types are NOT updated yet; the
-# create validation reports that case explicitly. Step 4 of the required
-# publication order -- both object types must already exist (step 3).
+# written without --apply. --from-object-type-id / --to-object-type-id take
+# the internal ObjectTypeIds (e.g. 'ns1exmpl.employee'), not RIDs -- resolve
+# them via `pltr ontology resolve` (see "Resolve Identifiers" below).
+# Existing link types are NOT updated yet; the create validation reports
+# that case explicitly. Step 4 of the required publication order -- both
+# object types must already exist (step 3).
 
 # Example
 pltr ontology link-type-upsert ri.ontology.main.ontology.abc123 \
     --api-name worksIn \
-    --from-object-type-id ri.ontology.main.object-type.aaa \
-    --to-object-type-id ri.ontology.main.object-type.bbb \
+    --from-object-type-id ns1exmpl.department \
+    --to-object-type-id ns1exmpl.employee \
     --many-side-property departmentId --apply
 ```
 
@@ -306,13 +322,14 @@ pltr ontology link-type-upsert ri.ontology.main.ontology.abc123 \
 pltr ontology link-type-delete ONTOLOGY_RID LINK_TYPE_ID [--apply] [--yes]
 
 # DESTRUCTIVE. Default is a dry-run plan; the real delete requires both
-# --apply and --yes. Deletes run in reverse publication order: link types
-# (step 4) go after dependent action types (step 5), before object types
-# (step 3).
+# --apply and --yes. LINK_TYPE_ID is the internal LinkTypeId
+# (e.g. 'ns1exmpl.works-in'), not the API name or RID. Deletes run in
+# reverse publication order: link types (step 4) go after dependent action
+# types (step 5), before object types (step 3).
 
 # Example
 pltr ontology link-type-delete ri.ontology.main.ontology.abc123 \
-    ri.ontology.main.link-type.abc123 --apply --yes
+    ns1exmpl.works-in --apply --yes
 ```
 
 ## Action Commands
@@ -353,19 +370,20 @@ pltr ontology action-validate ri.ontology.main.ontology.abc123 promoteEmployee '
 ### Upsert Action Type (modifyOntology, plan-first)
 
 ```bash
-pltr ontology action-type-upsert ONTOLOGY_RID --definition ACTION_TYPE_CREATE_JSON [--apply]
+pltr ontology action-type-upsert ONTOLOGY_RID --definition ACTION_TYPE_CREATE_JSON_FILE [--apply]
 
-# The definition is an ActionTypeCreate JSON document (inline or @file; see
-# the captured contract). Default is a dry-run
-# plan; nothing is written without --apply. Existing action types are NOT
-# updated yet; the create validation reports that case explicitly. Step 5
-# of the required publication order -- referenced object types (step 3) and
-# link types (step 4) must already exist; steps 6-8 (validate actions,
-# regenerate OSDK, enable application controls) follow.
+# --definition is a plain path to a JSON file containing the
+# ActionTypeCreate document; '-' reads stdin (there is no @file expansion
+# or inline JSON). Default is a dry-run plan; nothing is written without
+# --apply. Existing action types are NOT updated yet; the create validation
+# reports that case explicitly. Step 5 of the required publication order --
+# referenced object types (step 3) and link types (step 4) must already
+# exist; steps 6-8 (validate actions, regenerate OSDK, enable application
+# controls) follow.
 
 # Example
 pltr ontology action-type-upsert ri.ontology.main.ontology.abc123 \
-    --definition @action-type.json --apply
+    --definition action-type.json --apply
 ```
 
 ### Delete Action Type (modifyOntology, plan-first)

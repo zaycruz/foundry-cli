@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `proposal` group is no longer fail-closed: code-pr `create`/`list`/`get`/`comment`/`close` delegate to `RepositoryService` and global-proposal `create`/`get`/`close` delegate to `GlobalProposalService`. `create` and `comment` are dry-run plan by default with `--apply` to execute. Still fail-closed with exit 6 `unsupported-capability` (per-pair reasons): code-pr `approve`/`request-changes`/`merge`, global-proposal `list`/`comment`/`approve`/`request-changes`/`merge`/`accept`.
+- Skill bundle: nine new workflow skills under `skills/pltr-cli/workflows/` — `ontology-authoring`, `proposal-review`, `data-ingestion`, `build-triage`, `osdk-app-development`, `compute-module-ops`, `media-management`, `admin-audit`, and `ai-workloads` — so every command group now has a step-through operating procedure. All commands verified against the live CLI grammar; SDK capability gaps are documented explicitly instead of worked around.
+- Skill bundle: "Choosing the right tool" section in `SKILL.md` mapping agent situations (name→RID resolution, pre-mutation gating, unsupported capabilities, scripting) to the correct entry-point command or workflow.
 - `dataset schema update` — intentional additive schema migration: `--add-field name:TYPE[:nullable[:default]]` / `--fields-json`, `--branch`, client-side optimistic concurrency via `--expected-schema-version`, dry-run default with `--apply`, authoritative schema read-back. Additive-only: type changes on existing fields are rejected.
 - `dataset schema set` is now manifest-visible (`--format`/`--output`) and accepts `--expected-schema-version`.
 - `ontology object-type-add-property` — add a property to an existing object type with backing-column mapping via modifyOntology; dry-run default, `--branch-rid` targets a non-default ontology branch, read-back returns the created property RID.

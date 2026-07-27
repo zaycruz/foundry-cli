@@ -10,15 +10,24 @@ Use `skills/pltr-cli/` directly in this repository. For another agent client, in
 
 ```
 skills/pltr-cli/
-├── SKILL.md                    # Main skill definition
+├── SKILL.md                    # Main skill definition (routing + tool selection)
 ├── reference/                  # Command references loaded on demand
 │   ├── dependency-commands.md # Dependency and impact-analysis contract
 │   └── ...                    # Other pltr command groups
 └── workflows/                  # Multi-step operating workflows
     ├── change-impact-assessment.md # Mandatory pre/post-change gate
+    ├── ontology-authoring.md  # Plan-first schema changes via proposals
+    ├── proposal-review.md     # Code PR + Global Proposal review
     ├── data-analysis.md
     ├── data-pipeline.md
-    └── permission-management.md
+    ├── data-ingestion.md
+    ├── build-triage.md
+    ├── osdk-app-development.md
+    ├── compute-module-ops.md
+    ├── media-management.md
+    ├── permission-management.md
+    ├── admin-audit.md
+    └── ai-workloads.md
 ```
 
 ## Usage

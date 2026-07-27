@@ -1,50 +1,96 @@
 # Proposal Commands
 
-Review-workflow operations on proposals (for example code-repository pull
-requests). Coverage depends on the pinned `foundry-platform-sdk`: when the
-pinned client does not expose an operation for the selected proposal type,
-the command returns an explicit `unsupported-capability` result instead of
-guessing. (For Ontology Global Proposals backed by branch-service, see
-`global-branching-commands.md`.)
+Review-workflow operations on proposals. The PROPOSAL_TYPE argument selects
+one of two proposal systems:
+
+- `code-pr` — code repository pull requests, delegated to
+  `RepositoryService` (internal `stemma-pull-request` API).
+- `global-proposal` — Ontology Global Proposals, delegated to
+  `GlobalProposalService` (internal `branch-service` API). (For the
+  underlying branch surface, see `global-branching-commands.md`.)
+
+No other type value is accepted — an unknown type is a `validation` error
+(exit 4). Actions with no contract-verified implementation fail closed with
+an explicit `unsupported-capability` error (exit 6) instead of guessing;
+no raw endpoint fallback is attempted. All commands accept `--profile/-p`
+and `--format/-f` (table, json, csv; default table).
+
+## What Works and What Does Not
+
+Working:
+
+- code-pr: `create`, `list`, `get`, `comment`, `close`
+- global-proposal: `create`, `get`, `close`
+
+Still fail-closed (exit 6 `unsupported-capability`):
+
+- code-pr: `approve`, `request-changes`, `merge` — the internal
+  stemma-pull-request API has no contract-verified operations for these.
+- global-proposal: `list` — the branch-service API has no proposal list
+  endpoint (load-by-RID only); plus `comment`, `approve`,
+  `request-changes`, `merge`, `accept` — no contract-verified operations.
+
+The unsupported commands still parse their documented flags, but always
+return the unsupported-capability error for the selected type.
 
 ## Read Commands
 
 ```bash
-# Get one proposal
+# Get one proposal (both types; loads by RID, --parent-rid is not needed)
 pltr proposal get PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--format FORMAT]
 
-# List proposals under a parent (when supported for the type)
-pltr proposal list PROPOSAL_TYPE PARENT_RID [--format FORMAT]
+# List proposals (code-pr only; filtered to PARENT_RID client-side)
+pltr proposal list code-pr PARENT_RID [--format FORMAT]
 
 # Examples
-pltr proposal get code-repository 123 --parent-rid ri.stemma.main.repository.abc123
-pltr proposal list code-repository ri.stemma.main.repository.abc123
+pltr proposal get code-pr ri.stemma.main.pull-request.abc123
+pltr proposal list code-pr ri.stemma.main.repository.abc123
+pltr proposal get global-proposal ri.branch..proposal.abc123
 ```
 
 ## Write Commands
 
 ```bash
-# Create a proposal (when the pinned client exposes the operation)
-pltr proposal create PROPOSAL_TYPE --parent-rid RID \
-    [--title TITLE] [--source-ref REF] [--target-ref REF] [--description TEXT]
+# Create a proposal (dry-run plan by default; --apply issues the real write)
+# --parent-rid, --title and --source-ref are required
+pltr proposal create PROPOSAL_TYPE --parent-rid RID --title TITLE \
+    --source-ref REF [--target-ref REF] [--description TEXT] [--apply]
 
-# Comment on a proposal
-pltr proposal comment PROPOSAL_TYPE PROPOSAL_ID MESSAGE [--parent-rid RID]
+# Comment on a proposal (code-pr only; dry-run plan by default)
+pltr proposal comment code-pr PROPOSAL_ID MESSAGE [--apply]
 
-# Review actions (return unsupported-capability when not exposed)
+# Review actions (unsupported-capability, exit 6, for both types)
 pltr proposal approve PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--message TEXT]
 pltr proposal request-changes PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--message TEXT]
+
+# Merge / accept (unsupported-capability, exit 6, for both types)
+pltr proposal merge PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
 pltr proposal accept PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
 
-# Merge a code PR (or unsupported-capability)
-pltr proposal merge PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
-
-# Refresh and close after explicit confirmation
+# Refresh and close after explicit confirmation (both types)
 pltr proposal close PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
 
 # Examples
-pltr proposal comment code-repository 123 "looks good" \
-    --parent-rid ri.stemma.main.repository.abc123
-pltr proposal merge code-repository 123 \
-    --parent-rid ri.stemma.main.repository.abc123 --yes
+pltr proposal create code-pr --parent-rid ri.stemma.main.repository.abc123 \
+    --title "Fix typo" --source-ref my-branch --apply
+pltr proposal create global-proposal --parent-rid ri.ontology.main.ontology.abc123 \
+    --title "Schema update" --source-ref ri.branch..branch.def456 --apply
+pltr proposal comment code-pr ri.stemma.main.pull-request.abc123 "looks good" --apply
+pltr proposal close code-pr ri.stemma.main.pull-request.abc123 --yes
+pltr proposal close global-proposal ri.branch..proposal.abc123 --yes
 ```
+
+`create` argument mapping differs per type:
+
+- code-pr: `--parent-rid` is the base repository RID, `--source-ref` the
+  head commitish, `--target-ref` the base branch (default
+  `refs/heads/master`).
+- global-proposal: `--source-ref` is the Global Branch RID the proposal
+  belongs to, `--target-ref` maps to the merge target (default `main`).
+  `--parent-rid` is accepted but unused — the branch RID already carries
+  the target.
+
+`close` refreshes the proposal via `get`, then asks for interactive
+confirmation unless `--yes` is given; cancelling aborts with a validation
+error. With `--format json`, `--yes` is required so output stays JSON-only
+(validation error, exit 4, otherwise).

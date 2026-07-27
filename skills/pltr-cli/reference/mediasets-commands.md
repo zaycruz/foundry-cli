@@ -29,7 +29,7 @@ pltr media-sets get-by-path ri.mediasets.main.media-set.abc123 "/images/photo.jp
 Get embedding reference for a media item:
 
 ```bash
-pltr media-sets reference MEDIA_SET_RID MEDIA_ITEM_RID [--preview]
+pltr media-sets reference MEDIA_SET_RID MEDIA_ITEM_RID [--preview] [--format FORMAT]
 
 # Example
 pltr media-sets reference ri.mediasets.main.media-set.abc123 ri.mediasets.main.media-item.def456
@@ -39,6 +39,10 @@ pltr media-sets reference ri.mediasets.main.media-set.abc123 ri.mediasets.main.m
 
 MediaSets use transactions for uploads.
 
+Note on `--preview`: it enables Foundry preview APIs (passed through to the
+SDK's `preview` parameter) — it is NOT a dry-run. Transactions created,
+committed, or aborted with `--preview` still take effect.
+
 ### Create Transaction
 
 ```bash
@@ -46,7 +50,15 @@ pltr media-sets create MEDIA_SET_RID [--branch BRANCH] [--preview]
 
 # Example
 pltr media-sets create ri.mediasets.main.media-set.abc123 --branch main
-# Returns: Transaction ID
+# Prints a status line: "Transaction ID: <id>"
+```
+
+There is no `--format` option. The transaction ID is printed as a status
+line (`Transaction ID: <id>`), which goes to stderr when stdout is piped
+(see `src/pltr/utils/formatting.py`). Capture it in scripts with:
+
+```bash
+TRANSACTION_ID=$(pltr media-sets create $MEDIA_SET 2>&1 | sed -n 's/.*Transaction ID: //p')
 ```
 
 ### Commit Transaction
@@ -159,7 +171,7 @@ The typical upload workflow:
 MEDIA_SET="ri.mediasets.main.media-set.abc123"
 
 # 1. Create a transaction
-TRANSACTION_ID=$(pltr media-sets create $MEDIA_SET --format json | jq -r '.transaction_id')
+TRANSACTION_ID=$(pltr media-sets create $MEDIA_SET 2>&1 | sed -n 's/.*Transaction ID: //p')
 echo "Transaction: $TRANSACTION_ID"
 
 # 2. Upload files within the transaction
@@ -180,7 +192,7 @@ echo "Upload complete!"
 MEDIA_SET="ri.mediasets.main.media-set.abc123"
 
 # Create transaction
-TX=$(pltr media-sets create $MEDIA_SET --format json | jq -r '.transaction_id')
+TX=$(pltr media-sets create $MEDIA_SET 2>&1 | sed -n 's/.*Transaction ID: //p')
 
 # Upload
 pltr media-sets upload $MEDIA_SET /path/to/file.jpg "/uploads/file.jpg" $TX
@@ -192,7 +204,7 @@ pltr media-sets commit $MEDIA_SET $TX --yes
 ### Batch upload with error handling
 ```bash
 MEDIA_SET="ri.mediasets.main.media-set.abc123"
-TX=$(pltr media-sets create $MEDIA_SET --format json | jq -r '.transaction_id')
+TX=$(pltr media-sets create $MEDIA_SET 2>&1 | sed -n 's/.*Transaction ID: //p')
 
 # Upload multiple files
 for file in /local/images/*.jpg; do

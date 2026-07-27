@@ -3,7 +3,14 @@
 Commands for interacting with language models (LLMs) in Foundry, including Anthropic Claude models and OpenAI embeddings.
 
 ## Model RID Format
-`ri.language-models.main.model.{uuid}`
+
+The RID format depends on the command:
+
+- Inference commands (`anthropic messages`, `anthropic messages-advanced`,
+  `openai embeddings`): `ri.language-models.main.model.{id}`
+- Enrollment commands (`enroll`, `status`):
+  `ri.language-model-service..language-model.{id}` (note the double dot,
+  per live CLI help)
 
 ## Anthropic Claude Commands
 
@@ -23,7 +30,7 @@ pltr language-models anthropic messages MODEL_RID --message "MESSAGE" [OPTIONS]
 #   --top-k INTEGER         Sample from top K tokens
 #   --top-p FLOAT           Nucleus sampling threshold (0.0-1.0)
 #   --preview               Enable preview mode
-#   --format, -f TEXT       Output format (table, json, csv)
+#   --format, -f TEXT       Output format (table, json, csv) [default: json]
 #   --output, -o TEXT       Output file path
 #   --profile, -p TEXT      Profile name
 
@@ -56,13 +63,13 @@ pltr language-models anthropic messages-advanced MODEL_RID --request REQUEST_JSO
 # Options:
 #   --request, -r TEXT      Request JSON (inline or @file.json) - required
 #   --preview               Enable preview mode
-#   --format, -f TEXT       Output format (table, json, csv)
+#   --format, -f TEXT       Output format (table, json, csv) [default: json]
 #   --output, -o TEXT       Output file path
 #   --profile, -p TEXT      Profile name
 
 # Request JSON structure:
 # {
-#   "messages": [...],      # Required: List of message objects
+#   "messages": [...],      # Required: List of message objects; role is "USER" or "ASSISTANT" (uppercase)
 #   "maxTokens": 1024,      # Required: Maximum tokens to generate
 #   "system": [...],        # Optional: System prompt blocks
 #   "temperature": 0.7,     # Optional: Sampling temperature
@@ -81,9 +88,9 @@ pltr language-models anthropic messages-advanced MODEL_RID --request REQUEST_JSO
 # Create conversation.json:
 # {
 #   "messages": [
-#     {"role": "user", "content": [{"type": "text", "text": "Hi, I need help with Python"}]},
-#     {"role": "assistant", "content": [{"type": "text", "text": "I'd be happy to help! What do you need?"}]},
-#     {"role": "user", "content": [{"type": "text", "text": "How do I read a CSV file?"}]}
+#     {"role": "USER", "content": [{"type": "text", "text": "Hi, I need help with Python"}]},
+#     {"role": "ASSISTANT", "content": [{"type": "text", "text": "I'd be happy to help! What do you need?"}]},
+#     {"role": "USER", "content": [{"type": "text", "text": "How do I read a CSV file?"}]}
 #   ],
 #   "maxTokens": 500
 # }
@@ -96,14 +103,14 @@ pltr language-models anthropic messages-advanced ri.language-models.main.model.a
 
 ```bash
 pltr language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
-    --request '{"messages": [{"role": "user", "content": [{"type": "text", "text": "Solve this complex problem"}]}], "maxTokens": 2000, "thinking": {"type": "enabled", "budget": 10000}}'
+    --request '{"messages": [{"role": "USER", "content": [{"type": "text", "text": "Solve this complex problem"}]}], "maxTokens": 2000, "thinking": {"type": "enabled", "budget": 10000}}'
 ```
 
 #### Inline with System Prompt
 
 ```bash
 pltr language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
-    --request '{"messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}], "maxTokens": 100, "system": [{"type": "text", "text": "Be concise"}]}'
+    --request '{"messages": [{"role": "USER", "content": [{"type": "text", "text": "Hi"}]}], "maxTokens": 100, "system": [{"type": "text", "text": "Be concise"}]}'
 ```
 
 ## OpenAI Commands
@@ -120,7 +127,7 @@ pltr language-models openai embeddings MODEL_RID --input INPUT [OPTIONS]
 #   --dimensions, -d INT    Custom embedding dimensions (not all models support this)
 #   --encoding, -e TEXT     Output encoding format: 'float' or 'base64'
 #   --preview               Enable preview mode
-#   --format, -f TEXT       Output format (table, json, csv)
+#   --format, -f TEXT       Output format (table, json, csv) [default: json]
 #   --output, -o TEXT       Output file path
 #   --profile, -p TEXT      Profile name
 
@@ -157,18 +164,22 @@ enrollment can use.
 
 ```bash
 # List language models available to the current enrollment
-pltr language-models list [--format FORMAT]
+pltr language-models list [--format FORMAT] [--profile PROFILE] [--output FILE]
 
 # Enroll/enable a model
-pltr language-models enroll MODEL_ID [--format FORMAT]
+pltr language-models enroll MODEL_RID [--format FORMAT] [--profile PROFILE] [--output FILE]
 
 # Check enrollment status for a model
-pltr language-models status MODEL_ID [--format FORMAT]
+pltr language-models status MODEL_RID [--format FORMAT] [--profile PROFILE] [--output FILE]
+
+# MODEL_RID for enroll/status uses the enrollment format
+# ri.language-model-service..language-model.{id} (see Model RID Format above).
+# All three commands default to --format table.
 
 # Examples
 pltr language-models list
-pltr language-models enroll anthropic.claude-3-5-sonnet-20241022-v2:0
-pltr language-models status anthropic.claude-3-5-sonnet-20241022-v2:0
+pltr language-models enroll ri.language-model-service..language-model.abc123
+pltr language-models status ri.language-model-service..language-model.abc123
 ```
 
 ## Response Format

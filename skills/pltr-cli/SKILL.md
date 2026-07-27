@@ -94,6 +94,24 @@ pltr <command> --profile production
 pltr <command> --profile development
 ```
 
+## Choosing the right tool
+
+Decide the entry point from the situation, not from the command group name:
+
+| Situation | Start with |
+|-----------|------------|
+| You have a name or path, not a RID | `pltr search`, `pltr namespace list`, `pltr folder list` |
+| You are unsure what the CLI can do | `pltr agent-manifest` (authoritative grammar), `pltr capabilities` |
+| You are about to change any Foundry resource | `workflows/change-impact-assessment.md` — always, before planning |
+| You need docs on a Foundry feature | `pltr docs search` / `pltr docs page`, before guessing flags |
+| You are scripting or feeding another agent | `--agent` envelope or `--format json --output file`; never parse table output |
+| A command reports `unsupported-capability` | Stop and document the gap; do not simulate the result another way |
+| A mutation has no `--apply`/`--yes` flag | Present the exact command and require explicit operator confirmation |
+
+General rules: reads before writes, narrowest target first (`dependency property` over
+`dependency resource`), dry-run/plan before `--apply`, and keep artifacts
+(`--graph-output`, `--output`) for anything you may need to diff later.
+
 ## Reference Files
 
 Load these files based on the user's task:
@@ -133,7 +151,16 @@ For common multi-step tasks:
 |----------|------|
 | Data exploration, SQL analysis, ontology queries | `workflows/data-analysis.md` |
 | ETL pipelines, scheduled jobs, data quality | `workflows/data-pipeline.md` |
+| Batch/streaming ingestion with transaction rollback | `workflows/data-ingestion.md` |
+| Failed or stuck build diagnosis and remediation | `workflows/build-triage.md` |
+| Plan-first ontology schema authoring via branches and proposals | `workflows/ontology-authoring.md` |
+| Code PR and Ontology Global Proposal review | `workflows/proposal-review.md` |
+| OSDK app development end-to-end (SDK gen, React scaffold, widgets) | `workflows/osdk-app-development.md` |
+| Compute Module dev mode, logs, and function execution | `workflows/compute-module-ops.md` |
+| MediaSet upload/download with transaction lifecycle | `workflows/media-management.md` |
 | Setting up permissions, resource roles, access control | `workflows/permission-management.md` |
+| Identity lifecycle, access review, audit-log investigation | `workflows/admin-audit.md` |
+| AIP agents, language models, Functions queries, model registry | `workflows/ai-workloads.md` |
 | Pre-change Foundry dependency and impact gate | `workflows/change-impact-assessment.md` |
 
 ## Common Commands Quick Reference

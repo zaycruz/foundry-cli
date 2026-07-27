@@ -38,7 +38,7 @@ pltr global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024
 
 ```bash
 pltr global-branch create DISPLAY_NAME \
-    [--ontology-rid ONTOLOGY_RID] [--description TEXT] \
+    --ontology-rid ONTOLOGY_RID [--description TEXT] \
     [--add-resource RESOURCE_RID]... [--apply] [--format FORMAT]
 
 # Backed by branch-service POST /branch/create (contract-verified).
