@@ -1,0 +1,87 @@
+# gitleaks configuration
+#
+# Two layers. The default ruleset catches credentials. The rules below catch the
+# thing that actually goes wrong in a Foundry client: real environment data
+# committed as if it were example data -- resource identifiers, tenant
+# hostnames, local paths, and verification notes pinning down when and where a
+# probe ran.
+#
+# Every rule describes a *shape*, never a name. A rule listing real company,
+# client, or tenant identifiers would itself be the disclosure it exists to
+# prevent, so those live in a machine-local pre-commit gate and never enter this
+# repository.
+#
+# Note on syntax: gitleaks uses Go's RE2, which has no lookahead or lookbehind.
+# Exceptions are therefore expressed as rule allowlists, not negative patterns.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "foundry-resource-identifier"
+description = "Foundry resource identifier with a real UUID. Use a documented placeholder."
+regex = '''\bri\.[a-z0-9._-]+\.[a-z0-9-]+\.[a-z0-9._-]+\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b'''
+tags = ["foundry", "environment-data"]
+
+  [rules.allowlist]
+  regexTarget = "match"
+  regexes = [
+    # The two documented placeholder shapes. The all-zero prefix is the
+    # convention; only its final digits vary so fixtures can hold several
+    # distinct-but-obviously-fake identifiers.
+    '''12345678-1234-1234-1234-''',
+    '''00000000-0000-0000-0000-''',
+  ]
+
+[[rules]]
+id = "foundry-tenant-hostname"
+description = "Foundry hostname that is not an obvious placeholder. Use test/example/your-stack."
+regex = '''\b[a-z0-9][a-z0-9-]*\.palantirfoundry\.com\b'''
+tags = ["foundry", "environment-data"]
+
+  [rules.allowlist]
+  regexTarget = "match"
+  regexes = [
+    '''^(?:oauth|dev|prod|production|staging|stage|env|env-override|temp|keep|valid|param|profile|test|testing|example|sample|demo|new|old|updated|other|custom|my|your|your-stack|company|acme|localhost)[a-z0-9-]*\.palantirfoundry\.com$''',
+  ]
+
+[[rules]]
+id = "absolute-home-path"
+description = "Absolute path into a developer home directory. Use a relative path."
+regex = '''(?:/Users/|/home/)[a-z][a-z0-9_-]{2,}/'''
+tags = ["environment-data"]
+
+  [rules.allowlist]
+  regexTarget = "match"
+  regexes = [
+    '''(?:/Users/|/home/)(?:runner|user|username|you|me|example|test|ubuntu|root)/''',
+  ]
+
+[[rules]]
+id = "verification-forensics"
+description = "Verification note pinned to a date. Keep the behavioural claim, drop when and where it ran."
+regex = '''(?i)(?:live[- ]verified|verified live|captured (?:from|on)|probed? (?:on|against)|contract[- ]verified)[^.\n]{0,80}20\d{2}-\d{2}-\d{2}'''
+tags = ["environment-data"]
+
+[[rules]]
+id = "probe-artifact-reference"
+description = "Reference to a probe evidence file. Evidence is local-only and is not shipped."
+# Deliberately narrow: only files whose name marks them as captured probe
+# evidence. An earlier version also matched change-impact*.json, which is a
+# documented CLI *output* filename users legitimately create -- a rule that
+# flags normal usage gets switched off, taking the real coverage with it.
+regex = '''\b[\w./-]*probes?[\w./-]*\.jsonl\b'''
+tags = ["environment-data"]
+
+  [rules.allowlist]
+  regexTarget = "match"
+  regexes = [
+    '''(?i)(?:example|sample|test|fixture)''',
+  ]
+
+[allowlist]
+description = "Repository-wide allowlist"
+paths = [
+  '''(^|/)uv\.lock$''',
+  '''(^|/)\.gitleaks\.toml$''',
+]
