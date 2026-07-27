@@ -42,4 +42,4 @@ def test_namespace_list_error_returns_nonzero() -> None:
         result = runner.invoke(app, [])
 
     assert result.exit_code == 1
-    assert "denied" in result.stdout
+    assert "denied" in result.stderr

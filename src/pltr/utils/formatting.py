@@ -5,6 +5,7 @@ Output formatting utilities for CLI commands.
 import json
 import csv
 import os
+import sys
 from typing import Any, Dict, List, Optional, Union, Callable
 from datetime import datetime
 from io import StringIO
@@ -43,6 +44,13 @@ class OutputFormatter:
             console: Rich console instance (creates one if not provided)
         """
         self.console = console or Console()
+        # Status chatter (success/error/warning lines) is decoration, not the
+        # result. When stdout is piped -- the --format json path an agent
+        # parses -- it must go to stderr or it corrupts the JSON document.
+        # Interactive terminals keep the historic stdout behavior.
+        self._status_console = (
+            self.console if sys.stdout.isatty() else Console(stderr=True)
+        )
 
     def format_output(
         self,
@@ -471,6 +479,13 @@ class OutputFormatter:
         if output_file:
             with open(output_file, "w", encoding="utf-8") as handle:
                 handle.write(rendered)
+            # Still buffer the payload: the caller parses the one stdout
+            # envelope, and without it a --output run surfaced as an
+            # "unstructured" error even though the command succeeded.
+            buffer_agent_payload(
+                data,
+                meta={"result_type": type(data).__name__, "output_file": output_file},
+            )
             return None
         buffer_agent_payload(data, meta={"result_type": type(data).__name__})
         return rendered
@@ -748,28 +763,28 @@ class OutputFormatter:
         if agent_mode_enabled():
             buffer_agent_message(message, level="success")
             return
-        self.console.print(f"✅ {message}", style="green")
+        self._status_console.print(f"✅ {message}", style="green")
 
     def print_error(self, message: str):
         """Print error message with formatting."""
         if agent_mode_enabled():
             buffer_agent_message(message, level="error")
             return
-        self.console.print(f"❌ {message}", style="red")
+        self._status_console.print(f"❌ {message}", style="red")
 
     def print_warning(self, message: str):
         """Print warning message with formatting."""
         if agent_mode_enabled():
             buffer_agent_message(message, level="warning")
             return
-        self.console.print(f"⚠️  {message}", style="yellow")
+        self._status_console.print(f"⚠️  {message}", style="yellow")
 
     def print_info(self, message: str):
         """Print info message with formatting."""
         if agent_mode_enabled():
             buffer_agent_message(message, level="info")
             return
-        self.console.print(f"ℹ️  {message}", style="blue")
+        self._status_console.print(f"ℹ️  {message}", style="blue")
 
     def format_table(
         self,

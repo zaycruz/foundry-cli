@@ -7,6 +7,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from pltr.services.dataset import DatasetService
+from pltr.services.errors import FoundryApiError
+
+from foundry_sdk.v2.core.models import DatasetSchema
 
 
 @pytest.fixture
@@ -773,3 +776,181 @@ def test_get_schedules_adapts_sdk_rids_to_public_dictionary_contract(
             "created_time": None,
         }
     ]
+
+
+def _schema_field(name, field_type, nullable=True, default=None):
+    """Stand-in for a SDK DatasetFieldSchema."""
+    return SimpleNamespace(
+        name=name,
+        type=field_type,
+        nullable=nullable,
+        custom_metadata={"default": default} if default is not None else None,
+    )
+
+
+def _schema_response(fields, version_id="version-1"):
+    """Stand-in for a SDK GetDatasetSchemaResponse."""
+    return SimpleNamespace(
+        branch_name="master",
+        version_id=version_id,
+        schema_=SimpleNamespace(field_schema_list=fields),
+    )
+
+
+def test_update_schema_dry_run_returns_diff_without_writing(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.return_value = _schema_response(
+        [_schema_field("id", "INTEGER", nullable=False)]
+    )
+
+    result = service.update_schema(
+        "ri.foundry.main.dataset.test",
+        [{"name": "capacity", "type": "integer", "nullable": True, "default": None}],
+    )
+
+    mock_dataset_class.put_schema.assert_not_called()
+    assert result["status"] == "dry-run"
+    assert result["current_version_id"] == "version-1"
+    assert result["fields_added"] == [
+        {"name": "capacity", "type": "INTEGER", "nullable": True, "default": None}
+    ]
+    assert [f["name"] for f in result["schema"]["fields"]] == ["id", "capacity"]
+
+
+def test_update_schema_rejects_type_change_on_existing_field(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.return_value = _schema_response(
+        [_schema_field("id", "INTEGER")]
+    )
+
+    with pytest.raises(FoundryApiError) as exc_info:
+        service.update_schema(
+            "ri.foundry.main.dataset.test",
+            [{"name": "id", "type": "STRING", "nullable": True, "default": None}],
+        )
+
+    assert exc_info.value.error_name == "Datasets:NonAdditiveSchemaChange"
+    mock_dataset_class.put_schema.assert_not_called()
+
+
+def test_update_schema_skips_identical_existing_field(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.return_value = _schema_response(
+        [_schema_field("revision", "INTEGER", nullable=False, default="0")]
+    )
+
+    result = service.update_schema(
+        "ri.foundry.main.dataset.test",
+        [{"name": "revision", "type": "INTEGER", "nullable": False, "default": "0"}],
+    )
+
+    assert result["fields_added"] == []
+    assert result["fields_unchanged"][0]["name"] == "revision"
+    assert [f["name"] for f in result["schema"]["fields"]] == ["revision"]
+    mock_dataset_class.put_schema.assert_not_called()
+
+
+def test_update_schema_expected_version_conflict_raises(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.return_value = _schema_response(
+        [_schema_field("id", "INTEGER")], version_id="version-1"
+    )
+
+    with pytest.raises(FoundryApiError) as exc_info:
+        service.update_schema(
+            "ri.foundry.main.dataset.test",
+            [
+                {
+                    "name": "capacity",
+                    "type": "INTEGER",
+                    "nullable": True,
+                    "default": None,
+                }
+            ],
+            expected_schema_version="version-9",
+        )
+
+    assert exc_info.value.error_name == "Datasets:SchemaVersionConflict"
+    assert exc_info.value.safe_parameters["currentSchemaVersion"] == "version-1"
+    mock_dataset_class.put_schema.assert_not_called()
+
+
+def test_update_schema_apply_writes_merged_schema_and_reads_back(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.side_effect = [
+        _schema_response([_schema_field("id", "INTEGER")], version_id="version-1"),
+        _schema_response(
+            [_schema_field("id", "INTEGER"), _schema_field("capacity", "INTEGER")],
+            version_id="version-2",
+        ),
+    ]
+
+    result = service.update_schema(
+        "ri.foundry.main.dataset.test",
+        [{"name": "capacity", "type": "INTEGER", "nullable": True, "default": None}],
+        expected_schema_version="version-1",
+        apply=True,
+    )
+
+    mock_dataset_class.put_schema.assert_called_once()
+    put_kwargs = mock_dataset_class.put_schema.call_args.kwargs
+    assert put_kwargs["dataset_rid"] == "ri.foundry.main.dataset.test"
+    assert put_kwargs["branch_name"] == "master"
+    assert [f.name for f in put_kwargs["schema"].field_schema_list] == [
+        "id",
+        "capacity",
+    ]
+    assert result["status"] == "applied"
+    assert result["version_id"] == "version-2"
+    assert [f["name"] for f in result["schema"]["fields"]] == ["id", "capacity"]
+
+
+def test_update_schema_wraps_sdk_errors_as_foundry_api_error(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.side_effect = Exception("preview not enabled")
+
+    with pytest.raises(FoundryApiError, match="preview not enabled"):
+        service.update_schema(
+            "ri.foundry.main.dataset.test",
+            [
+                {
+                    "name": "capacity",
+                    "type": "INTEGER",
+                    "nullable": True,
+                    "default": None,
+                }
+            ],
+        )
+
+
+def test_put_schema_expected_version_conflict_skips_write(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.return_value = _schema_response(
+        [_schema_field("id", "INTEGER")], version_id="version-1"
+    )
+
+    with pytest.raises(FoundryApiError) as exc_info:
+        service.put_schema(
+            "ri.foundry.main.dataset.test",
+            DatasetSchema(field_schema_list=[]),
+            expected_schema_version="version-9",
+        )
+
+    assert exc_info.value.error_name == "Datasets:SchemaVersionConflict"
+    mock_dataset_class.put_schema.assert_not_called()
+
+
+def test_put_schema_expected_version_match_writes(mock_dataset_service):
+    service, mock_dataset_class = mock_dataset_service
+    mock_dataset_class.get_schema.return_value = _schema_response(
+        [_schema_field("id", "INTEGER")], version_id="version-1"
+    )
+
+    result = service.put_schema(
+        "ri.foundry.main.dataset.test",
+        DatasetSchema(field_schema_list=[]),
+        expected_schema_version="version-1",
+    )
+
+    assert result["status"] == "Schema updated successfully"
+    mock_dataset_class.put_schema.assert_called_once()
