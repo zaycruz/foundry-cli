@@ -13,6 +13,11 @@ from foundry_sdk.v2.ontologies.models import ApplyActionRequestOptions
 from ..config.settings import Settings
 from ..utils.pagination import PaginationConfig, PaginationResult
 from .base import BaseService
+from .errors import (
+    FoundryApiError,
+    foundry_error_from_conjure,
+    foundry_error_from_sdk,
+)
 
 # Verified request contract for OntologyModificationService.modifyOntology:
 # the captured contract (contract-verified against a live deployment).
@@ -103,18 +108,19 @@ def _require_successful_internal_response(
     """Separate transport/deserialization failures from validation errors."""
     if status == 200:
         return
-    error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
     if status == 400:
+        error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
         detail = f" ({error_name})" if error_name else ""
-        raise RuntimeError(
-            f"{operation} request failed during contract deserialization "
-            f"with HTTP 400{detail}; the modifyOntology request shape was "
-            f"rejected before validation: {str(raw)[:300]}"
+        raise foundry_error_from_conjure(
+            status,
+            payload,
+            raw,
+            context=(
+                f"{operation} request failed during contract deserialization"
+                f"{detail}; the request shape was rejected before validation"
+            ),
         )
-    detail = f" ({error_name})" if error_name else ""
-    raise RuntimeError(
-        f"{operation} failed with HTTP {status}{detail}: {str(raw)[:300]}"
-    )
+    raise foundry_error_from_conjure(status, payload, raw, context=operation)
 
 
 def _dry_run_errors(payload: Any) -> List[Mapping[str, Any]]:
@@ -156,6 +162,51 @@ def _format_validation_error(error: Mapping[str, Any], *, entity: str) -> str:
     return error_name
 
 
+def _run_dry_run_full(
+    client: Any,
+    ontology_rid: str,
+    modification_request: Mapping[str, Any],
+    *,
+    operation: str,
+    entity: str,
+) -> Tuple[List[str], List[str], List[Mapping[str, Any]]]:
+    """POST a dry-run validation.
+
+    Returns ``(formatted_errors, terminal_error_names, raw_errors)``. Callers
+    that need the server's structured validation entries (for example to
+    attach them to a typed ``FoundryApiError``) use this over
+    :func:`_run_dry_run_collect`.
+    """
+    dry_run_url, _ = _modify_urls(ontology_rid)
+    status, parsed, raw = client.conjure(
+        "POST",
+        dry_run_url,
+        json_body={"modificationRequest": modification_request},
+        expected=200,
+    )
+    _require_successful_internal_response(status, parsed, raw, operation=operation)
+    if isinstance(parsed, Mapping) and parsed.get("type") == "success":
+        return [], [], []
+    errors = _dry_run_errors(parsed)
+    if errors:
+        names = []
+        for error in errors:
+            error_data = error.get("errorData")
+            if isinstance(error_data, Mapping):
+                names.append(
+                    _error_terminal_name(str(error_data.get("errorName") or ""))
+                )
+        return (
+            [_format_validation_error(error, entity=entity) for error in errors],
+            names,
+            errors,
+        )
+    raise RuntimeError(
+        f"{operation} returned an invalid response shape: expected "
+        "{'type': 'success'} or {'type': 'error', 'error': {'errors': [...]}}"
+    )
+
+
 def _run_dry_run_collect(
     client: Any,
     ontology_rid: str,
@@ -171,33 +222,14 @@ def _run_dry_run_collect(
     validation failure (for example already-exists -> update path) need the
     terminal names too.
     """
-    dry_run_url, _ = _modify_urls(ontology_rid)
-    status, parsed, raw = client.conjure(
-        "POST",
-        dry_run_url,
-        json_body={"modificationRequest": modification_request},
-        expected=200,
+    errors, names, _ = _run_dry_run_full(
+        client,
+        ontology_rid,
+        modification_request,
+        operation=operation,
+        entity=entity,
     )
-    _require_successful_internal_response(status, parsed, raw, operation=operation)
-    if isinstance(parsed, Mapping) and parsed.get("type") == "success":
-        return [], []
-    errors = _dry_run_errors(parsed)
-    if errors:
-        names = []
-        for error in errors:
-            error_data = error.get("errorData")
-            if isinstance(error_data, Mapping):
-                names.append(
-                    _error_terminal_name(str(error_data.get("errorName") or ""))
-                )
-        return (
-            [_format_validation_error(error, entity=entity) for error in errors],
-            names,
-        )
-    raise RuntimeError(
-        f"{operation} returned an invalid response shape: expected "
-        "{'type': 'success'} or {'type': 'error', 'error': {'errors': [...]}}"
-    )
+    return errors, names
 
 
 def _run_dry_run(
@@ -385,6 +417,79 @@ def _is_uuid(value: Any) -> bool:
     except (ValueError, AttributeError, TypeError):
         return False
     return True
+
+
+# Property type scalars supported by object-type-add-property, mapped to their
+# TypeForModification wire shapes (vendor: PropertyTypeModification.type; all
+# scalars except string are empty structs).
+_PROPERTY_TYPE_WIRE_TYPES: Dict[str, Dict[str, Any]] = {
+    "STRING": {
+        "type": "string",
+        "string": {"isLongText": False, "supportsExactMatching": True},
+    },
+    "INTEGER": {"type": "integer", "integer": {}},
+    "LONG": {"type": "long", "long": {}},
+    "DOUBLE": {"type": "double", "double": {}},
+    "BOOLEAN": {"type": "boolean", "boolean": {}},
+    "TIMESTAMP": {"type": "timestamp", "timestamp": {}},
+    "DATE": {"type": "date", "date": {}},
+}
+
+# DEPRECATED is deliberately absent: DeprecatedPropertyTypeStatusModification
+# requires deadline/message fields the command does not collect.
+_PROPERTY_STATUS_WIRE_TYPES: Dict[str, Dict[str, Any]] = {
+    "ACTIVE": {"type": "active", "active": {}},
+    "EXPERIMENTAL": {"type": "experimental", "experimental": {}},
+    "EXAMPLE": {"type": "example", "example": {}},
+}
+
+_BRANCH_UNSUPPORTED_TERMINAL_NAME = "BranchUnsupported"
+
+
+def _raise_on_branch_unsupported(
+    terminal_names: List[str],
+    raw_errors: List[Mapping[str, Any]],
+    *,
+    branch_rid: Optional[str],
+) -> None:
+    """Surface branch-targeting failures as a typed FoundryApiError.
+
+    ``ontologyBranchRid`` support is source-only on this stack, so a dry-run
+    that rejects branch targeting must not degrade to a generic validation
+    message: the typed error keeps the server's validation details.
+    """
+    if not branch_rid:
+        return
+    if not any(_BRANCH_UNSUPPORTED_TERMINAL_NAME in name for name in terminal_names):
+        return
+    raise FoundryApiError(
+        f"ontology branch {branch_rid} is not supported as a modification "
+        "target on this stack",
+        error_name="OntologyMetadata:BranchUnsupported",
+        validation_details=list(raw_errors),
+    )
+
+
+def _property_type_id(api_name: str) -> str:
+    """Derive the snake_case PropertyTypeId matching loaded-state convention."""
+    with_word_boundaries = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", api_name)
+    with_word_boundaries = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", with_word_boundaries)
+    suffix = re.sub(r"[^a-z0-9]+", "_", with_word_boundaries.casefold()).strip("_")
+    if not suffix or not suffix[0].isalpha():
+        raise RuntimeError(
+            f"Cannot derive a valid property type ID from API name "
+            f"{api_name!r}; the derived ID must start with a letter"
+        )
+    return suffix
+
+
+def _status_type_name(status: Any) -> Optional[str]:
+    """Return the union discriminator of a loaded status, if present."""
+    if isinstance(status, Mapping):
+        status_type = status.get("type")
+        if isinstance(status_type, str):
+            return status_type
+    return None
 
 
 # Required ontology contract publication order. Referenced by
@@ -839,24 +944,591 @@ class ObjectTypeService(BaseService):
         )
         return result
 
+    def add_property_to_object_type(
+        self,
+        ontology_rid: str,
+        object_type: str,
+        api_name: str,
+        property_type: str,
+        display_name: Optional[str] = None,
+        description: Optional[str] = None,
+        status: Optional[str] = None,
+        visibility: Optional[str] = None,
+        backing_column: Optional[str] = None,
+        backing_dataset: Optional[str] = None,
+        branch_rid: Optional[str] = None,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Add a property to an existing object type via modifyOntology.
+
+        ``object_type`` is the object type API name or RID; the internal
+        ObjectTypeId is resolved through the verified bulkLoadEntities read.
+        The request is an ``objectTypes`` update carrying the merged state
+        plus the new propertyType, and — when ``backing_column`` is given —
+        an ``objectTypeDatasources`` update adding the columnMapping entry
+        (see artifacts/ontology-modify-contract.md sections 2-3). Object
+        types using interfaces or shared property types are refused: the
+        loaded state cannot be faithfully reconstructed for them.
+
+        Defaults to a dry-run; ``apply=True`` issues the real modification
+        and verifies it by reloading the state and reading the created
+        property RID and column mapping back. ``branch_rid`` targets a
+        non-default ontology branch (request-level ``ontologyBranchRid``,
+        source-only on this stack); a dry-run rejection of branch targeting
+        surfaces as ``OntologyMetadata:BranchUnsupported``.
+        """
+        wire_type = _PROPERTY_TYPE_WIRE_TYPES.get(property_type.upper())
+        if wire_type is None:
+            raise RuntimeError(
+                f"unsupported property type {property_type!r}; supported: "
+                + ", ".join(sorted(_PROPERTY_TYPE_WIRE_TYPES))
+            )
+        status_wire = None
+        if status is not None:
+            status_wire = _PROPERTY_STATUS_WIRE_TYPES.get(status.upper())
+            if status_wire is None:
+                raise RuntimeError(
+                    f"unsupported property status {status!r}; supported: "
+                    + ", ".join(sorted(_PROPERTY_STATUS_WIRE_TYPES))
+                )
+
+        client = _internal_client(self)
+        loaded = self._load_object_type_state(
+            client,
+            None,
+            identifier=self._object_type_load_identifier(ontology_rid, object_type),
+        )
+        loaded_object_type = loaded["objectType"]
+        object_type_id = loaded_object_type.get("id")
+        if not isinstance(object_type_id, str):
+            raise RuntimeError(
+                "loaded object type state has no ObjectTypeId; the "
+                "add-property path cannot proceed without it"
+            )
+        object_type_rid = loaded_object_type.get("rid")
+        property_id = _property_type_id(api_name)
+
+        # Reuse the loaded-state translation. It refuses interfaces and
+        # shared property types, and with the loaded display name / primary
+        # key / backing dataset passed back it changes nothing by itself.
+        loaded_properties = loaded_object_type.get("propertyTypes") or {}
+        loaded_primary_keys = [
+            loaded_properties[rid]["id"]
+            for rid in loaded_object_type.get("primaryKeys") or []
+            if isinstance(loaded_properties.get(rid), Mapping)
+            and loaded_properties[rid].get("id")
+        ]
+        if not loaded_primary_keys:
+            raise RuntimeError(
+                "loaded object type state has no resolvable primary key; "
+                "the add-property path cannot proceed without it"
+            )
+        modification, _ = self._merge_object_type_update(
+            loaded,
+            display_name=(
+                (loaded_object_type.get("displayMetadata") or {}).get("displayName")
+                or object_type_id
+            ),
+            primary_key=loaded_primary_keys[0],
+            backing_dataset=self._first_loaded_dataset_rid(loaded) or "",
+            description=None,
+        )
+
+        property_mods = modification["propertyTypes"]
+        if property_id in property_mods or any(
+            prop.get("apiName") == api_name for prop in property_mods.values()
+        ):
+            raise RuntimeError(
+                f"object type {object_type_id} already has a property with "
+                f"API name {api_name!r}; nothing was added"
+            )
+        new_property: Dict[str, Any] = {
+            "id": property_id,
+            "apiName": api_name,
+            "displayMetadata": {
+                "displayName": display_name or api_name,
+                "visibility": visibility or "NORMAL",
+            },
+            "indexedForSearch": False,
+            "type": dict(wire_type),
+            "typeClasses": [],
+        }
+        if description is not None:
+            new_property["displayMetadata"]["description"] = description
+        if status_wire is not None:
+            new_property["status"] = status_wire
+        property_mods[property_id] = new_property
+
+        datasource_update: Optional[Dict[str, Any]] = None
+        chosen_dataset_rid: Optional[str] = None
+        if backing_column is not None:
+            # The loaded payload is untyped, so narrow both halves here rather
+            # than handing Any through: the callee keys a wire mapping by these
+            # values and a non-string id would produce an unusable request.
+            rid_to_id: Dict[str, str] = {
+                rid: property_id_value
+                for rid, prop in loaded_properties.items()
+                if isinstance(prop, Mapping)
+                and isinstance(rid, str)
+                and isinstance(property_id_value := prop.get("id"), str)
+                and property_id_value
+            }
+            datasource_update, chosen_dataset_rid = (
+                self._build_datasource_column_update(
+                    loaded,
+                    rid_to_id=rid_to_id,
+                    property_id=property_id,
+                    backing_column=backing_column,
+                    backing_dataset=backing_dataset,
+                )
+            )
+
+        modification_request: Dict[str, Any] = {
+            "objectTypes": {
+                object_type_id: {
+                    "type": "update",
+                    "update": {"objectType": modification},
+                }
+            }
+        }
+        if datasource_update is not None:
+            modification_request["objectTypeDatasources"] = {
+                object_type_id: [datasource_update]
+            }
+        if branch_rid is not None:
+            modification_request["ontologyBranchRid"] = branch_rid
+
+        plan: Dict[str, Any] = {
+            "operation": "object-type-add-property",
+            "apiName": api_name,
+            "propertyTypeId": property_id,
+            "objectTypeId": object_type_id,
+            "ontologyRid": ontology_rid,
+        }
+        if isinstance(object_type_rid, str):
+            plan["objectTypeRid"] = object_type_rid
+        if backing_column is not None:
+            plan["backingColumn"] = backing_column
+            plan["backingDataset"] = chosen_dataset_rid
+        if branch_rid is not None:
+            plan["ontologyBranchRid"] = branch_rid
+
+        validation_errors, terminal_names, raw_errors = _run_dry_run_full(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type add property dry-run",
+            entity="object type",
+        )
+        _raise_on_branch_unsupported(terminal_names, raw_errors, branch_rid=branch_rid)
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Object type add property dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="object type add property modify",
+        )
+        verification, property_rid = self._verify_property_present(
+            client,
+            object_type_id=object_type_id,
+            api_name=api_name,
+            backing_column=backing_column,
+        )
+        result: Dict[str, Any] = {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+            "verification": verification,
+        }
+        if property_rid is not None:
+            result["propertyRid"] = property_rid
+        return result
+
+    def _object_type_load_identifier(
+        self, ontology_rid: str, object_type: str
+    ) -> Dict[str, Any]:
+        """Build a bulkLoadEntities identifier, resolving API names to RIDs.
+
+        The bulk-load ``ObjectTypeIdentifier`` union supports only
+        ``objectTypeId``/``objectTypeRid`` (vendor api-components.ts); an
+        ``objectTypeApiName`` variant is leniently dropped server-side and
+        yields a null entry. API names are resolved to RIDs through the SDK
+        first.
+        """
+        if object_type.startswith("ri."):
+            return {"type": "objectTypeRid", "objectTypeRid": object_type}
+        try:
+            resolved = self.service.Ontology.ObjectType.get(ontology_rid, object_type)
+        except Exception as e:
+            raise foundry_error_from_sdk(
+                e, context=f"resolve object type '{object_type}'"
+            )
+        rid = getattr(resolved, "rid", None)
+        if not isinstance(rid, str) or not rid:
+            raise FoundryApiError(
+                f"Could not resolve object type API name '{object_type}' to a RID",
+                error_name="OntologyMetadata:ObjectTypeNotFound",
+                safe_parameters={"objectTypeApiName": object_type},
+            )
+        return {"type": "objectTypeRid", "objectTypeRid": rid}
+
     @staticmethod
-    def _load_object_type_state(client: Any, object_type_id: str) -> Mapping[str, Any]:
+    def _first_loaded_dataset_rid(loaded: Mapping[str, Any]) -> Optional[str]:
+        """Return the first dataset RID among loaded datasources, if any."""
+        for entry in loaded.get("datasources") or []:
+            if not isinstance(entry, Mapping):
+                continue
+            definition = entry.get("datasource")
+            if not isinstance(definition, Mapping):
+                continue
+            body = next(
+                (
+                    definition.get(variant)
+                    for variant in ("dataset", "datasetV2", "datasetV3")
+                    if isinstance(definition.get(variant), Mapping)
+                ),
+                None,
+            )
+            if body is not None and isinstance(body.get("datasetRid"), str):
+                return body["datasetRid"]
+        return None
+
+    @staticmethod
+    def _build_datasource_column_update(
+        loaded: Mapping[str, Any],
+        *,
+        rid_to_id: Mapping[str, str],
+        property_id: str,
+        backing_column: str,
+        backing_dataset: Optional[str],
+    ) -> Tuple[Dict[str, Any], str]:
+        """Build the objectTypeDatasources update adding a columnMapping.
+
+        The loaded datasource definition is translated back into its
+        modification shape (PropertyTypeRid keys become PropertyTypeIds)
+        and the new property's column mapping is appended. Only ``dataset``
+        and ``datasetV2`` datasources are supported: ``datasetV3`` carries
+        property security groups that an update could silently drop, so it
+        is refused. Returns ``(update_entry, dataset_rid)``.
+        """
+        candidates: List[Tuple[Mapping[str, Any], str, Mapping[str, Any]]] = []
+        unsupported_variants: List[str] = []
+        for entry in loaded.get("datasources") or []:
+            if not isinstance(entry, Mapping):
+                continue
+            definition = entry.get("datasource")
+            if not isinstance(definition, Mapping):
+                continue
+            variant = definition.get("type")
+            body = definition.get(variant) if isinstance(variant, str) else None
+            if not isinstance(body, Mapping) or "datasetRid" not in body:
+                continue
+            if variant not in ("dataset", "datasetV2"):
+                unsupported_variants.append(str(variant))
+                continue
+            if backing_dataset is not None and (
+                body.get("datasetRid") != backing_dataset
+            ):
+                continue
+            candidates.append((entry, str(variant), body))
+
+        if not candidates:
+            if unsupported_variants:
+                raise RuntimeError(
+                    "cannot map the backing column: the object type's "
+                    f"datasources are {unsupported_variants}, which the "
+                    "add-property path cannot faithfully update (property "
+                    "security groups would be dropped); only 'dataset' and "
+                    "'datasetV2' datasources are supported"
+                )
+            raise RuntimeError(
+                "cannot map the backing column: the object type has no "
+                "dataset-backed datasource"
+                + (
+                    f" matching {backing_dataset}"
+                    if backing_dataset is not None
+                    else ""
+                )
+            )
+        if len(candidates) > 1:
+            raise RuntimeError(
+                "the object type has multiple dataset-backed datasources; "
+                "pass --backing-dataset to select one"
+            )
+
+        entry, variant, body = candidates[0]
+        datasource_rid = entry.get("rid")
+        if not isinstance(datasource_rid, str):
+            raise RuntimeError(
+                "loaded datasource has no datasource RID; the datasource "
+                "update path requires it"
+            )
+        dataset_rid = body["datasetRid"]
+
+        mapping: Dict[str, Any] = {}
+        for prop_rid, info in (body.get("propertyMapping") or {}).items():
+            mapped_id = rid_to_id.get(prop_rid)
+            if mapped_id is None:
+                raise RuntimeError(
+                    f"loaded datasource maps unknown property {prop_rid}; "
+                    "the add-property path refuses to drop the mapping"
+                )
+            mapping[mapped_id] = info
+
+        if variant == "dataset":
+            mapping[property_id] = backing_column
+            dataset_mod: Dict[str, Any] = {
+                "datasetRid": dataset_rid,
+                "propertyMapping": mapping,
+            }
+            if body.get("writebackDatasetRid"):
+                dataset_mod["writebackDatasetRid"] = body["writebackDatasetRid"]
+            definition = {"type": "dataset", "dataset": dataset_mod}
+        else:
+            mapping[property_id] = {
+                "type": "column",
+                "column": backing_column,
+            }
+            definition = {
+                "type": "datasetV2",
+                "datasetV2": {
+                    "datasetRid": dataset_rid,
+                    "propertyMapping": mapping,
+                },
+            }
+        return (
+            {
+                "type": "update",
+                "update": {
+                    "rid": datasource_rid,
+                    "objectTypeDatasourceDefinition": definition,
+                },
+            },
+            dataset_rid,
+        )
+
+    def _verify_property_present(
+        self,
+        client: Any,
+        *,
+        object_type_id: str,
+        api_name: str,
+        backing_column: Optional[str],
+    ) -> Tuple[Dict[str, Any], Optional[str]]:
+        """Read a created property back via the verified bulkLoadEntities.
+
+        Returns ``(verification, property_rid)``. The authoritative read-back
+        reloads the object type state and locates the property by API name;
+        when a backing column was requested, the datasource mappings are
+        checked for the new column too.
+        """
+        try:
+            entry = self._load_object_type_state(client, object_type_id)
+        except Exception as e:
+            return (
+                {
+                    "status": "not-verified",
+                    "detail": (f"read-back via bulkLoadEntities failed: {e}"),
+                },
+                None,
+            )
+        properties = entry["objectType"].get("propertyTypes") or {}
+        match = next(
+            (
+                (rid, prop)
+                for rid, prop in properties.items()
+                if isinstance(prop, Mapping) and prop.get("apiName") == api_name
+            ),
+            None,
+        )
+        if match is None:
+            return (
+                {
+                    "status": "not-verified",
+                    "detail": (
+                        "read-back via bulkLoadEntities did not find the "
+                        f"property {api_name!r}"
+                    ),
+                },
+                None,
+            )
+        property_rid, _ = match
+        if backing_column is not None:
+            mapped = False
+            for ds_entry in entry.get("datasources") or []:
+                if not isinstance(ds_entry, Mapping):
+                    continue
+                definition = ds_entry.get("datasource")
+                if not isinstance(definition, Mapping):
+                    continue
+                body = definition.get(definition.get("type"))
+                if not isinstance(body, Mapping):
+                    continue
+                values = (body.get("propertyMapping") or {}).values()
+                if any(
+                    value == backing_column
+                    or (
+                        isinstance(value, Mapping)
+                        and value.get("column") == backing_column
+                    )
+                    for value in values
+                ):
+                    mapped = True
+                    break
+            if not mapped:
+                return (
+                    {
+                        "status": "not-verified",
+                        "detail": (
+                            "property read back via bulkLoadEntities but "
+                            f"no datasource maps column {backing_column!r}"
+                        ),
+                    },
+                    property_rid,
+                )
+            return (
+                {
+                    "status": "verified",
+                    "detail": (
+                        "property and column mapping read back via bulkLoadEntities"
+                    ),
+                },
+                property_rid,
+            )
+        return (
+            {
+                "status": "verified",
+                "detail": "property read back via bulkLoadEntities",
+            },
+            property_rid,
+        )
+
+    def resolve_object_type(
+        self,
+        ontology_rid: str,
+        *,
+        api_name: Optional[str] = None,
+        rid: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Resolve an object type API name or RID to its full identifiers.
+
+        Read-only: goes through the verified bulkLoadEntities endpoint and
+        returns both the RID and the internal ObjectTypeId, plus display
+        name and status where available.
+        """
+        if (api_name is None) == (rid is None):
+            raise RuntimeError("resolve requires exactly one of api_name or rid")
+        client = _internal_client(self)
+        identifier = (
+            {"type": "objectTypeRid", "objectTypeRid": rid}
+            if rid is not None
+            else self._object_type_load_identifier(ontology_rid, api_name or "")
+        )
+        entry = self._load_object_type_state(client, None, identifier=identifier)
+        object_type = entry["objectType"]
+        display_metadata = object_type.get("displayMetadata") or {}
+        return {
+            "kind": "object-type",
+            "ontologyRid": ontology_rid,
+            "rid": object_type.get("rid"),
+            "id": object_type.get("id"),
+            "apiName": object_type.get("apiName"),
+            "displayName": display_metadata.get("displayName"),
+            "status": _status_type_name(object_type.get("status")),
+        }
+
+    def resolve_property(
+        self,
+        ontology_rid: str,
+        *,
+        object_type: str,
+        api_name: str,
+    ) -> Dict[str, Any]:
+        """Resolve a property API name within an object type scope.
+
+        Read-only: loads the object type (API name or RID) through the
+        verified bulkLoadEntities endpoint and returns the property's RID
+        and internal PropertyTypeId.
+        """
+        client = _internal_client(self)
+        entry = self._load_object_type_state(
+            client,
+            None,
+            identifier=self._object_type_load_identifier(ontology_rid, object_type),
+        )
+        loaded_object_type = entry["objectType"]
+        for property_rid, prop in (
+            loaded_object_type.get("propertyTypes") or {}
+        ).items():
+            if not isinstance(prop, Mapping):
+                continue
+            if prop.get("apiName") != api_name:
+                continue
+            display_metadata = prop.get("displayMetadata") or {}
+            return {
+                "kind": "property",
+                "ontologyRid": ontology_rid,
+                "rid": prop.get("rid") or property_rid,
+                "id": prop.get("id"),
+                "apiName": api_name,
+                "displayName": display_metadata.get("displayName"),
+                "status": _status_type_name(prop.get("status")),
+                "objectType": {
+                    "rid": loaded_object_type.get("rid"),
+                    "id": loaded_object_type.get("id"),
+                    "apiName": loaded_object_type.get("apiName"),
+                },
+            }
+        raise RuntimeError(
+            f"object type {loaded_object_type.get('apiName') or object_type} "
+            f"has no property with API name {api_name!r}"
+        )
+
+    @staticmethod
+    def _load_object_type_state(
+        client: Any,
+        object_type_id: Optional[str],
+        *,
+        identifier: Optional[Mapping[str, Any]] = None,
+    ) -> Mapping[str, Any]:
         """Load an object type's current state via bulkLoadEntities.
 
-        Endpoint contract-verified against a live deployment. Requested entities that
+        Endpoint contract-verified against a live deployment. ``identifier``
+        overrides the default ``objectTypeId`` identifier so callers can load by
+        ``objectTypeRid`` (API names are resolved to RIDs by callers;
+        the bulk-load union has no API-name variant). Requested entities that
         do not exist (or are not visible) come back as null/absent entries,
         which fails the update path loudly: no state, no update.
         """
+        if identifier is None:
+            identifier = {
+                "type": "objectTypeId",
+                "objectTypeId": object_type_id,
+            }
         status, parsed, raw = client.conjure(
             "POST",
             _BULK_LOAD_ENTITIES_ENDPOINT,
             json_body={
                 "objectTypes": [
                     {
-                        "identifier": {
-                            "type": "objectTypeId",
-                            "objectTypeId": object_type_id,
-                        }
+                        "identifier": dict(identifier),
                     }
                 ],
                 "linkTypes": [],
@@ -897,9 +1569,9 @@ class ObjectTypeService(BaseService):
         ):
             raise RuntimeError(
                 "Could not load the current state of object type "
-                f"{object_type_id}: bulkLoadEntities returned no usable "
-                "entry. The update path requires the existing type's "
-                "state and refuses to guess or recreate."
+                f"{object_type_id or identifier}: bulkLoadEntities returned "
+                "no usable entry. The update path requires the existing "
+                "type's state and refuses to guess or recreate."
             )
         return entry
 
@@ -2163,8 +2835,8 @@ class ActionService(BaseService):
 
         Defaults to a dry-run; ``apply=True`` issues the real modification
         and verifies the create by reading the action type back through the
-        SDK full-metadata endpoint. Existing action types are intentionally
-        not updated yet.
+        SDK full-metadata endpoint. Updates to existing action types go
+        through :meth:`update_action_type`.
         """
         create = self._normalize_action_type_create(definition)
         api_name = create["apiName"]
@@ -2234,6 +2906,652 @@ class ActionService(BaseService):
         if isinstance(rid, str):
             result["rid"] = rid
         return result
+
+    # Patch keys supported by update_action_type. Anything else is rejected
+    # client-side with the supported set, because unknown body keys are
+    # silently dropped by the server (contract doc, gotcha 6).
+    _ACTION_TYPE_UPDATE_PATCH_KEYS = (
+        "displayMetadata",
+        "logic",
+        "parameters",
+        "status",
+        "validations",
+        "writeAuthorization",
+    )
+
+    def update_action_type(
+        self,
+        ontology_rid: str,
+        action_type: str,
+        patch: Mapping[str, Any],
+        branch: Optional[str] = None,
+        branch_rid: Optional[str] = None,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """Update an existing action type via modifyOntology.
+
+        ``action_type`` is the action type API name or RID. ``patch`` is a
+        partial document with keys from
+        ``ActionService._ACTION_TYPE_UPDATE_PATCH_KEYS``; unknown keys are
+        rejected client-side. The current definition is loaded through the
+        verified bulkLoadEntities endpoint (resolved branch-aware through
+        the SDK full-metadata read when an API name is given), the patch is
+        merged onto it, and the result is sent as
+        ``actionTypesToUpdate: {<actionTypeRid>: <ActionTypeUpdate>}`` (see
+        artifacts/ontology-modify-contract.md section 4).
+
+        Defaults to a dry-run; ``apply=True`` issues the real modification
+        and verifies it by reading the action type back through the SDK
+        full-metadata endpoint (``branch`` selects the read-back branch).
+        ``branch_rid`` targets the modification itself at a non-default
+        ontology branch (``ontologyBranchRid``, source-only on this stack).
+        """
+        if not isinstance(patch, Mapping) or not patch:
+            raise FoundryApiError(
+                "action-type-update requires a non-empty patch document "
+                "(supported keys: "
+                + ", ".join(self._ACTION_TYPE_UPDATE_PATCH_KEYS)
+                + ")"
+            )
+        unknown = sorted(set(patch) - set(self._ACTION_TYPE_UPDATE_PATCH_KEYS))
+        if unknown:
+            raise FoundryApiError(
+                "unsupported action type patch keys: "
+                + ", ".join(unknown)
+                + "; supported keys: "
+                + ", ".join(self._ACTION_TYPE_UPDATE_PATCH_KEYS)
+            )
+
+        if action_type.startswith("ri."):
+            rid = action_type
+        else:
+            metadata = self.get_action_type(ontology_rid, action_type, branch=branch)
+            resolved = metadata.get("rid")
+            if not isinstance(resolved, str) or not resolved:
+                raise RuntimeError(
+                    f"Could not resolve a RID for action type {action_type}; "
+                    "the update path requires the action type RID"
+                )
+            rid = resolved
+
+        client = _internal_client(self)
+        loaded = self._load_action_type_state(client, rid=rid)
+        update, changed_fields = self._merge_action_type_update(loaded, patch)
+        api_name = (loaded["actionType"].get("metadata") or {}).get(
+            "apiName"
+        ) or action_type
+
+        modification_request: Dict[str, Any] = {"actionTypesToUpdate": {rid: update}}
+        if branch_rid is not None:
+            modification_request["ontologyBranchRid"] = branch_rid
+
+        plan: Dict[str, Any] = {
+            "operation": "action-type-update",
+            "apiName": api_name,
+            "rid": rid,
+            "ontologyRid": ontology_rid,
+            "changedFields": changed_fields,
+            "update": update,
+        }
+        if branch is not None:
+            plan["branch"] = branch
+        if branch_rid is not None:
+            plan["ontologyBranchRid"] = branch_rid
+
+        validation_errors, terminal_names, raw_errors = _run_dry_run_full(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="action type update dry-run",
+            entity="action type",
+        )
+        _raise_on_branch_unsupported(terminal_names, raw_errors, branch_rid=branch_rid)
+        if validation_errors:
+            if apply:
+                raise RuntimeError(
+                    "Action type update dry-run validation failed: "
+                    + "; ".join(validation_errors)
+                )
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "error", "errors": validation_errors},
+            }
+        if not apply:
+            return {
+                **plan,
+                "mode": "dry-run",
+                "validation": {"status": "success", "errors": []},
+            }
+
+        _run_modify(
+            client,
+            ontology_rid,
+            modification_request,
+            operation="action type update modify",
+        )
+        result: Dict[str, Any] = {
+            **plan,
+            "mode": "applied",
+            "validation": {"status": "success", "errors": []},
+        }
+        try:
+            result["metadata"] = self.get_action_type(
+                ontology_rid, api_name, branch=branch
+            )
+            result["verification"] = {
+                "status": "verified",
+                "detail": ("read back via SDK ontologies ActionTypeFullMetadata.get"),
+            }
+        except Exception as e:
+            result["verification"] = {
+                "status": "not-verified",
+                "detail": (
+                    "read-back via SDK ontologies "
+                    f"ActionTypeFullMetadata.get failed: {e}"
+                ),
+            }
+        return result
+
+    @staticmethod
+    def _load_action_type_state(
+        client: Any,
+        *,
+        rid: str,
+    ) -> Mapping[str, Any]:
+        """Load an action type's internal definition via bulkLoadEntities.
+
+        Same verified endpoint as the object type state load. Returns the
+        full entry (``actionType.actionTypeLogic`` +
+        ``actionType.metadata``), which the update path translates into an
+        ``ActionTypeUpdate``. Missing entries fail loudly. The bulk-load
+        request takes ``ActionTypeLoadRequestV2`` entries (``{"rid": ...}``
+        directly — there is no identifier wrapper and no API-name variant),
+        so callers must resolve API names to RIDs before calling this.
+        """
+        status, parsed, raw = client.conjure(
+            "POST",
+            _BULK_LOAD_ENTITIES_ENDPOINT,
+            json_body={
+                "objectTypes": [],
+                "linkTypes": [],
+                "actionTypes": [{"rid": rid}],
+                "interfaceTypes": [],
+                "sharedPropertyTypes": [],
+                "typeGroups": [],
+                "datasourceTypes": [],
+            },
+            expected=200,
+        )
+        _require_successful_internal_response(
+            status, parsed, raw, operation="action type load"
+        )
+        if not isinstance(parsed, Mapping):
+            raise RuntimeError(
+                "action type load returned an invalid response shape: "
+                "expected a JSON object"
+            )
+        entries = parsed.get("actionTypes")
+        entry = entries[0] if isinstance(entries, list) and entries else None
+        if not isinstance(entry, Mapping) or not isinstance(
+            entry.get("actionType"), Mapping
+        ):
+            raise RuntimeError(
+                "Could not load the current state of action type "
+                f"{rid}: bulkLoadEntities returned no usable "
+                "entry. The update path requires the existing definition "
+                "and refuses to guess or recreate."
+            )
+        return entry
+
+    @classmethod
+    def _merge_action_type_update(
+        cls,
+        loaded: Mapping[str, Any],
+        patch: Mapping[str, Any],
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """Build an ActionTypeUpdate from loaded state plus the patch.
+
+        Loaded state (see artifacts/real-action-type-delete-contact.json)
+        is translated field-by-field: logic and action-type-level
+        validations are wholesale-replaced from the loaded values unless
+        the patch overrides them; parameter/validation deltas go into the
+        ``*ToCreate``/``*ToDelete``/``*ToUpdate`` maps (create keys are
+        UUID-normalized, delete/update keys are rids). Returns
+        ``(update, changed_fields)``.
+        """
+        action = loaded["actionType"]
+        logic_block = action.get("actionTypeLogic") or {}
+        metadata = action.get("metadata") or {}
+        api_name = metadata.get("apiName")
+        if not isinstance(api_name, str) or not api_name:
+            raise RuntimeError(
+                "loaded action type state has no apiName; the update path "
+                "cannot proceed without it"
+            )
+
+        changed_fields: List[str] = []
+
+        display_metadata = _strip_nulls(dict(metadata.get("displayMetadata") or {}))
+        if "displayMetadata" in patch:
+            dm_patch = patch["displayMetadata"]
+            if not isinstance(dm_patch, Mapping):
+                raise RuntimeError(
+                    "'displayMetadata' patch must be a JSON object; it is "
+                    "merged shallowly onto the loaded display metadata"
+                )
+            display_metadata.update(_strip_nulls(dict(dm_patch)))
+            changed_fields.append("displayMetadata")
+
+        logic = _strip_nulls(dict(logic_block.get("logic") or {"rules": []}))
+        logic = cls._normalize_loaded_logic_rules(logic)
+        if "logic" in patch:
+            logic = cls._normalize_action_type_logic_patch(patch["logic"])
+            changed_fields.append("logic")
+
+        loaded_parameters = metadata.get("parameters") or {}
+        parameter_ordering = list(metadata.get("parameterOrdering") or [])
+        form_content_ordering = [
+            dict(item)
+            for item in (metadata.get("formContentOrdering") or [])
+            if isinstance(item, Mapping)
+        ]
+        parameters_to_create: Dict[str, Any] = {}
+        parameters_to_delete: List[str] = []
+        if "parameters" in patch:
+            (
+                parameters_to_create,
+                parameters_to_delete,
+                parameter_ordering,
+                form_content_ordering,
+            ) = cls._apply_parameters_patch(
+                patch["parameters"],
+                loaded_parameters=loaded_parameters,
+                parameter_ordering=parameter_ordering,
+                form_content_ordering=form_content_ordering,
+            )
+            changed_fields.append("parameters")
+
+        at_level = (logic_block.get("validation") or {}).get(
+            "actionTypeLevelValidation"
+        ) or {}
+        loaded_rules = at_level.get("rules") or {}
+        validations_ordering: List[Any] = list(at_level.get("ordering") or [])
+        validations_to_create: Dict[str, Any] = {}
+        validations_to_delete: List[str] = []
+        validations_to_update: Dict[str, Any] = {}
+        if "validations" in patch:
+            (
+                validations_to_create,
+                validations_to_delete,
+                validations_to_update,
+                validations_ordering,
+            ) = cls._apply_validations_patch(
+                patch["validations"],
+                loaded_rules=loaded_rules,
+                ordering=validations_ordering,
+            )
+            changed_fields.append("validations")
+
+        status_mod: Optional[Dict[str, Any]] = None
+        if "status" in patch:
+            status_mod = _PROPERTY_STATUS_WIRE_TYPES.get(str(patch["status"]).upper())
+            if status_mod is None:
+                raise RuntimeError(
+                    "'status' patch must be ACTIVE, EXPERIMENTAL, or "
+                    "EXAMPLE (DEPRECATED requires deadline/message fields "
+                    "and is not supported)"
+                )
+            changed_fields.append("status")
+
+        write_authorization: Optional[Any] = None
+        if "writeAuthorization" in patch:
+            write_auth_patch = patch["writeAuthorization"]
+            if not isinstance(write_auth_patch, Mapping):
+                raise RuntimeError(
+                    "'writeAuthorization' patch must be a JSON object "
+                    "(AuthorizationModification)"
+                )
+            write_authorization = _strip_nulls(dict(write_auth_patch))
+            changed_fields.append("writeAuthorization")
+        elif at_level.get("writeAuthorization") is not None:
+            # Carry the loaded write authorization over so the update does
+            # not clear it.
+            write_authorization = _strip_nulls(dict(at_level["writeAuthorization"]))
+
+        update: Dict[str, Any] = {
+            "apiName": api_name,
+            "displayMetadata": display_metadata,
+            "logic": logic,
+            "notifications": list(logic_block.get("notifications") or []),
+            "parameterOrdering": parameter_ordering,
+            "formContentOrdering": form_content_ordering,
+            "parametersToCreate": parameters_to_create,
+            "parametersToDelete": parameters_to_delete,
+            "parametersToUpdate": {},
+            "sectionsToCreate": {},
+            "sectionsToDelete": [],
+            "sectionsToUpdate": {},
+            "typeGroups": list(
+                (metadata.get("entities") or {}).get("typeGroups") or []
+            ),
+            "validationsOrdering": [
+                cls._validation_rule_identifier(entry) for entry in validations_ordering
+            ],
+            "validationsToCreate": validations_to_create,
+            "validationsToDelete": validations_to_delete,
+            "validationsToUpdate": validations_to_update,
+        }
+        if status_mod is not None:
+            update["status"] = status_mod
+        if write_authorization is not None:
+            update["writeAuthorization"] = write_authorization
+        return _strip_nulls(update), changed_fields
+
+    @staticmethod
+    def _validation_rule_identifier(entry: Any) -> Any:
+        """Encode one validationsOrdering entry as a ValidationRuleIdentifier.
+
+        The wire union is ``{"type": "rid", "rid": ...}`` for persisted
+        rules and ``{"type": "validationRuleIdInRequest", ...}`` for rules
+        created in the same request; plain strings fail Conjure
+        deserialization with a 422.
+        """
+        if isinstance(entry, Mapping):
+            return dict(entry)
+        if isinstance(entry, str) and entry.startswith("ri."):
+            return {"type": "rid", "rid": entry}
+        return {"type": "validationRuleIdInRequest", "validationRuleIdInRequest": entry}
+
+    @staticmethod
+    def _normalize_loaded_logic_rules(logic: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate loaded rule fields into the modification shape.
+
+        Loaded rules carry ``logicRuleRid``; the modification types
+        reference rules by ``logicRuleIdentifier`` (union rid |
+        logicRuleIdInRequest), and the server leniently DROPS unknown
+        fields — an unmapped rid would silently lose the rule's identity
+        on update.
+        """
+        rules = logic.get("rules")
+        if not isinstance(rules, list):
+            return logic
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            variant = rule.get(rule.get("type", ""))
+            if isinstance(variant, dict) and isinstance(
+                variant.get("logicRuleRid"), str
+            ):
+                variant["logicRuleIdentifier"] = {
+                    "type": "rid",
+                    "rid": variant.pop("logicRuleRid"),
+                }
+        return logic
+
+    @staticmethod
+    def _normalize_action_type_logic_patch(logic_patch: Any) -> Dict[str, Any]:
+        """Validate a replacement ActionLogicModification document.
+
+        Rules pass through as given; function rules must carry their
+        function RID and version as given by the function registry, and
+        rule inputs may bind the protected current-user value as
+        ``{"type": "currentUser", "currentUser": {}}`` (vendor:
+        LogicRuleValueModification_currentUser).
+        """
+        if not isinstance(logic_patch, Mapping) or not isinstance(
+            logic_patch.get("rules"), list
+        ):
+            raise RuntimeError(
+                "'logic' patch requires a 'rules' list; it replaces the "
+                "loaded logic wholesale"
+            )
+        for rule in logic_patch["rules"]:
+            if not isinstance(rule, Mapping) or not isinstance(rule.get("type"), str):
+                raise RuntimeError(
+                    "each logic rule must be a Conjure union with a 'type' "
+                    "discriminator"
+                )
+            rule_type = rule["type"]
+            payload = rule.get(rule_type)
+            if not isinstance(payload, Mapping):
+                raise RuntimeError(
+                    f"logic rule {rule_type!r} is missing its "
+                    f"'{rule_type}' payload object"
+                )
+            if rule_type in ("functionRule", "batchedFunctionRule"):
+                if not payload.get("functionRid") or not payload.get("functionVersion"):
+                    raise RuntimeError(
+                        f"{rule_type} requires 'functionRid' and "
+                        "'functionVersion', passed as given by the "
+                        "function registry"
+                    )
+                for input_name, value in (
+                    payload.get("functionInputValues") or {}
+                ).items():
+                    if (
+                        isinstance(value, Mapping)
+                        and value.get("type") == "currentUser"
+                        and not isinstance(value.get("currentUser"), Mapping)
+                    ):
+                        raise RuntimeError(
+                            f"function input {input_name!r}: the protected "
+                            "current-user value must be "
+                            '{"type": "currentUser", "currentUser": {}}'
+                        )
+        return _strip_nulls(dict(logic_patch))
+
+    @staticmethod
+    def _apply_parameters_patch(
+        params_patch: Any,
+        *,
+        loaded_parameters: Mapping[str, Any],
+        parameter_ordering: List[str],
+        form_content_ordering: List[Dict[str, Any]],
+    ) -> Tuple[Dict[str, Any], List[str], List[str], List[Dict[str, Any]]]:
+        """Split a parameters patch into create/delete maps plus ordering.
+
+        ``add`` entries become ``parametersToCreate`` keyed by ParameterId
+        (PutParameterRequestModification shape); ``remove`` entries resolve
+        to ParameterRids in ``parametersToDelete``; ``ordering`` replaces
+        ``parameterOrdering`` and must name exactly the resulting
+        parameters.
+        """
+        if not isinstance(params_patch, Mapping):
+            raise RuntimeError(
+                "'parameters' patch must be a JSON object with 'add', "
+                "'remove', and/or 'ordering'"
+            )
+        unknown = sorted(set(params_patch) - {"add", "remove", "ordering"})
+        if unknown:
+            raise RuntimeError(
+                "unsupported 'parameters' patch keys: "
+                + ", ".join(unknown)
+                + "; supported: add, remove, ordering"
+            )
+        add = params_patch.get("add") or {}
+        remove = params_patch.get("remove") or []
+        ordering_patch = params_patch.get("ordering")
+        if not isinstance(add, Mapping) or not isinstance(remove, list):
+            raise RuntimeError(
+                "'parameters.add' must be an object and 'parameters.remove' "
+                "a list of ParameterIds"
+            )
+
+        to_create: Dict[str, Any] = {}
+        to_delete: List[str] = []
+        ordering = list(parameter_ordering)
+        form_ordering = list(form_content_ordering)
+
+        for parameter_id in remove:
+            parameter = loaded_parameters.get(parameter_id)
+            if not isinstance(parameter, Mapping) or not parameter.get("rid"):
+                raise RuntimeError(
+                    f"cannot delete parameter {parameter_id!r}: not present "
+                    "on the action type (known: "
+                    + ", ".join(sorted(str(k) for k in loaded_parameters))
+                    + ")"
+                )
+            to_delete.append(str(parameter["rid"]))
+            ordering = [p for p in ordering if p != parameter_id]
+            form_ordering = [
+                fc for fc in form_ordering if fc.get("parameterId") != parameter_id
+            ]
+
+        for parameter_id, spec in add.items():
+            if parameter_id in loaded_parameters and (parameter_id not in remove):
+                raise RuntimeError(
+                    f"parameter {parameter_id!r} already exists; remove it "
+                    "in the same patch to replace it"
+                )
+            if not isinstance(spec, Mapping) or not all(
+                key in spec for key in ("displayMetadata", "type", "validation")
+            ):
+                raise RuntimeError(
+                    f"'parameters.add[{parameter_id!r}]' must be a "
+                    "PutParameterRequestModification object with "
+                    "'displayMetadata', 'type', and 'validation' (see the "
+                    "action type create contract for the full shape)"
+                )
+            to_create[str(parameter_id)] = _strip_nulls(dict(spec))
+            if parameter_id not in ordering:
+                ordering.append(str(parameter_id))
+                form_ordering.append(
+                    {"type": "parameterId", "parameterId": str(parameter_id)}
+                )
+
+        if ordering_patch is not None:
+            if not isinstance(ordering_patch, list) or set(
+                map(str, ordering_patch)
+            ) != set(ordering):
+                raise RuntimeError(
+                    "'parameters.ordering' must contain exactly the "
+                    "resulting parameter ids: " + ", ".join(ordering)
+                )
+            ordering = [str(p) for p in ordering_patch]
+        return to_create, to_delete, ordering, form_ordering
+
+    @staticmethod
+    def _apply_validations_patch(
+        validations_patch: Any,
+        *,
+        loaded_rules: Mapping[str, Any],
+        ordering: List[Any],
+    ) -> Tuple[Dict[str, Any], List[str], Dict[str, Any], List[Any]]:
+        """Split a validations patch into create/delete/update + ordering.
+
+        ``add`` keys are UUID-normalized like action-type-upsert does for
+        ``validations``; ``remove``/``update`` are keyed by
+        ValidationRuleRid. The patch may not remove every action-type-level
+        validation: Foundry requires at least one.
+        """
+        if not isinstance(validations_patch, Mapping):
+            raise RuntimeError(
+                "'validations' patch must be a JSON object with 'add', "
+                "'remove', 'update', and/or 'ordering'"
+            )
+        unknown = sorted(
+            set(validations_patch) - {"add", "remove", "update", "ordering"}
+        )
+        if unknown:
+            raise RuntimeError(
+                "unsupported 'validations' patch keys: "
+                + ", ".join(unknown)
+                + "; supported: add, remove, update, ordering"
+            )
+        add = validations_patch.get("add") or {}
+        remove = validations_patch.get("remove") or []
+        update = validations_patch.get("update") or {}
+        ordering_patch = validations_patch.get("ordering")
+
+        to_create: Dict[str, Any] = {}
+        key_map: Dict[str, str] = {}
+        for key, value in add.items():
+            if not isinstance(value, Mapping) or (
+                "condition" not in value or "displayMetadata" not in value
+            ):
+                raise RuntimeError(
+                    f"'validations.add[{key!r}]' requires 'condition' and "
+                    "'displayMetadata' (ValidationRuleModification)"
+                )
+            new_key = str(key) if _is_uuid(key) else str(uuid.uuid4())
+            to_create[new_key] = _strip_nulls(dict(value))
+            key_map[str(key)] = new_key
+
+        to_delete: List[str] = []
+        for rule_rid in remove:
+            if rule_rid not in loaded_rules:
+                raise RuntimeError(
+                    f"cannot delete validation {rule_rid!r}: not present "
+                    "on the action type"
+                )
+            to_delete.append(str(rule_rid))
+
+        to_update: Dict[str, Any] = {}
+        for rule_rid, value in update.items():
+            if rule_rid not in loaded_rules:
+                raise RuntimeError(
+                    f"cannot update validation {rule_rid!r}: not present "
+                    "on the action type"
+                )
+            if not isinstance(value, Mapping):
+                raise RuntimeError(
+                    f"'validations.update[{rule_rid!r}]' must be a "
+                    "ValidationRuleModification object"
+                )
+            to_update[str(rule_rid)] = _strip_nulls(dict(value))
+
+        remaining = [rid for rid in ordering if rid not in to_delete]
+        remaining.extend(key for key in to_create if key not in remaining)
+        if ordering_patch is not None:
+            if not isinstance(ordering_patch, list):
+                raise RuntimeError("'validations.ordering' must be a list")
+            remaining = [key_map.get(str(item), item) for item in ordering_patch]
+        if not remaining:
+            raise RuntimeError(
+                "the patch removes every action-type-level validation; "
+                "Foundry requires at least one (see the create contract)"
+            )
+        return to_create, to_delete, to_update, remaining
+
+    def resolve_action_type(
+        self,
+        ontology_rid: str,
+        *,
+        api_name: Optional[str] = None,
+        rid: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Resolve an action type API name or RID to its identifiers.
+
+        Read-only: goes through the verified bulkLoadEntities endpoint and
+        returns the RID, API name, display name, and status.
+        """
+        if (api_name is None) == (rid is None):
+            raise RuntimeError("resolve requires exactly one of api_name or rid")
+        client = _internal_client(self)
+        if rid is None:
+            # The bulk-load ActionTypeIdentifier union supports only rid /
+            # actionTypeIdInRequest; resolve the API name to a RID first.
+            metadata_for_rid = self.get_action_type(ontology_rid, api_name or "")
+            resolved_rid = metadata_for_rid.get("rid")
+            if not isinstance(resolved_rid, str) or not resolved_rid:
+                raise FoundryApiError(
+                    f"Could not resolve action type API name '{api_name}' to a RID",
+                    error_name="OntologyMetadata:ActionTypeNotFound",
+                    safe_parameters={"actionTypeApiName": api_name},
+                )
+            rid = resolved_rid
+        entry = self._load_action_type_state(client, rid=rid)
+        metadata = entry["actionType"].get("metadata") or {}
+        display_metadata = metadata.get("displayMetadata") or {}
+        return {
+            "kind": "action-type",
+            "ontologyRid": ontology_rid,
+            "rid": metadata.get("rid"),
+            "apiName": metadata.get("apiName"),
+            "displayName": display_metadata.get("displayName"),
+            "status": _status_type_name(metadata.get("status")),
+        }
 
     def delete_action_type(
         self,

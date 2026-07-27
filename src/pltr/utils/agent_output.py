@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, is_dataclass
 from datetime import date, datetime
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, Dict, IO, Iterable, List, Mapping, Optional
 
@@ -20,6 +21,40 @@ SENSITIVE_KEY_PARTS = (
     "secret",
     "token",
 )
+
+# Credentials also hide inside otherwise-innocent string values: git remote
+# URLs, registry .npmrc lines, argv-style flags, Authorization headers echoed
+# into logs. Key-based redaction cannot catch those, so string values are
+# scrubbed with value patterns before they reach the model or logs.
+SENSITIVE_VALUE_PATTERNS = (
+    # URL userinfo: https://user:pass@host (git remotes, registry URLs)
+    (re.compile(r"(https?://)([^/\s:@]+):([^@\s]+)@"), r"\1\2:[REDACTED]@"),
+    # Bearer / Basic authorization headers embedded in text
+    (re.compile(r"(?i)(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}"), r"\1 [REDACTED]"),
+    # Registry auth lines: //registry/:_authToken=..., _auth=..., always-auth
+    (re.compile(r"(_authToken|_auth|_password)(\s*[=:]\s*)(\S+)"), r"\1\2[REDACTED]"),
+    # argv-style flags: --token abc, --api-key=abc, --client-secret abc
+    (
+        re.compile(
+            r"(?i)(--(?:[\w-]*(?:token|secret|password|api[-_]?key|credential)[\w-]*))"
+            r"(\s+|=)(\S+)"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+    # KEY=value environment dumps for credential-looking keys
+    (
+        re.compile(
+            r"(?im)^([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API[-_]?KEY|CREDENTIAL)[A-Z0-9_]*)(\s*=\s*)(\S+)"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+)
+
+
+def _redact_string(value: str) -> str:
+    for pattern, replacement in SENSITIVE_VALUE_PATTERNS:
+        value = pattern.sub(replacement, value)
+    return value
 
 
 @dataclass(frozen=True)
@@ -109,8 +144,10 @@ def redact_value(value: Any, key: Optional[str] = None) -> Any:
     """Convert a value to JSON data while redacting credential-like fields."""
     if key and _is_sensitive_key(key):
         return "[REDACTED]"
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, (bool, int, float)):
         return value
+    if isinstance(value, str):
+        return _redact_string(value)
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, Path):
@@ -245,6 +282,24 @@ def buffer_agent_payload(
 def buffer_agent_message(message: str, *, level: str = "info") -> None:
     """Record a status message for the single envelope."""
     _buffer.messages.append({"level": level, "message": message})
+
+
+def buffer_agent_exception(exc: BaseException, *, context: str = "") -> None:
+    """Record one failure as a typed error entry in the single envelope.
+
+    ``FoundryApiError`` entries keep Foundry's errorName/errorCode/
+    errorInstanceId/safeParameters/validationDetails; anything else degrades
+    to a message-only entry. Commands should call this before exiting nonzero
+    so agents get actionable errors instead of an unstructured blob.
+    """
+    from ..services.errors import FoundryApiError
+
+    if isinstance(exc, FoundryApiError):
+        entry = exc.error_entry()
+    else:
+        message = f"{context}: {exc}" if context else str(exc)
+        entry = {"type": "error", "message": message}
+    buffer_agent_payload(None, errors=[entry])
 
 
 def agent_output_pending() -> bool:

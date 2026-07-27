@@ -151,7 +151,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 1
-        assert "Failed to get query" in result.stdout
+        assert "Failed to get query" in result.stderr
 
     # ===== Query Get-By-RID Tests =====
 
@@ -202,7 +202,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 1
-        assert "Failed to get query" in result.stdout
+        assert "Failed to get query" in result.stderr
 
     # ===== Query Execute Tests =====
 
@@ -344,7 +344,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 1
-        assert "Invalid JSON in parameters" in result.stdout
+        assert "Invalid JSON in parameters" in result.stderr
 
     def test_query_execute_file_not_found(self, runner, mock_service):
         """Test execute query with non-existent parameter file."""
@@ -364,7 +364,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 1
-        assert "Parameter file not found" in result.stdout
+        assert "Parameter file not found" in result.stderr
 
     def test_query_execute_permission_denied(self, runner, mock_service):
         """Test execute query with permission denied error."""
@@ -388,7 +388,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 1
-        assert "Failed to execute query" in result.stdout
+        assert "Failed to execute query" in result.stderr
 
     def test_query_execute_no_parameters(self, runner, mock_service):
         """Test execute query without parameters."""
@@ -522,7 +522,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 1
-        assert "Failed to get value type" in result.stdout
+        assert "Failed to get value type" in result.stderr
 
     def test_value_type_get_with_profile(self, runner, mock_service):
         """Test get value type with profile option."""
@@ -626,7 +626,7 @@ class TestFunctionsCommands:
 
         # Assert
         assert result.exit_code == 0
-        assert "saved to output.json" in result.stdout
+        assert "saved to output.json" in result.stderr
 
 
 class TestFunctionsSearchCommand:
@@ -702,7 +702,7 @@ class TestFunctionsSearchCommand:
         result = runner.invoke(app, ["functions", "search", "revenue"])
 
         assert result.exit_code == 1
-        assert "inconclusive" in result.stdout
+        assert "inconclusive" in result.stderr
 
     def test_search_error(self, runner, mock_service):
         """Test functions search error handling."""
@@ -713,4 +713,4 @@ class TestFunctionsSearchCommand:
         result = runner.invoke(app, ["functions", "search", "revenue"])
 
         assert result.exit_code == 1
-        assert "Failed to search functions" in result.stdout
+        assert "Failed to search functions" in result.stderr

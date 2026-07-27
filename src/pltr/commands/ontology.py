@@ -2,6 +2,7 @@
 Ontology commands for interacting with Foundry ontologies.
 """
 
+import click
 import json
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Optional
 import typer
 from rich.console import Console
 
+from ..services.functions import FunctionsService
 from ..services.ontology import (
     OntologyService,
     ObjectTypeService,
@@ -17,7 +19,7 @@ from ..services.ontology import (
     ActionService,
     QueryService,
 )
-from ..utils.agent_output import require_confirmation
+from ..utils.agent_output import buffer_agent_exception, require_confirmation
 from ..utils.formatting import OutputFormatter
 from ..utils.pagination import PaginationConfig
 from ..utils.progress import SpinnerProgressTracker
@@ -384,6 +386,116 @@ def _warn_on_unverified(result: dict) -> None:
         )
 
 
+@app.command("object-type-add-property")
+def add_property_to_object_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    object_type: str = typer.Option(
+        ..., "--object-type", help="Object type API name or RID"
+    ),
+    api_name: str = typer.Option(
+        ..., "--api-name", help="New property API name (camelCase)"
+    ),
+    property_type: str = typer.Option(
+        ...,
+        "--type",
+        help="Property base type",
+        click_type=click.Choice(
+            [
+                "STRING",
+                "INTEGER",
+                "LONG",
+                "DOUBLE",
+                "BOOLEAN",
+                "TIMESTAMP",
+                "DATE",
+            ]
+        ),
+    ),
+    display_name: Optional[str] = typer.Option(
+        None, "--display-name", help="Property display name (default: API name)"
+    ),
+    description: Optional[str] = typer.Option(
+        None, "--description", help="Property description"
+    ),
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        help="Property status",
+        click_type=click.Choice(["ACTIVE", "EXPERIMENTAL", "EXAMPLE"]),
+    ),
+    visibility: Optional[str] = typer.Option(
+        None,
+        "--visibility",
+        help="Property visibility (default: NORMAL)",
+        click_type=click.Choice(["NORMAL", "HIDDEN", "PROMINENT"]),
+    ),
+    backing_column: Optional[str] = typer.Option(
+        None,
+        "--backing-column",
+        help="Backing dataset column to map the property to",
+    ),
+    backing_dataset: Optional[str] = typer.Option(
+        None,
+        "--backing-dataset",
+        help="Backing dataset RID (required when the object type has "
+        "multiple dataset-backed datasources)",
+    ),
+    branch_rid: Optional[str] = typer.Option(
+        None,
+        "--branch-rid",
+        help="Ontology branch RID to target (omit for the default branch)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real modification (default: dry-run only)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Add a property to an existing object type via modifyOntology (dry-run unless --apply).
+
+    Resolves the object type (API name or RID) to its internal ObjectTypeId,
+    adds the property type, and — with --backing-column — maps it to a
+    backing dataset column in the same request. Object types using
+    interfaces or shared property types are refused. With --apply, the
+    created property RID and column mapping are read back for verification.
+    """
+    try:
+        result = ObjectTypeService(profile=profile).add_property_to_object_type(
+            ontology_rid=ontology_rid,
+            object_type=object_type,
+            api_name=api_name,
+            property_type=property_type,
+            display_name=display_name,
+            description=description,
+            status=status,
+            visibility=visibility,
+            backing_column=backing_column,
+            backing_dataset=backing_dataset,
+            branch_rid=branch_rid,
+            apply=apply,
+        )
+        formatter.format_dict(result, format=format, output=output)
+        _exit_on_validation_error(result)
+        _warn_on_unverified(result)
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        buffer_agent_exception(e, context="object-type-add-property")
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        buffer_agent_exception(e, context="object-type-add-property")
+        formatter.print_error(f"Failed to add property to object type: {e}")
+        raise typer.Exit(1) from e
+
+
 def _delete_preview(
     *,
     service_delete: Any,
@@ -688,6 +800,92 @@ def upsert_action_type(
         raise typer.Exit(1) from e
     except Exception as e:
         formatter.print_error(f"Failed to upsert action type: {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("action-type-update")
+def update_action_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    action_type: str = typer.Option(
+        ..., "--action-type", help="Action type API name or RID"
+    ),
+    definition: str = typer.Option(
+        ...,
+        "--definition",
+        help="Path to a JSON file with the partial patch document ('-' reads stdin)",
+    ),
+    branch: Optional[str] = typer.Option(
+        None,
+        "--branch",
+        "-b",
+        help="Foundry branch to read the definition back from",
+    ),
+    branch_rid: Optional[str] = typer.Option(
+        None,
+        "--branch-rid",
+        help="Ontology branch RID to target the modification at "
+        "(omit for the default branch)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real modification (default: dry-run only)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Update an existing action type via modifyOntology (dry-run unless --apply).
+
+    The definition is a partial patch document; supported keys are
+    displayMetadata, logic, parameters, validations, writeAuthorization,
+    and status. The patch is merged onto the action type's loaded
+    definition and sent as actionTypesToUpdate (see
+    artifacts/ontology-modify-contract.md section 4). Creates stay with
+    action-type-upsert.
+
+    Logic patches replace the loaded rules wholesale; a functionRule must
+    carry functionRid and functionVersion as given by the function
+    registry. Rule inputs can bind the current user with
+    {"type": "currentUser", "currentUser": {}}. Parameter patches take
+    add/remove/ordering; validation patches take add/remove/update/
+    ordering.
+    """
+    try:
+        if definition == "-":
+            raw_definition = sys.stdin.read()
+        else:
+            raw_definition = Path(definition).read_text()
+        try:
+            parsed_definition = json.loads(raw_definition)
+        except json.JSONDecodeError as e:
+            formatter.print_error(f"Invalid JSON in action type patch: {e}")
+            raise typer.Exit(1) from e
+
+        result = ActionService(profile=profile).update_action_type(
+            ontology_rid=ontology_rid,
+            action_type=action_type,
+            patch=parsed_definition,
+            branch=branch,
+            branch_rid=branch_rid,
+            apply=apply,
+        )
+        formatter.format_dict(result, format=format, output=output)
+        _exit_on_validation_error(result)
+        _warn_on_unverified(result)
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        buffer_agent_exception(e, context="action-type-update")
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        buffer_agent_exception(e, context="action-type-update")
+        formatter.print_error(f"Failed to update action type: {e}")
         raise typer.Exit(1) from e
 
 
@@ -1306,3 +1504,90 @@ def execute_query(
     except Exception as e:
         formatter.print_error(f"Failed to execute query: {e}")
         raise typer.Exit(1)
+
+
+@app.command("resolve")
+def resolve_entity(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    kind: str = typer.Option(
+        ...,
+        "--kind",
+        help="Entity kind to resolve",
+        click_type=click.Choice(["object-type", "property", "action-type", "function"]),
+    ),
+    api_name: Optional[str] = typer.Option(
+        None, "--api-name", help="Entity API name (exactly one of --api-name/--rid)"
+    ),
+    rid: Optional[str] = typer.Option(
+        None, "--rid", help="Entity RID (exactly one of --api-name/--rid)"
+    ),
+    object_type: Optional[str] = typer.Option(
+        None,
+        "--object-type",
+        help="Object type API name or RID (required for --kind property)",
+    ),
+    version: Optional[str] = typer.Option(
+        None,
+        "--version",
+        help="Function version (recorded but not resolved; the search "
+        "gateway exposes no per-version RIDs)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Resolve a typed identifier to its RID and internal ID (read-only).
+
+    object-type and action-type return the RID plus display name and
+    status; object-type also returns the internal ObjectTypeId (for
+    example 'ns0abcde.cohort'). property requires --object-type plus
+    --api-name and returns the property RID and internal PropertyTypeId.
+    function resolves an API name through the fail-safe search gateway;
+    unresolved lookups report status "inconclusive" rather than empty.
+    """
+    try:
+        if (api_name is None) == (rid is None):
+            formatter.print_error("resolve requires exactly one of --api-name or --rid")
+            raise typer.Exit(1)
+
+        if kind == "object-type":
+            result = ObjectTypeService(profile=profile).resolve_object_type(
+                ontology_rid, api_name=api_name, rid=rid
+            )
+        elif kind == "property":
+            if api_name is None or object_type is None:
+                formatter.print_error(
+                    "--kind property requires --api-name and --object-type"
+                )
+                raise typer.Exit(1)
+            result = ObjectTypeService(profile=profile).resolve_property(
+                ontology_rid, object_type=object_type, api_name=api_name
+            )
+        elif kind == "action-type":
+            result = ActionService(profile=profile).resolve_action_type(
+                ontology_rid, api_name=api_name, rid=rid
+            )
+        else:
+            result = FunctionsService(profile=profile).resolve_function(
+                api_name=api_name, rid=rid, version=version
+            )
+
+        formatter.format_dict(result, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Resolution saved to {output}")
+
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        buffer_agent_exception(e, context="resolve")
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        buffer_agent_exception(e, context="resolve")
+        formatter.print_error(f"Failed to resolve {kind}: {e}")
+        raise typer.Exit(1) from e

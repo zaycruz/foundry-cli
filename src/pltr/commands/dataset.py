@@ -3,12 +3,13 @@ Simplified dataset commands that work with foundry-platform-sdk v1.27.0.
 """
 
 import typer
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from rich.console import Console
 
 from ..services.dataset import DatasetService
 from ..utils.agent_output import (
     agent_mode_enabled,
+    buffer_agent_exception,
     buffer_agent_payload,
     render_agent_json,
     require_confirmation,
@@ -326,8 +327,23 @@ def set_schema(
     transaction_rid: Optional[str] = typer.Option(
         None, "--transaction-rid", help="Transaction RID to use"
     ),
+    expected_schema_version: Optional[str] = typer.Option(
+        None,
+        "--expected-schema-version",
+        help="Fail if the current schema version differs (optimistic concurrency)",
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
     ),
 ):
     """Set or update the schema of a dataset."""
@@ -406,16 +422,20 @@ def set_schema(
         with SpinnerProgressTracker().track_spinner(
             f"Setting schema on dataset {dataset_rid}..."
         ):
-            service.put_schema(
+            result = service.put_schema(
                 dataset_rid=dataset_rid,
                 schema=schema,
                 branch=branch,
                 transaction_rid=transaction_rid,
+                expected_schema_version=expected_schema_version,
             )
 
         formatter.print_success(f"Successfully set schema on dataset {dataset_rid}")
         if transaction_rid:
             formatter.print_info(f"Transaction RID: {transaction_rid}")
+        formatter.format_output(
+            {k: v for k, v in result.items() if k != "schema"}, format, output
+        )
 
     except (ProfileNotFoundError, MissingCredentialsError) as e:
         formatter.print_error(f"Authentication error: {e}")
@@ -424,7 +444,155 @@ def set_schema(
         formatter.print_error(f"File not found: {e}")
         raise typer.Exit(1)
     except Exception as e:
+        buffer_agent_exception(e)
         formatter.print_error(f"Failed to set schema: {e}")
+        raise typer.Exit(1)
+
+
+def _parse_field_specs(
+    add_field: Optional[List[str]], fields_json: Optional[str]
+) -> List[Dict[str, Any]]:
+    """Parse --add-field/--fields-json into field spec dicts.
+
+    --add-field entries are name:type[:nullable[:default]], e.g.
+    ``capacity:INTEGER`` or ``revision:INTEGER:false:0``. A default is kept in
+    the field's custom metadata because DatasetFieldSchema has no default slot.
+    """
+    specs: List[Dict[str, Any]] = []
+    for entry in add_field or []:
+        parts = entry.split(":")
+        if not 2 <= len(parts) <= 4:
+            raise typer.BadParameter(
+                f"Invalid --add-field '{entry}'; expected name:type[:nullable[:default]]"
+            )
+        name, field_type = parts[0].strip(), parts[1].strip().upper()
+        if not name or not field_type:
+            raise typer.BadParameter(
+                f"Invalid --add-field '{entry}'; name and type are required"
+            )
+        nullable = True
+        if len(parts) >= 3:
+            raw_nullable = parts[2].strip().lower()
+            if raw_nullable not in ("true", "false"):
+                raise typer.BadParameter(
+                    f"Invalid --add-field '{entry}'; nullable must be true or false"
+                )
+            nullable = raw_nullable == "true"
+        specs.append(
+            {
+                "name": name,
+                "type": field_type,
+                "nullable": nullable,
+                "default": parts[3] if len(parts) == 4 else None,
+            }
+        )
+    if fields_json:
+        import json
+
+        try:
+            parsed = json.loads(fields_json)
+        except json.JSONDecodeError as e:
+            raise typer.BadParameter(f"Invalid --fields-json: {e}")
+        if not isinstance(parsed, list):
+            raise typer.BadParameter("--fields-json must be a JSON array of fields")
+        for item in parsed:
+            if (
+                not isinstance(item, dict)
+                or not item.get("name")
+                or not item.get("type")
+            ):
+                raise typer.BadParameter(
+                    "--fields-json entries must be objects with name and type"
+                )
+            specs.append(
+                {
+                    "name": str(item["name"]),
+                    "type": str(item["type"]).upper(),
+                    "nullable": bool(item.get("nullable", True)),
+                    "default": item.get("default"),
+                }
+            )
+    if not specs:
+        raise typer.BadParameter(
+            "Provide at least one field via --add-field or --fields-json"
+        )
+    return specs
+
+
+@schema_app.command("update")
+def update_schema(
+    dataset_rid: str = typer.Argument(
+        ..., help="Dataset Resource Identifier", autocompletion=complete_rid
+    ),
+    add_field: Optional[List[str]] = typer.Option(
+        None,
+        "--add-field",
+        help="Field to add as name:type[:nullable[:default]] (repeatable)",
+    ),
+    fields_json: Optional[str] = typer.Option(
+        None,
+        "--fields-json",
+        help='JSON array of {"name", "type", "nullable", "default"} field objects',
+    ),
+    branch: str = typer.Option("master", "--branch", help="Dataset branch"),
+    expected_schema_version: Optional[str] = typer.Option(
+        None,
+        "--expected-schema-version",
+        help="Fail if the current schema version differs (optimistic concurrency)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply/--no-apply",
+        help="Write the merged schema (default: dry-run diff only)",
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Add fields to a dataset schema (additive migration, dry-run by default)."""
+    fields = _parse_field_specs(add_field, fields_json)
+    try:
+        cache_rid(dataset_rid)
+        service = DatasetService(profile=profile)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"{'Applying' if apply else 'Computing'} schema update for {dataset_rid}..."
+        ):
+            result = service.update_schema(
+                dataset_rid,
+                fields,
+                branch=branch,
+                expected_schema_version=expected_schema_version,
+                apply=apply,
+            )
+
+        formatter.format_dict(result, format, output)
+
+        if apply:
+            formatter.print_success(
+                f"Schema updated on dataset {dataset_rid} (branch '{branch}')"
+            )
+        else:
+            formatter.print_info("Dry-run only; pass --apply to write the schema")
+        if output:
+            formatter.print_success(f"Schema update result saved to {output}")
+
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        buffer_agent_exception(e)
+        formatter.print_error(f"Failed to update schema: {e}")
         raise typer.Exit(1)
 
 

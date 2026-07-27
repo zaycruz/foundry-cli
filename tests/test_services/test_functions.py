@@ -459,3 +459,78 @@ class TestFunctionsServiceSearch:
 
         with pytest.raises(RuntimeError, match="Failed to search functions"):
             service.search_functions("revenue")
+
+
+class TestResolveFunction:
+    """Function apiName -> RID resolution (fail-safe like search)."""
+
+    @pytest.fixture
+    def service(self):
+        with patch("pltr.services.base.AuthManager"):
+            return FunctionsService()
+
+    def test_resolve_function_exact_match(self, service):
+        search_result = {
+            "status": "ok",
+            "reason": None,
+            "limit": 25,
+            "results": [
+                {
+                    "name": "myFunc",
+                    "rid": "ri.function-registry.main.function.abc",
+                    "type": "Function",
+                },
+                {"name": "myFuncV2", "rid": None, "type": "Function"},
+            ],
+        }
+        with patch("pltr.services.functions.SearchService") as mock_search:
+            mock_search.return_value.search.return_value = search_result
+            result = service.resolve_function(api_name="myFunc")
+
+        assert result["status"] == "ok"
+        assert result["rid"] == "ri.function-registry.main.function.abc"
+        assert result["apiName"] == "myFunc"
+
+    def test_resolve_function_no_match_is_inconclusive(self, service):
+        with patch("pltr.services.functions.SearchService") as mock_search:
+            mock_search.return_value.search.return_value = {
+                "status": "ok",
+                "reason": None,
+                "limit": 25,
+                "results": [],
+            }
+            result = service.resolve_function(api_name="missing")
+
+        assert result["status"] == "inconclusive"
+        assert "no function titled" in result["reason"]
+        assert "rid" not in result
+
+    def test_resolve_function_search_failure_passthrough(self, service):
+        with patch("pltr.services.functions.SearchService") as mock_search:
+            mock_search.return_value.search.return_value = {
+                "status": "inconclusive",
+                "reason": "graphql-error",
+                "results": None,
+            }
+            result = service.resolve_function(api_name="myFunc")
+
+        assert result["status"] == "inconclusive"
+        assert result["reason"] == "graphql-error"
+
+    def test_resolve_function_rid_passthrough(self, service):
+        result = service.resolve_function(
+            rid="ri.function-registry.main.function.abc", version="1.0.0"
+        )
+
+        assert result["status"] == "ok"
+        assert result["rid"] == "ri.function-registry.main.function.abc"
+        assert result["version"] == "1.0.0"
+        assert result["source"] == "argument"
+
+    def test_resolve_function_requires_exactly_one_identifier(self, service):
+        with pytest.raises(RuntimeError, match="exactly one"):
+            service.resolve_function()
+        with pytest.raises(RuntimeError, match="exactly one"):
+            service.resolve_function(
+                api_name="myFunc", rid="ri.function-registry.main.function.abc"
+            )

@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from io import StringIO
 
 from pltr.commands.dataset import app
+from pltr.services.errors import FoundryApiError
 from pltr.utils.agent_output import flush_agent_output
 from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
 
@@ -151,7 +152,7 @@ def test_get_dataset_profile_not_found(mock_dataset_service):
     result = runner.invoke(app, ["get", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 1
-    assert "Profile not found" in result.stdout
+    assert "Profile not found" in result.stderr
 
 
 def test_get_dataset_missing_credentials(mock_dataset_service):
@@ -163,7 +164,7 @@ def test_get_dataset_missing_credentials(mock_dataset_service):
     result = runner.invoke(app, ["get", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 1
-    assert "Missing token" in result.stdout
+    assert "Missing token" in result.stderr
 
 
 def test_get_dataset_error(mock_dataset_service):
@@ -173,7 +174,7 @@ def test_get_dataset_error(mock_dataset_service):
     result = runner.invoke(app, ["get", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 1
-    assert "Failed to get dataset" in result.stdout
+    assert "Failed to get dataset" in result.stderr
 
 
 # Tests for 'create' command
@@ -186,7 +187,7 @@ def test_create_dataset_success(mock_dataset_service, sample_dataset):
     )
 
     assert result.exit_code == 0
-    assert "Successfully created dataset" in result.stdout
+    assert "Successfully created dataset" in result.stderr
     mock_dataset_service.create_dataset.assert_called_once_with(
         name="New Dataset", parent_folder_rid="ri.compass.main.folder.test"
     )
@@ -256,7 +257,7 @@ def test_create_dataset_profile_not_found(mock_dataset_service):
     )
 
     assert result.exit_code == 1
-    assert "Profile not found" in result.stdout
+    assert "Profile not found" in result.stderr
 
 
 def test_create_dataset_missing_credentials(mock_dataset_service):
@@ -270,7 +271,7 @@ def test_create_dataset_missing_credentials(mock_dataset_service):
     )
 
     assert result.exit_code == 1
-    assert "Missing token" in result.stdout
+    assert "Missing token" in result.stderr
 
 
 def test_create_dataset_error(mock_dataset_service):
@@ -282,7 +283,7 @@ def test_create_dataset_error(mock_dataset_service):
     )
 
     assert result.exit_code == 1
-    assert "Failed to create dataset" in result.stdout
+    assert "Failed to create dataset" in result.stderr
 
 
 # Tests for 'preview' command
@@ -379,7 +380,7 @@ def test_preview_dataset_with_output_file(mock_dataset_service, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert "Preview saved to" in result.stdout
+    assert "Preview saved to" in result.stderr
 
 
 def test_preview_dataset_empty(mock_dataset_service):
@@ -389,7 +390,7 @@ def test_preview_dataset_empty(mock_dataset_service):
     result = runner.invoke(app, ["preview", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 0
-    assert "Dataset is empty" in result.stdout
+    assert "Dataset is empty" in result.stderr
 
 
 def test_preview_dataset_with_profile(mock_dataset_service):
@@ -414,7 +415,7 @@ def test_preview_dataset_profile_not_found(mock_dataset_service):
     result = runner.invoke(app, ["preview", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 1
-    assert "Profile not found" in result.stdout
+    assert "Profile not found" in result.stderr
 
 
 def test_preview_dataset_missing_credentials(mock_dataset_service):
@@ -426,7 +427,7 @@ def test_preview_dataset_missing_credentials(mock_dataset_service):
     result = runner.invoke(app, ["preview", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 1
-    assert "Missing token" in result.stdout
+    assert "Missing token" in result.stderr
 
 
 def test_preview_dataset_error(mock_dataset_service):
@@ -436,7 +437,7 @@ def test_preview_dataset_error(mock_dataset_service):
     result = runner.invoke(app, ["preview", "ri.foundry.main.dataset.test"])
 
     assert result.exit_code == 1
-    assert "Failed to preview dataset" in result.stdout
+    assert "Failed to preview dataset" in result.stderr
 
 
 def test_schedule_list_passes_public_dictionary_contract_to_formatter(
@@ -509,3 +510,157 @@ def test_list_transactions_rejects_removed_branch_option(mock_dataset_service):
     assert "No such option: --branch" in compact_stderr
     assert "No such option: --branch" in _plain(result.stderr)
     mock_dataset_service.get_transactions.assert_not_called()
+
+
+# Tests for 'schema update' command
+def test_schema_update_dry_run_does_not_apply(mock_dataset_service):
+    mock_dataset_service.update_schema.return_value = {
+        "dataset_rid": "ri.foundry.main.dataset.test",
+        "status": "dry-run",
+        "current_version_id": "version-1",
+        "fields_added": [
+            {"name": "capacity", "type": "INTEGER", "nullable": True, "default": None}
+        ],
+        "schema": {"fields": [{"name": "id"}, {"name": "capacity"}]},
+    }
+
+    result = runner.invoke(
+        app,
+        [
+            "schema",
+            "update",
+            "ri.foundry.main.dataset.test",
+            "--add-field",
+            "capacity:INTEGER",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_dataset_service.update_schema.assert_called_once_with(
+        "ri.foundry.main.dataset.test",
+        [{"name": "capacity", "type": "INTEGER", "nullable": True, "default": None}],
+        branch="master",
+        expected_schema_version=None,
+        apply=False,
+    )
+
+
+def test_schema_update_parses_nullable_and_default(mock_dataset_service):
+    mock_dataset_service.update_schema.return_value = {"status": "dry-run"}
+
+    result = runner.invoke(
+        app,
+        [
+            "schema",
+            "update",
+            "ri.foundry.main.dataset.test",
+            "--add-field",
+            "revision:INTEGER:false:0",
+        ],
+    )
+
+    assert result.exit_code == 0
+    fields = mock_dataset_service.update_schema.call_args.args[1]
+    assert fields == [
+        {"name": "revision", "type": "INTEGER", "nullable": False, "default": "0"}
+    ]
+
+
+def test_schema_update_apply_path(mock_dataset_service):
+    mock_dataset_service.update_schema.return_value = {
+        "status": "applied",
+        "version_id": "version-2",
+    }
+
+    result = runner.invoke(
+        app,
+        [
+            "schema",
+            "update",
+            "ri.foundry.main.dataset.test",
+            "--fields-json",
+            '[{"name": "capacity", "type": "integer"}]',
+            "--branch",
+            "development",
+            "--expected-schema-version",
+            "version-1",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_dataset_service.update_schema.assert_called_once_with(
+        "ri.foundry.main.dataset.test",
+        [{"name": "capacity", "type": "INTEGER", "nullable": True, "default": None}],
+        branch="development",
+        expected_schema_version="version-1",
+        apply=True,
+    )
+
+
+def test_schema_update_requires_fields(mock_dataset_service):
+    result = runner.invoke(app, ["schema", "update", "ri.foundry.main.dataset.test"])
+
+    assert result.exit_code == 2
+    assert "--add-field or --fields-json" in _plain(result.stderr)
+    mock_dataset_service.update_schema.assert_not_called()
+
+
+def test_schema_update_rejects_malformed_add_field(mock_dataset_service):
+    result = runner.invoke(
+        app,
+        ["schema", "update", "ri.foundry.main.dataset.test", "--add-field", "capacity"],
+    )
+
+    assert result.exit_code == 2
+    mock_dataset_service.update_schema.assert_not_called()
+
+
+def test_schema_update_service_failure_exits_nonzero(mock_dataset_service):
+    mock_dataset_service.update_schema.side_effect = FoundryApiError(
+        "schema conflict",
+        error_name="Datasets:SchemaVersionConflict",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "schema",
+            "update",
+            "ri.foundry.main.dataset.test",
+            "--add-field",
+            "capacity:INTEGER",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Failed to update schema" in _plain(result.stderr)
+
+
+def test_schema_set_passes_expected_version_and_formats_output(mock_dataset_service):
+    mock_dataset_service.put_schema.return_value = {
+        "dataset_rid": "ri.foundry.main.dataset.test",
+        "branch": "master",
+        "status": "Schema updated successfully",
+    }
+
+    result = runner.invoke(
+        app,
+        [
+            "schema",
+            "set",
+            "ri.foundry.main.dataset.test",
+            "--json",
+            '{"fields": [{"name": "id", "type": "INTEGER"}]}',
+            "--expected-schema-version",
+            "version-1",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_dataset_service.put_schema.call_args.kwargs
+    assert call_kwargs["dataset_rid"] == "ri.foundry.main.dataset.test"
+    assert call_kwargs["expected_schema_version"] == "version-1"
+    assert '"status": "Schema updated successfully"' in result.stdout

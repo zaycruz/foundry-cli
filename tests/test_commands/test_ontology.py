@@ -1003,7 +1003,7 @@ def test_get_action_type_command_not_found(mock_services):
     )
 
     assert result.exit_code == 1
-    assert "Failed to get action type" in result.stdout
+    assert "Failed to get action type" in result.stderr
 
 
 # Delete/upsert authoring commands (modifyOntology-backed)
@@ -1328,3 +1328,383 @@ def test_upsert_help_texts_reference_publication_order():
         assert result.exit_code == 0
         assert "publication" in result.output
         assert step in result.output
+
+
+# object-type-add-property command tests
+def test_object_type_add_property_dry_run_default(mock_services):
+    """object-type-add-property dry-runs by default and passes options through."""
+    mock_instance = Mock()
+    mock_instance.add_property_to_object_type.return_value = _dry_run_plan(
+        "object-type-add-property"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-add-property",
+            "ri.ontology.main.ontology.test",
+            "--object-type",
+            "ExampleObject",
+            "--api-name",
+            "tailNumber",
+            "--type",
+            "STRING",
+            "--backing-column",
+            "tail_number",
+            "--branch-rid",
+            "ri.ontology.main.branch.feature",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.add_property_to_object_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        object_type="ExampleObject",
+        api_name="tailNumber",
+        property_type="STRING",
+        display_name=None,
+        description=None,
+        status=None,
+        visibility=None,
+        backing_column="tail_number",
+        backing_dataset=None,
+        branch_rid="ri.ontology.main.branch.feature",
+        apply=False,
+    )
+
+
+def test_object_type_add_property_apply_flag(mock_services):
+    """--apply propagates to the service call."""
+    mock_instance = Mock()
+    mock_instance.add_property_to_object_type.return_value = _applied_result(
+        "object-type-add-property"
+    )
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-add-property",
+            "ri.ontology.main.ontology.test",
+            "--object-type",
+            "ExampleObject",
+            "--api-name",
+            "tailNumber",
+            "--type",
+            "INTEGER",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert mock_instance.add_property_to_object_type.call_args.kwargs["apply"] is True
+
+
+def test_object_type_add_property_rejects_bad_type(mock_services):
+    """The --type choice is enforced before any service call."""
+    mock_services["object_type"].return_value = Mock()
+
+    result = runner.invoke(
+        app,
+        [
+            "object-type-add-property",
+            "ri.ontology.main.ontology.test",
+            "--object-type",
+            "ExampleObject",
+            "--api-name",
+            "tailNumber",
+            "--type",
+            "FLOAT",
+        ],
+    )
+
+    assert result.exit_code != 0
+
+
+# action-type-update command tests
+def test_action_type_update_command(mock_services, tmp_path):
+    """action-type-update reads the JSON patch and dry-runs by default."""
+    patch_file = tmp_path / "patch.json"
+    patch_file.write_text(json.dumps({"status": "ACTIVE"}))
+    mock_instance = Mock()
+    mock_instance.update_action_type.return_value = _dry_run_plan("action-type-update")
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-update",
+            "ri.ontology.main.ontology.test",
+            "--action-type",
+            "delete-contact",
+            "--definition",
+            str(patch_file),
+            "--branch",
+            "feature-branch",
+            "--branch-rid",
+            "ri.ontology.main.branch.feature",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.update_action_type.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        action_type="delete-contact",
+        patch={"status": "ACTIVE"},
+        branch="feature-branch",
+        branch_rid="ri.ontology.main.branch.feature",
+        apply=False,
+    )
+
+
+def test_action_type_update_definition_from_stdin(mock_services):
+    """'-' reads the patch document from stdin."""
+    mock_instance = Mock()
+    mock_instance.update_action_type.return_value = _dry_run_plan("action-type-update")
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-update",
+            "ri.ontology.main.ontology.test",
+            "--action-type",
+            "delete-contact",
+            "--definition",
+            "-",
+            "--apply",
+        ],
+        input=json.dumps({"displayMetadata": {"description": "new"}}),
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_instance.update_action_type.call_args.kwargs
+    assert call_kwargs["patch"] == {"displayMetadata": {"description": "new"}}
+    assert call_kwargs["apply"] is True
+    assert call_kwargs["branch"] is None
+    assert call_kwargs["branch_rid"] is None
+
+
+def test_action_type_update_invalid_json(mock_services, tmp_path):
+    """A malformed patch file fails before any service call."""
+    patch_file = tmp_path / "patch.json"
+    patch_file.write_text("{not json")
+    mock_services["action"].return_value = Mock()
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-update",
+            "ri.ontology.main.ontology.test",
+            "--action-type",
+            "delete-contact",
+            "--definition",
+            str(patch_file),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.output
+
+
+def test_action_type_update_surfaces_typed_errors(mock_services, tmp_path):
+    """Service failures print an error and exit non-zero."""
+    patch_file = tmp_path / "patch.json"
+    patch_file.write_text(json.dumps({"unknown": {}}))
+    mock_instance = Mock()
+    mock_instance.update_action_type.side_effect = RuntimeError(
+        "unsupported action type patch keys: unknown"
+    )
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "action-type-update",
+            "ri.ontology.main.ontology.test",
+            "--action-type",
+            "delete-contact",
+            "--definition",
+            str(patch_file),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "unsupported action type patch keys" in result.output
+
+
+# resolve command tests
+def test_resolve_requires_exactly_one_identifier(mock_services):
+    """resolve fails when neither or both of --api-name/--rid are given."""
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "ri.ontology.main.ontology.test",
+            "--kind",
+            "object-type",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "exactly one" in result.output
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "ri.ontology.main.ontology.test",
+            "--kind",
+            "object-type",
+            "--api-name",
+            "ExampleObject",
+            "--rid",
+            "ri.ontology.main.object-type.example-object",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "exactly one" in result.output
+
+
+def test_resolve_object_type_command(mock_services):
+    """object-type resolution delegates to ObjectTypeService."""
+    mock_instance = Mock()
+    mock_instance.resolve_object_type.return_value = {
+        "kind": "object-type",
+        "rid": "ri.ontology.main.object-type.example-object",
+        "id": "ns0abcde.example-object",
+        "apiName": "ExampleObject",
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "ri.ontology.main.ontology.test",
+            "--kind",
+            "object-type",
+            "--api-name",
+            "ExampleObject",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.resolve_object_type.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        api_name="ExampleObject",
+        rid=None,
+    )
+
+
+def test_resolve_property_requires_object_type(mock_services):
+    """--kind property without --object-type fails before the service call."""
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "ri.ontology.main.ontology.test",
+            "--kind",
+            "property",
+            "--api-name",
+            "msn",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--object-type" in result.output
+
+
+def test_resolve_property_command(mock_services):
+    """property resolution passes the object-type scope through."""
+    mock_instance = Mock()
+    mock_instance.resolve_property.return_value = {
+        "kind": "property",
+        "rid": "ri.ontology.main.property.msn",
+        "id": "msn",
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "ri.ontology.main.ontology.test",
+            "--kind",
+            "property",
+            "--object-type",
+            "ExampleObject",
+            "--api-name",
+            "msn",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.resolve_property.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        object_type="ExampleObject",
+        api_name="msn",
+    )
+
+
+def test_resolve_action_type_command(mock_services):
+    """action-type resolution delegates to ActionService."""
+    mock_instance = Mock()
+    mock_instance.resolve_action_type.return_value = {
+        "kind": "action-type",
+        "rid": "ri.actions.main.action-type.1234",
+        "apiName": "delete-contact",
+    }
+    mock_services["action"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "resolve",
+            "ri.ontology.main.ontology.test",
+            "--kind",
+            "action-type",
+            "--rid",
+            "ri.actions.main.action-type.1234",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.resolve_action_type.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        api_name=None,
+        rid="ri.actions.main.action-type.1234",
+    )
+
+
+def test_resolve_function_command(mock_services):
+    """function resolution delegates to FunctionsService."""
+    with patch("pltr.commands.ontology.FunctionsService") as mock_functions:
+        mock_instance = Mock()
+        mock_instance.resolve_function.return_value = {
+            "status": "ok",
+            "kind": "function",
+            "rid": "ri.function-registry.main.function.abc",
+            "apiName": "myFunc",
+            "version": "1.0.0",
+        }
+        mock_functions.return_value = mock_instance
+
+        result = runner.invoke(
+            app,
+            [
+                "resolve",
+                "ri.ontology.main.ontology.test",
+                "--kind",
+                "function",
+                "--api-name",
+                "myFunc",
+                "--version",
+                "1.0.0",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mock_instance.resolve_function.assert_called_once_with(
+        api_name="myFunc", rid=None, version="1.0.0"
+    )

@@ -15,6 +15,7 @@ from foundry_sdk.v2.datasets.models import (
 from ..config.settings import Settings
 from ..utils.pagination import PaginationConfig, PaginationResult
 from .base import BaseService
+from .errors import FoundryApiError, foundry_error_from_sdk
 
 
 class DatasetService(BaseService):
@@ -117,12 +118,47 @@ class DatasetService(BaseService):
         except Exception as e:
             raise RuntimeError(f"Failed to apply schema for dataset {dataset_rid}: {e}")
 
+    def _get_schema_response(self, dataset_rid: str, branch: str = "master") -> Any:
+        """Fetch the raw GetDatasetSchemaResponse (schema + version_id)."""
+        try:
+            return self.service.Dataset.get_schema(dataset_rid, branch_name=branch)
+        except Exception as e:
+            raise foundry_error_from_sdk(
+                e, context=f"Failed to get schema for dataset {dataset_rid}"
+            )
+
+    def _assert_schema_version(
+        self, dataset_rid: str, branch: str, expected_schema_version: str
+    ) -> Any:
+        """Return the current schema response or raise a typed conflict.
+
+        The SDK put_schema has no expected-version parameter, so optimistic
+        concurrency is enforced client-side against the version_id read here.
+        """
+        current = self._get_schema_response(dataset_rid, branch)
+        current_version = getattr(current, "version_id", None)
+        if current_version != expected_schema_version:
+            raise FoundryApiError(
+                f"Schema version conflict for dataset {dataset_rid} on branch "
+                f"'{branch}': expected {expected_schema_version}, "
+                f"current {current_version}",
+                error_name="Datasets:SchemaVersionConflict",
+                safe_parameters={
+                    "datasetRid": dataset_rid,
+                    "branchName": branch,
+                    "expectedSchemaVersion": expected_schema_version,
+                    "currentSchemaVersion": current_version,
+                },
+            )
+        return current
+
     def put_schema(
         self,
         dataset_rid: str,
         schema: Any,
         branch: str = "master",
         transaction_rid: Optional[str] = None,
+        expected_schema_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Set or update dataset schema.
@@ -132,10 +168,14 @@ class DatasetService(BaseService):
             schema: DatasetSchema object with field definitions
             branch: Dataset branch name
             transaction_rid: Optional transaction RID
+            expected_schema_version: Optional schema version_id that must match
+                the current version before writing (optimistic concurrency)
 
         Returns:
             Schema update result
         """
+        if expected_schema_version is not None:
+            self._assert_schema_version(dataset_rid, branch, expected_schema_version)
         try:
             from foundry_sdk.v2.core.models import DatasetSchema
 
@@ -159,6 +199,154 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(f"Failed to set schema for dataset {dataset_rid}: {e}")
+
+    @staticmethod
+    def _serialize_schema(schema: Any) -> Dict[str, Any]:
+        """Serialize a DatasetSchema into plain JSON-safe field dictionaries."""
+        fields = []
+        for field in getattr(schema, "field_schema_list", None) or []:
+            fields.append(
+                {
+                    "name": getattr(field, "name", None),
+                    "type": str(getattr(field, "type", None)),
+                    "nullable": bool(getattr(field, "nullable", True)),
+                    "default": (getattr(field, "custom_metadata", None) or {}).get(
+                        "default"
+                    ),
+                }
+            )
+        return {"fields": fields}
+
+    def update_schema(
+        self,
+        dataset_rid: str,
+        fields: List[Dict[str, Any]],
+        branch: str = "master",
+        expected_schema_version: Optional[str] = None,
+        apply: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Add fields to a dataset schema (additive migration).
+
+        Dry-run by default: computes the merged schema and returns a diff
+        without writing. With apply=True, writes the merged schema via
+        put_schema and reads it back for the authoritative result.
+
+        Args:
+            dataset_rid: Dataset Resource Identifier
+            fields: Field specs as {"name", "type", "nullable", "default"} dicts
+            branch: Dataset branch name
+            expected_schema_version: Optional schema version_id that must match
+                the current version before writing (optimistic concurrency)
+            apply: Write the merged schema when True; dry-run diff when False
+
+        Returns:
+            Diff (dry-run) or the read-back schema (applied)
+        """
+        from foundry_sdk.v2.core.models import DatasetFieldSchema, DatasetSchema
+
+        if not fields:
+            raise ValueError("At least one field must be provided")
+
+        if expected_schema_version is not None:
+            current = self._assert_schema_version(
+                dataset_rid, branch, expected_schema_version
+            )
+        else:
+            current = self._get_schema_response(dataset_rid, branch)
+        current_version = getattr(current, "version_id", None)
+        existing_fields = list(
+            getattr(getattr(current, "schema_", None), "field_schema_list", None) or []
+        )
+
+        existing_by_name = {
+            field.name: field
+            for field in existing_fields
+            if getattr(field, "name", None)
+        }
+        added: List[Dict[str, Any]] = []
+        unchanged: List[Dict[str, Any]] = []
+        merged_fields = list(existing_fields)
+        for field in fields:
+            name = str(field["name"])
+            field_type = str(field["type"]).upper()
+            nullable = bool(field.get("nullable", True))
+            default = field.get("default")
+            spec = {
+                "name": name,
+                "type": field_type,
+                "nullable": nullable,
+                "default": default,
+            }
+            existing = existing_by_name.get(name)
+            if existing is not None:
+                existing_default = (
+                    getattr(existing, "custom_metadata", None) or {}
+                ).get("default")
+                if (
+                    str(getattr(existing, "type", "")).upper() == field_type
+                    and bool(getattr(existing, "nullable", True)) == nullable
+                    and existing_default == default
+                ):
+                    unchanged.append(spec)
+                    continue
+                raise FoundryApiError(
+                    f"Field '{name}' already exists on dataset {dataset_rid} "
+                    "with a different shape; only additive schema migrations "
+                    "are supported",
+                    error_name="Datasets:NonAdditiveSchemaChange",
+                    safe_parameters={
+                        "datasetRid": dataset_rid,
+                        "branchName": branch,
+                        "fieldName": name,
+                        "existingType": str(getattr(existing, "type", None)),
+                        "requestedType": field_type,
+                    },
+                )
+            merged_fields.append(
+                DatasetFieldSchema(
+                    name=name,
+                    type=field_type,  # type: ignore[arg-type]
+                    nullable=nullable,
+                    custom_metadata={"default": default}
+                    if default is not None
+                    else None,
+                )
+            )
+            added.append(spec)
+
+        # model_construct keeps the server-returned field objects untouched;
+        # re-validating them through pydantic would drop nested type details.
+        merged_schema = DatasetSchema.model_construct(field_schema_list=merged_fields)
+        result: Dict[str, Any] = {
+            "dataset_rid": dataset_rid,
+            "branch": branch,
+            "current_version_id": current_version,
+            "fields_added": added,
+            "fields_unchanged": unchanged,
+            "schema": self._serialize_schema(merged_schema),
+        }
+
+        if not apply:
+            result["status"] = "dry-run"
+            return result
+
+        try:
+            self.service.Dataset.put_schema(
+                dataset_rid=dataset_rid,
+                schema=merged_schema,
+                branch_name=branch,
+            )
+        except Exception as e:
+            raise foundry_error_from_sdk(
+                e, context=f"Failed to update schema for dataset {dataset_rid}"
+            )
+
+        read_back = self._get_schema_response(dataset_rid, branch)
+        result["status"] = "applied"
+        result["version_id"] = getattr(read_back, "version_id", None)
+        result["schema"] = self._serialize_schema(getattr(read_back, "schema_", None))
+        return result
 
     def infer_schema_from_csv(
         self, csv_path: Union[str, Path], sample_rows: int = 100

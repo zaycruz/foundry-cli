@@ -118,6 +118,26 @@ pltr dataset schema apply ri.foundry.main.dataset.abc123
 pltr dataset schema set ri.foundry.main.dataset.abc123 --json-file schema.json
 ```
 
+### Additive schema migration (branch-aware, optimistic concurrency)
+
+```bash
+# Dry-run (default): shows the fields that would be added, nothing is written
+pltr dataset schema update DATASET_RID --branch develop \
+    --add-field capacity:INTEGER --add-field revision:INTEGER:false:0
+
+# Apply the additive migration with an expected-version check
+pltr dataset schema update DATASET_RID --branch develop \
+    --expected-schema-version 00000004-0000-0000-0000-000000000000 \
+    --fields-json '[{"name":"capacity","type":"INTEGER","nullable":true}]' \
+    --apply
+
+# --add-field format: name:TYPE[:nullable[:default]]
+# Additive only: type changes on existing fields are rejected.
+# --expected-schema-version fails with Datasets:SchemaVersionConflict when the
+# current schema version differs (client-side optimistic concurrency).
+# After --apply the schema is read back and returned with its new version.
+```
+
 ## Preview Data
 
 ```bash
