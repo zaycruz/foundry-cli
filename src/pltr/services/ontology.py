@@ -56,6 +56,15 @@ _OBJECT_TYPE_ALREADY_EXISTS_NAMES = {
     "objectTypesAlreadyExist",
 }
 
+
+class ObjectTypeNotFoundError(RuntimeError):
+    """The requested object type does not exist (or is not visible).
+
+    A RuntimeError subclass so existing ``except RuntimeError`` callers keep
+    working while guarded flows can distinguish a missing type from other
+    load failures.
+    """
+
 _COMMON_ERROR_MESSAGES = {
     "InvalidObjectTypeId": (
         "Foundry rejected the generated object type ID for this ontology namespace"
@@ -1569,13 +1578,25 @@ class ObjectTypeService(BaseService):
         if not isinstance(entry, Mapping) or not isinstance(
             entry.get("objectType"), Mapping
         ):
-            raise RuntimeError(
+            raise ObjectTypeNotFoundError(
                 "Could not load the current state of object type "
                 f"{object_type_id or identifier}: bulkLoadEntities returned "
                 "no usable entry. The update path requires the existing "
                 "type's state and refuses to guess or recreate."
             )
         return entry
+
+    def load_object_type_state(
+        self, object_type_id: str
+    ) -> Mapping[str, Any]:
+        """Load an object type's current state by internal ObjectTypeId.
+
+        Read-only preflight for guarded mutations. Raises
+        ``ObjectTypeNotFoundError`` when the type does not exist (or is not
+        visible); other load failures propagate unchanged.
+        """
+        client = _internal_client(self)
+        return self._load_object_type_state(client, object_type_id)
 
     @staticmethod
     def _merge_object_type_update(

@@ -1985,3 +1985,283 @@ def test_guarded_upsert_change_type_validated(mock_guarded_service):
     result = runner.invoke(app, _guarded_upsert_args("--change-type", "bogus"))
 
     assert result.exit_code != 0
+
+
+# Guarded delete composite command (object-type-guarded-delete)
+def _guarded_delete_args(*extra: str) -> list[str]:
+    return [
+        "object-type-guarded-delete",
+        "ri.ontology.main.ontology.test",
+        "ns0abcde.example-object",
+        *extra,
+    ]
+
+
+def _guarded_delete_composite(**overrides):
+    result = {
+        "operation": "object-type-guarded-delete",
+        "request": {
+            "ontologyRid": "ri.ontology.main.ontology.test",
+            "objectTypeId": "ns0abcde.example-object",
+            "apiName": "ExampleObject",
+            "change": "delete object type",
+            "changeType": "remove-delete",
+        },
+        "preflight": {
+            "state": "existing",
+            "current": {
+                "objectTypeId": "ns0abcde.example-object",
+                "apiName": "ExampleObject",
+            },
+        },
+        "impact": {
+            "skipped": False,
+            "status": "clean",
+            "verification": {"must_verify_before_merge": []},
+        },
+        "plan": {
+            "mode": "dry-run",
+            "validation": {"status": "success", "errors": []},
+        },
+        "gate": {
+            "impact_gate": "run",
+            "verification_required": False,
+            "verification_accepted": False,
+        },
+        "applied": False,
+        "readback": None,
+        "caveats": [],
+    }
+    result.update(overrides)
+    return result
+
+
+@pytest.fixture
+def mock_guarded_mutation_service():
+    """Mock the composite GuardedMutationService."""
+    with patch("pltr.commands.ontology.GuardedMutationService") as mock_cls:
+        yield mock_cls
+
+
+def test_guarded_delete_plan_default_makes_no_mutation(
+    mock_guarded_mutation_service,
+):
+    """Default invocation composes the plan and never calls apply."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite()
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args())
+
+    assert result.exit_code == 0
+    mock_instance.prepare_object_type_delete.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        object_type_id="ns0abcde.example-object",
+        change=None,
+        change_type=None,
+        skip_impact_gate=False,
+        graph_output=None,
+    )
+    mock_instance.apply_object_type_delete.assert_not_called()
+
+
+def test_guarded_delete_apply_requires_yes(mock_guarded_mutation_service):
+    """Destructive apply without --yes prompts; declining cancels the delete."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite()
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args("--apply"), input="n\n")
+
+    assert result.exit_code == 0
+    assert "cancelled" in result.output
+    mock_instance.apply_object_type_delete.assert_not_called()
+
+
+def test_guarded_delete_apply_yes_executes(mock_guarded_mutation_service):
+    """--apply --yes deletes; a clean gate records no verification acceptance."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite()
+    )
+    mock_instance.apply_object_type_delete.return_value = (
+        _guarded_delete_composite(
+            applied=True,
+            readback={"status": "verified-removed", "detail": "not found"},
+        )
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args("--apply", "--yes"))
+
+    assert result.exit_code == 0
+    mock_instance.apply_object_type_delete.assert_called_once()
+    assert (
+        mock_instance.apply_object_type_delete.call_args.kwargs[
+            "verification_accepted"
+        ]
+        is False
+    )
+
+
+def test_guarded_delete_needs_verification_acceptance_recorded(
+    mock_guarded_mutation_service,
+):
+    """--yes on a needs-verification gate is recorded as explicit acceptance."""
+    gated = _guarded_delete_composite(
+        impact={
+            "skipped": False,
+            "status": "needs-verification",
+            "verification": {
+                "must_verify_before_merge": [{"item": "verify action contracts"}]
+            },
+        },
+    )
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = gated
+    mock_instance.apply_object_type_delete.return_value = (
+        _guarded_delete_composite(
+            applied=True,
+            readback={"status": "verified-removed", "detail": "not found"},
+        )
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args("--apply", "--yes"))
+
+    assert result.exit_code == 0
+    assert (
+        mock_instance.apply_object_type_delete.call_args.kwargs[
+            "verification_accepted"
+        ]
+        is True
+    )
+
+
+def test_guarded_delete_not_found_preflight_fails(mock_guarded_mutation_service):
+    """A missing type fails with the typed not-found, exit 1, no delete."""
+    from pltr.services.ontology import ObjectTypeNotFoundError
+
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.side_effect = ObjectTypeNotFoundError(
+        "Could not load the current state of object type ns0abcde.missing"
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args())
+
+    assert result.exit_code == 1
+    assert "Failed guarded delete of object type" in result.output
+    assert "Could not load the current state" in result.output
+    mock_instance.apply_object_type_delete.assert_not_called()
+
+
+def test_guarded_delete_skip_impact_gate_forwarded(mock_guarded_mutation_service):
+    """--skip-impact-gate is forwarded to the service as an explicit opt-out."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite(
+            impact={
+                "skipped": True,
+                "status": "skipped",
+                "reason": "--skip-impact-gate",
+            },
+            gate={
+                "impact_gate": "skipped-requested",
+                "verification_required": False,
+                "verification_accepted": False,
+            },
+        )
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args("--skip-impact-gate"))
+
+    assert result.exit_code == 0
+    assert (
+        mock_instance.prepare_object_type_delete.call_args.kwargs[
+            "skip_impact_gate"
+        ]
+        is True
+    )
+
+
+def test_guarded_delete_apply_result_includes_readback(
+    mock_guarded_mutation_service,
+):
+    """The applied composite carries the verified-removed read-back."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite()
+    )
+    mock_instance.apply_object_type_delete.return_value = (
+        _guarded_delete_composite(
+            applied=True,
+            readback={
+                "status": "verified-removed",
+                "detail": "post-delete load reports the object type as not found",
+            },
+        )
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(
+        app, _guarded_delete_args("--apply", "--yes", "--format", "json")
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["applied"] is True
+    assert payload["readback"]["status"] == "verified-removed"
+
+
+def test_guarded_delete_change_and_change_type_forwarded(
+    mock_guarded_mutation_service,
+):
+    """Explicit --change/--change-type reach the impact gate."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite()
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        _guarded_delete_args(
+            "--change", "remove Employee", "--change-type", "remove-delete"
+        ),
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_instance.prepare_object_type_delete.call_args.kwargs
+    assert call_kwargs["change"] == "remove Employee"
+    assert call_kwargs["change_type"] == "remove-delete"
+
+
+def test_guarded_delete_plan_validation_error_exits(
+    mock_guarded_mutation_service,
+):
+    """A failed delete validation exits 1 before any confirmation prompt."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_delete.return_value = (
+        _guarded_delete_composite(
+            plan={
+                "mode": "dry-run",
+                "validation": {
+                    "status": "error",
+                    "errors": ["dependent link types still reference this type"],
+                },
+            }
+        )
+    )
+    mock_guarded_mutation_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_delete_args("--apply", "--yes"))
+
+    assert result.exit_code == 1
+    assert "dependent link types" in result.output
+    mock_instance.apply_object_type_delete.assert_not_called()

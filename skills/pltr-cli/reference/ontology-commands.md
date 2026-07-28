@@ -167,6 +167,32 @@ pltr ontology object-type-delete ri.ontology.main.ontology.abc123 \
     ns1exmpl.employee --apply --yes
 ```
 
+### Guarded Delete Object Type (composite: preflight + impact gate + delete + verify-removed)
+
+```bash
+pltr ontology object-type-guarded-delete ONTOLOGY_RID OBJECT_TYPE_ID \
+    [--change TEXT] [--change-type TYPE] [--skip-impact-gate] \
+    [--graph-output FILE] [--apply] [--yes]
+
+# DESTRUCTIVE. Composite of the safe-delete sequence: preflight load of
+# the object type (typed not-found aborts before any plan) -> dependency
+# impact assessment (same engine as `pltr dependency object-type`;
+# --change-type defaults to remove-delete) -> dry-run delete plan -> on
+# --apply AND --yes, the delete -> read-back that confirms the type no
+# longer loads (readback status verified-removed vs not-verified).
+# OBJECT_TYPE_ID is the internal ObjectTypeId (e.g. 'ns1exmpl.employee'),
+# resolvable via `pltr ontology resolve`. When the impact status is
+# needs-verification, the confirmation names the unresolved
+# must_verify_before_merge count and --yes is recorded as accepted.
+# --skip-impact-gate opts out explicitly and is recorded. Coverage gaps
+# are carried as caveats, never treated as "no impact".
+
+# Example
+pltr ontology object-type-guarded-delete ri.ontology.main.ontology.abc123 \
+    ns1exmpl.employee --graph-output ./guarded-delete-impact.json \
+    --apply --yes
+```
+
 ### Add Property to Existing Object Type (modifyOntology, plan-first)
 
 ```bash

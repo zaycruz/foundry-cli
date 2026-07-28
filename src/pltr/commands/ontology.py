@@ -13,7 +13,7 @@ from rich.console import Console
 
 from ..services.functions import FunctionsService
 from ..services.dependency import CHANGE_TYPES
-from ..services.guarded_upsert import GuardedUpsertService
+from ..services.guarded_upsert import GuardedMutationService, GuardedUpsertService
 from ..services.ontology import (
     OntologyService,
     ObjectTypeService,
@@ -737,6 +737,122 @@ def delete_object_type(
         raise typer.Exit(1) from e
     except Exception as e:
         formatter.print_error(f"Failed to delete object type: {e}")
+        raise typer.Exit(1) from e
+
+
+@app.command("object-type-guarded-delete")
+def guarded_delete_object_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    object_type_id: str = typer.Argument(
+        ...,
+        help="Internal ObjectTypeId (e.g. 'ns1exmpl.my-type'), not the API name",
+    ),
+    change: Optional[str] = typer.Option(
+        None,
+        "--change",
+        help="Free-text description of intent (default: 'delete object type')",
+    ),
+    change_type: Optional[str] = typer.Option(
+        None,
+        "--change-type",
+        help="Classify the intended change for the impact gate "
+        "(default: remove-delete)",
+        click_type=click.Choice(list(CHANGE_TYPES)),
+    ),
+    skip_impact_gate: bool = typer.Option(
+        False,
+        "--skip-impact-gate",
+        help="Explicitly opt out of the dependency preflight (recorded in the result)",
+    ),
+    graph_output: Optional[str] = typer.Option(
+        None,
+        "--graph-output",
+        help="Dependency graph artifact path (default: pltr state directory)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real deletion (default: dry-run plan only)",
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip the confirmation prompt (with --apply)"
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Guarded object type delete: preflight, impact gate, plan, apply, verify.
+
+    One composite invocation for the sequence agents otherwise hand-assemble:
+    1) resolve the internal ObjectTypeId to current state (a missing type
+    fails with a typed not-found — no delete is planned), 2) run the
+    read-only dependency impact gate for --change/--change-type, 3) build
+    the modifyOntology delete dry-run plan, and — with --apply --yes —
+    4) issue the real deletion and verify removal by a read-back that must
+    now report the type as not found.
+
+    Without --apply nothing mutates; the composite plan (preflight state,
+    impact agent block, validated delete plan, caveats) is printed. Deletion
+    always requires the double confirmation --apply AND --yes; when the gate
+    also reports needs-verification, that acceptance is recorded in the
+    result. Deletes run in reverse publication order (action types, then
+    link types, then object types). --skip-impact-gate opts out of step 2
+    and is recorded.
+    """
+    try:
+        service = GuardedMutationService(profile=profile)
+        result = service.prepare_object_type_delete(
+            ontology_rid=ontology_rid,
+            object_type_id=object_type_id,
+            change=change,
+            change_type=change_type,
+            skip_impact_gate=skip_impact_gate,
+            graph_output=graph_output,
+        )
+        plan = result.get("plan") or {}
+        if not apply:
+            formatter.format_dict(result, format=format, output=output)
+            _exit_on_validation_error(plan)
+            formatter.print_info(
+                f"Dry-run only; pass --apply to delete object type {object_type_id}."
+            )
+            return
+        # Never apply a plan Foundry validation already rejected.
+        _exit_on_validation_error(plan)
+        impact = result.get("impact") or {}
+        verification = impact.get("verification") or {}
+        must_verify = verification.get("must_verify_before_merge") or []
+        accepted = bool(impact.get("status") == "needs-verification" and must_verify)
+        message = (
+            f"Delete object type {object_type_id} from ontology "
+            f"{ontology_rid}? This action cannot be undone."
+        )
+        if accepted:
+            message += (
+                f" The impact gate also reports {len(must_verify)} unresolved "
+                "must_verify_before_merge item(s); confirming accepts them."
+            )
+        if not require_confirmation(message, confirmed=yes, option_name="--yes"):
+            formatter.print_info("Deletion cancelled")
+            raise typer.Exit(0)
+        result = service.apply_object_type_delete(
+            result, verification_accepted=accepted
+        )
+        formatter.format_dict(result, format=format, output=output)
+        _warn_on_unverified(result.get("delete") or {})
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        buffer_agent_exception(e, context="object-type-guarded-delete")
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        buffer_agent_exception(e, context="object-type-guarded-delete")
+        formatter.print_error(f"Failed guarded delete of object type: {e}")
         raise typer.Exit(1) from e
 
 

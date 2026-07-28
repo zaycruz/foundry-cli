@@ -1,20 +1,20 @@
-"""Composite guarded-upsert orchestration for ontology object types.
+"""Composite guarded-mutation orchestration for ontology object types.
 
 Composes the sequence agents previously hand-assembled across several CLI
 invocations: read the current object type state, run the read-only
 dependency/impact preflight (DependencyGraphService), build the
-modifyOntology dry-run plan (ObjectTypeService.upsert_object_type), and —
-only when the command layer applies — issue the real modification and read
-the type back through the verified SDK get.
+modifyOntology dry-run plan (ObjectTypeService.upsert_object_type /
+delete_object_type), and — only when the command layer applies — issue the
+real modification and verify it with an authoritative read-back.
 
-The service never mutates in ``prepare_object_type_upsert``; mutation is
-confined to ``apply_object_type_upsert``. Impact-gate uncertainty (partial /
+The service never mutates in the ``prepare_*`` methods; mutation is
+confined to the ``apply_*`` methods. Impact-gate uncertainty (partial /
 inaccessible / unsupported / unresolved / budget-exhausted coverage) is
 carried into the result's ``caveats`` and is never converted to "no impact".
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from ..auth.base import MissingCredentialsError, ProfileNotFoundError
 from ..utils.dependency_artifacts import (
@@ -23,7 +23,7 @@ from ..utils.dependency_artifacts import (
 )
 from .base import BaseService
 from .dependency import DependencyGraphService, DiscoveryBudget
-from .ontology import ObjectTypeService
+from .ontology import ObjectTypeNotFoundError, ObjectTypeService
 
 # Coverage statuses that mean the dependency gate could not fully see the
 # blast radius. They are uncertainty, never proof of no impact.
@@ -57,8 +57,8 @@ def _is_object_type_not_found(error: BaseException) -> bool:
     return False
 
 
-class GuardedUpsertService(BaseService):
-    """Compose preflight reads, the impact gate, and the upsert plan/apply."""
+class GuardedMutationService(BaseService):
+    """Compose preflight reads, the impact gate, and mutation plan/apply."""
 
     def _get_service(self) -> Any:
         return self.client
@@ -318,3 +318,158 @@ class GuardedUpsertService(BaseService):
         prepared["applied"] = True
         prepared["readback"] = readback
         return prepared
+
+    @staticmethod
+    def _summarize_loaded_state(
+        object_type_id: str, entry: Mapping[str, Any]
+    ) -> Dict[str, Any]:
+        """Project the bulk-loaded state entry to a compact summary."""
+        object_type = entry.get("objectType") or {}
+        display = object_type.get("displayMetadata") or {}
+        return {
+            "objectTypeId": object_type_id,
+            "apiName": object_type.get("apiName"),
+            "displayName": display.get("displayName"),
+            "status": object_type.get("status"),
+        }
+
+    def prepare_object_type_delete(
+        self,
+        *,
+        ontology_rid: str,
+        object_type_id: str,
+        change: Optional[str] = None,
+        change_type: Optional[str] = None,
+        skip_impact_gate: bool = False,
+        graph_output: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Build the composite delete plan without mutating anything.
+
+        Resolves the internal ObjectTypeId to the current state (a missing
+        type fails with the typed ``ObjectTypeNotFoundError`` — a delete is
+        never planned for something that does not exist), runs the impact
+        gate against the resolved API name, and validates the delete through
+        the existing dry-run path.
+        """
+        change = change or "delete object type"
+        change_type = change_type or "remove-delete"
+        caveats: List[str] = []
+        object_types = ObjectTypeService(profile=self.profile)
+        entry = object_types.load_object_type_state(object_type_id)
+        preflight: Dict[str, Any] = {
+            "state": "existing",
+            "current": self._summarize_loaded_state(object_type_id, entry),
+        }
+        api_name = preflight["current"].get("apiName") or object_type_id
+
+        if skip_impact_gate:
+            caveats.append(
+                "impact gate explicitly skipped via --skip-impact-gate; no "
+                "dependency preflight was performed for this change"
+            )
+            impact: Dict[str, Any] = {
+                "skipped": True,
+                "status": "skipped",
+                "reason": "--skip-impact-gate",
+            }
+            gate_mode = "skipped-requested"
+        else:
+            impact = self._run_impact_gate(
+                ontology_rid=ontology_rid,
+                api_name=api_name,
+                change=change,
+                change_type=change_type,
+                graph_output=graph_output,
+                caveats=caveats,
+            )
+            gate_mode = "run"
+
+        plan = object_types.delete_object_type(
+            ontology_rid=ontology_rid,
+            object_type_id=object_type_id,
+            apply=False,
+        )
+
+        verification = impact.get("verification") or {}
+        must_verify = verification.get("must_verify_before_merge") or []
+        return {
+            "operation": "object-type-guarded-delete",
+            "request": {
+                "ontologyRid": ontology_rid,
+                "objectTypeId": object_type_id,
+                "apiName": api_name,
+                "change": change,
+                "changeType": change_type,
+            },
+            "preflight": preflight,
+            "impact": impact,
+            "plan": plan,
+            "gate": {
+                "impact_gate": gate_mode,
+                "verification_required": bool(
+                    impact.get("status") == "needs-verification" and must_verify
+                ),
+                "verification_accepted": False,
+            },
+            "applied": False,
+            "readback": None,
+            "caveats": caveats,
+        }
+
+    def apply_object_type_delete(
+        self,
+        prepared: Dict[str, Any],
+        *,
+        verification_accepted: bool = False,
+    ) -> Dict[str, Any]:
+        """Apply a prepared composite delete, then verify removal by read-back.
+
+        ``prepared`` must come from ``prepare_object_type_delete``; the
+        original request is replayed through the existing delete path with
+        ``apply=True``. The read-back loads the type again: a typed not-found
+        is the positive removal signal (``verified-removed``); a type that
+        still loads is reported ``not-verified``, never raised over.
+        """
+        request = prepared.get("request") or {}
+        object_types = ObjectTypeService(profile=self.profile)
+        delete_result = object_types.delete_object_type(
+            ontology_rid=request["ontologyRid"],
+            object_type_id=request["objectTypeId"],
+            apply=True,
+        )
+
+        try:
+            object_types.load_object_type_state(request["objectTypeId"])
+            readback: Dict[str, Any] = {
+                "status": "not-verified",
+                "detail": (
+                    "object type still loads after the delete was applied"
+                ),
+            }
+        except ObjectTypeNotFoundError:
+            readback = {
+                "status": "verified-removed",
+                "detail": (
+                    "post-delete load reports the object type as not found"
+                ),
+            }
+
+        gate = prepared.setdefault("gate", {})
+        gate["verification_accepted"] = verification_accepted
+        if verification_accepted:
+            must_verify = (
+                (prepared.get("impact") or {}).get("verification") or {}
+            ).get("must_verify_before_merge") or []
+            prepared.setdefault("caveats", []).append(
+                f"operator explicitly accepted {len(must_verify)} unresolved "
+                "must_verify_before_merge item(s) via --yes"
+            )
+        prepared["delete"] = delete_result
+        prepared["applied"] = True
+        prepared["readback"] = readback
+        return prepared
+
+
+# Backwards-compatible alias: the guarded-upsert command and its tests were
+# committed against this name before the service grew the delete counterpart.
+GuardedUpsertService = GuardedMutationService
