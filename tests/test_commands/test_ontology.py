@@ -1708,3 +1708,280 @@ def test_resolve_function_command(mock_services):
     mock_instance.resolve_function.assert_called_once_with(
         api_name="myFunc", rid=None, version="1.0.0"
     )
+
+
+# Guarded upsert composite command (object-type-guarded-upsert)
+def _guarded_upsert_args(*extra: str) -> list[str]:
+    return [
+        "object-type-guarded-upsert",
+        "ri.ontology.main.ontology.test",
+        "--api-name",
+        "ExampleObject",
+        "--display-name",
+        "Example Object",
+        "--primary-key",
+        "id",
+        "--backing-dataset",
+        "ri.foundry.main.dataset.example",
+        *extra,
+    ]
+
+
+def _guarded_composite(**overrides):
+    result = {
+        "operation": "object-type-guarded-upsert",
+        "request": {
+            "ontologyRid": "ri.ontology.main.ontology.test",
+            "apiName": "ExampleObject",
+            "displayName": "Example Object",
+            "primaryKey": "id",
+            "backingDataset": "ri.foundry.main.dataset.example",
+            "description": None,
+            "change": None,
+            "changeType": None,
+        },
+        "preflight": {"state": "existing", "current": {"api_name": "ExampleObject"}},
+        "impact": {
+            "skipped": False,
+            "status": "clean",
+            "verification": {"must_verify_before_merge": []},
+        },
+        "plan": {
+            "mode": "dry-run",
+            "validation": {"status": "success", "errors": []},
+        },
+        "gate": {
+            "impact_gate": "run",
+            "verification_required": False,
+            "verification_accepted": False,
+        },
+        "applied": False,
+        "readback": None,
+        "caveats": [],
+    }
+    result.update(overrides)
+    return result
+
+
+@pytest.fixture
+def mock_guarded_service():
+    """Mock the composite GuardedUpsertService."""
+    with patch("pltr.commands.ontology.GuardedUpsertService") as mock_cls:
+        yield mock_cls
+
+
+def test_guarded_upsert_plan_default_makes_no_mutation(mock_guarded_service):
+    """Default invocation composes the plan and never calls apply."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = _guarded_composite()
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--change", "rename"))
+
+    assert result.exit_code == 0
+    mock_instance.prepare_object_type_upsert.assert_called_once_with(
+        ontology_rid="ri.ontology.main.ontology.test",
+        api_name="ExampleObject",
+        display_name="Example Object",
+        primary_key="id",
+        backing_dataset="ri.foundry.main.dataset.example",
+        description=None,
+        change="rename",
+        change_type=None,
+        skip_impact_gate=False,
+        graph_output=None,
+    )
+    mock_instance.apply_object_type_upsert.assert_not_called()
+
+
+def test_guarded_upsert_apply_executes_when_gate_is_clean(mock_guarded_service):
+    """--apply with a clean gate applies and returns the composite result."""
+    applied = _guarded_composite(
+        applied=True,
+        readback={"status": "verified", "object_type": {"api_name": "ExampleObject"}},
+    )
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = _guarded_composite()
+    mock_instance.apply_object_type_upsert.return_value = applied
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--apply"))
+
+    assert result.exit_code == 0
+    mock_instance.apply_object_type_upsert.assert_called_once()
+    assert (
+        mock_instance.apply_object_type_upsert.call_args.kwargs[
+            "verification_accepted"
+        ]
+        is False
+    )
+
+
+def test_guarded_upsert_needs_verification_requires_yes(mock_guarded_service):
+    """Unresolved must_verify_before_merge blocks --apply without --yes."""
+    gated = _guarded_composite(
+        impact={
+            "skipped": False,
+            "status": "needs-verification",
+            "verification": {
+                "must_verify_before_merge": [{"item": "verify action contracts"}]
+            },
+        },
+    )
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = gated
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--apply"), input="n\n")
+
+    assert result.exit_code == 0
+    assert "cancelled" in result.output
+    mock_instance.apply_object_type_upsert.assert_not_called()
+
+
+def test_guarded_upsert_yes_records_operator_acceptance(mock_guarded_service):
+    """--yes is forwarded as explicit acceptance of the unresolved items."""
+    gated = _guarded_composite(
+        impact={
+            "skipped": False,
+            "status": "needs-verification",
+            "verification": {
+                "must_verify_before_merge": [{"item": "verify action contracts"}]
+            },
+        },
+    )
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = gated
+    mock_instance.apply_object_type_upsert.return_value = _guarded_composite(
+        applied=True,
+        readback={"status": "verified", "object_type": {}},
+    )
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--apply", "--yes"))
+
+    assert result.exit_code == 0
+    assert (
+        mock_instance.apply_object_type_upsert.call_args.kwargs[
+            "verification_accepted"
+        ]
+        is True
+    )
+
+
+def test_guarded_upsert_net_new_records_caveat(mock_guarded_service):
+    """Net-new preflight surfaces the coverage caveat in the JSON result."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = _guarded_composite(
+        preflight={"state": "net-new", "current": None},
+        impact={
+            "skipped": True,
+            "status": "skipped",
+            "reason": "net-new object type has no existing dependents",
+        },
+        caveats=[
+            "object type 'ExampleObject' does not exist yet (net-new); the "
+            "impact gate ran against no existing dependents"
+        ],
+    )
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--format", "json"))
+
+    assert result.exit_code == 0
+    # CliRunner mixes the stderr status line ("Dry-run only...") into output;
+    # the JSON document itself starts at the first '{'.
+    payload = json.loads(result.output[result.output.index("{") :])
+    assert payload["preflight"]["state"] == "net-new"
+    assert payload["impact"]["skipped"] is True
+    assert any("net-new" in caveat for caveat in payload["caveats"])
+
+
+def test_guarded_upsert_apply_result_includes_readback(mock_guarded_service):
+    """The applied composite carries the authoritative read-back."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = _guarded_composite()
+    mock_instance.apply_object_type_upsert.return_value = _guarded_composite(
+        applied=True,
+        readback={
+            "status": "verified",
+            "object_type": {"api_name": "ExampleObject", "rid": "ri.ontology.x"},
+        },
+    )
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--apply", "--format", "json"))
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["applied"] is True
+    assert payload["readback"]["status"] == "verified"
+    assert payload["readback"]["object_type"]["api_name"] == "ExampleObject"
+
+
+def test_guarded_upsert_skip_impact_gate_forwarded(mock_guarded_service):
+    """--skip-impact-gate is forwarded to the service as an explicit opt-out."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = _guarded_composite(
+        impact={
+            "skipped": True,
+            "status": "skipped",
+            "reason": "--skip-impact-gate",
+        },
+        gate={
+            "impact_gate": "skipped-requested",
+            "verification_required": False,
+            "verification_accepted": False,
+        },
+    )
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args("--skip-impact-gate"))
+
+    assert result.exit_code == 0
+    assert (
+        mock_instance.prepare_object_type_upsert.call_args.kwargs["skip_impact_gate"]
+        is True
+    )
+
+
+def test_guarded_upsert_plan_validation_error_exits(mock_guarded_service):
+    """A failed dry-run validation exits 1 like object-type-upsert."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.return_value = _guarded_composite(
+        plan={
+            "mode": "dry-run",
+            "validation": {
+                "status": "error",
+                "errors": ["the backing dataset has no schema"],
+            },
+        }
+    )
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args())
+
+    assert result.exit_code == 1
+    assert "backing dataset has no schema" in result.output
+    mock_instance.apply_object_type_upsert.assert_not_called()
+
+
+def test_guarded_upsert_service_error_surfaces(mock_guarded_service):
+    """Service failures surface as command errors."""
+    mock_instance = Mock()
+    mock_instance.prepare_object_type_upsert.side_effect = RuntimeError("boom")
+    mock_guarded_service.return_value = mock_instance
+
+    result = runner.invoke(app, _guarded_upsert_args())
+
+    assert result.exit_code == 1
+    assert "Failed guarded upsert of object type" in result.output
+
+
+def test_guarded_upsert_change_type_validated(mock_guarded_service):
+    """--change-type accepts only the dependency gate's change-type enum."""
+    mock_guarded_service.return_value = Mock()
+
+    result = runner.invoke(app, _guarded_upsert_args("--change-type", "bogus"))
+
+    assert result.exit_code != 0

@@ -116,6 +116,40 @@ pltr ontology object-type-upsert ri.ontology.main.ontology.abc123 \
     --backing-dataset ri.foundry.main.dataset.abc123 --apply
 ```
 
+### Guarded Upsert Object Type (composite: preflight + impact gate + upsert + read-back)
+
+```bash
+pltr ontology object-type-guarded-upsert ONTOLOGY_RID \
+    --api-name API_NAME --display-name NAME --primary-key FIELD \
+    --backing-dataset DATASET_RID [--description TEXT] \
+    [--change TEXT] [--change-type TYPE] [--skip-impact-gate] \
+    [--graph-output FILE] [--apply] [--yes]
+
+# Composite of the sequence agents otherwise run by hand: load current
+# object type state -> dependency impact assessment (same engine as
+# `pltr dependency object-type`) -> dry-run upsert plan -> on --apply,
+# the upsert -> authoritative read-back. Default is plan-only; nothing is
+# written without --apply. When the impact status is needs-verification
+# with unresolved must_verify_before_merge items, --yes is additionally
+# required and the acceptance is recorded in the result. For a net-new
+# object type the gate is skipped with a recorded caveat (no existing
+# dependents). --skip-impact-gate opts out explicitly and is recorded.
+# Coverage gaps (partial/inaccessible/unsupported/unresolved/...) are
+# carried as caveats in the result, never treated as "no impact".
+# --change-type accepts the same enum as `pltr dependency object-type`:
+# rename, type-change, optional-to-required, required-to-optional,
+# remove-delete, action-input-change, query-output-change. --graph-output
+# retains the full impact graph artifact. No --branch-rid: the underlying
+# upsert writes to the default branch.
+
+# Example
+pltr ontology object-type-guarded-upsert ri.ontology.main.ontology.abc123 \
+    --api-name Employee --display-name "Employee" --primary-key employeeId \
+    --backing-dataset ri.foundry.main.dataset.abc123 \
+    --change "rename display name" --change-type rename \
+    --graph-output ./guarded-upsert-impact.json --apply
+```
+
 ### Delete Object Type (modifyOntology, plan-first)
 
 ```bash

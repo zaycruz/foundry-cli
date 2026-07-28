@@ -12,6 +12,8 @@ import typer
 from rich.console import Console
 
 from ..services.functions import FunctionsService
+from ..services.dependency import CHANGE_TYPES
+from ..services.guarded_upsert import GuardedUpsertService
 from ..services.ontology import (
     OntologyService,
     ObjectTypeService,
@@ -19,7 +21,13 @@ from ..services.ontology import (
     ActionService,
     QueryService,
 )
-from ..utils.agent_output import buffer_agent_exception, require_confirmation
+from ..utils.agent_output import (
+    agent_mode_enabled,
+    buffer_agent_exception,
+    buffer_agent_payload,
+    require_confirmation,
+)
+from ..utils.error_hints import HintedUsageCommand, resolve_error_hint
 from ..utils.formatting import OutputFormatter
 from ..utils.pagination import PaginationConfig
 from ..utils.progress import SpinnerProgressTracker
@@ -200,6 +208,8 @@ def get_object_type(
         formatter.print_error(f"Authentication error: {e}")
         raise typer.Exit(1)
     except Exception as e:
+        if agent_mode_enabled():
+            buffer_agent_exception(e, context="object-type-get")
         formatter.print_error(f"Failed to get object type: {e}")
         raise typer.Exit(1)
 
@@ -292,7 +302,7 @@ def create_object_type(
         raise typer.Exit(1)
 
 
-@app.command("object-type-upsert")
+@app.command("object-type-upsert", cls=HintedUsageCommand)
 def upsert_object_type(
     ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
     api_name: str = typer.Option(..., "--api-name", help="Object type API name"),
@@ -347,7 +357,7 @@ def upsert_object_type(
             apply=apply,
         )
         formatter.format_dict(result, format=format, output=output)
-        _exit_on_validation_error(result)
+        _exit_on_validation_error(result, context="object-type-upsert")
         _warn_on_unverified(result)
     except (typer.Exit, typer.Abort):
         raise
@@ -355,11 +365,13 @@ def upsert_object_type(
         formatter.print_error(f"Authentication error: {e}")
         raise typer.Exit(1) from e
     except Exception as e:
+        if agent_mode_enabled():
+            buffer_agent_exception(e, context="object-type-upsert")
         formatter.print_error(f"Failed to upsert object type: {e}")
         raise typer.Exit(1) from e
 
 
-def _exit_on_validation_error(result: dict) -> None:
+def _exit_on_validation_error(result: dict, *, context: str = "") -> None:
     """Exit non-zero when a dry-run plan failed Foundry validation."""
     validation = result.get("validation") if isinstance(result, dict) else None
     if isinstance(validation, dict) and validation.get("status") == "error":
@@ -369,6 +381,20 @@ def _exit_on_validation_error(result: dict) -> None:
                 formatter.print_error(f"Dry-run validation failed: {error}")
         else:
             formatter.print_error("Dry-run validation failed")
+        if context and agent_mode_enabled():
+            detail = (
+                "; ".join(str(error) for error in errors)
+                if isinstance(errors, list)
+                else "see the printed plan"
+            )
+            entry: dict = {
+                "type": "validation",
+                "message": f"{context}: dry-run validation failed: {detail}",
+            }
+            hint = resolve_error_hint(context, entry=entry)
+            if hint:
+                entry["hint"] = hint
+            buffer_agent_payload(None, errors=[entry])
         raise typer.Exit(1)
 
 
@@ -384,6 +410,130 @@ def _warn_on_unverified(result: dict) -> None:
         formatter.print_warning(
             f"Mutation applied but not verified: {verification.get('detail')}"
         )
+
+
+@app.command("object-type-guarded-upsert")
+def guarded_upsert_object_type(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    api_name: str = typer.Option(..., "--api-name", help="Object type API name"),
+    display_name: str = typer.Option(
+        ..., "--display-name", help="Object type display name"
+    ),
+    primary_key: str = typer.Option(
+        ..., "--primary-key", help="Primary key property API name"
+    ),
+    backing_dataset: str = typer.Option(
+        ..., "--backing-dataset", help="Backing dataset RID"
+    ),
+    description: Optional[str] = typer.Option(
+        None, "--description", help="Object type description"
+    ),
+    change: Optional[str] = typer.Option(
+        None, "--change", help="Free-text description of the intended change"
+    ),
+    change_type: Optional[str] = typer.Option(
+        None,
+        "--change-type",
+        help="Classify the intended change for the impact gate",
+        click_type=click.Choice(list(CHANGE_TYPES)),
+    ),
+    skip_impact_gate: bool = typer.Option(
+        False,
+        "--skip-impact-gate",
+        help="Explicitly opt out of the dependency preflight (recorded in the result)",
+    ),
+    graph_output: Optional[str] = typer.Option(
+        None,
+        "--graph-output",
+        help="Dependency graph artifact path (default: pltr state directory)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Issue the real modification (default: dry-run plan only)",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Accept unresolved must_verify_before_merge items (with --apply)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv, agent)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Guarded object type upsert: preflight, impact gate, plan, apply, read-back.
+
+    One composite invocation for the sequence agents otherwise hand-assemble:
+    1) load the current object type state (not-found means net-new), 2) run
+    the read-only dependency impact gate for --change/--change-type, 3) build
+    the modifyOntology dry-run plan, and — with --apply — 4) issue the real
+    modification and read the type back authoritatively.
+
+    Without --apply nothing mutates; the composite plan (preflight state,
+    impact agent block, validated upsert plan, caveats) is printed. When the
+    gate reports needs-verification with unresolved must_verify_before_merge
+    items, --apply additionally requires --yes as explicit operator
+    acceptance. --skip-impact-gate opts out of step 2 and is recorded.
+    """
+    try:
+        service = GuardedUpsertService(profile=profile)
+        result = service.prepare_object_type_upsert(
+            ontology_rid=ontology_rid,
+            api_name=api_name,
+            display_name=display_name,
+            primary_key=primary_key,
+            backing_dataset=backing_dataset,
+            description=description,
+            change=change,
+            change_type=change_type,
+            skip_impact_gate=skip_impact_gate,
+            graph_output=graph_output,
+        )
+        plan = result.get("plan") or {}
+        if not apply:
+            formatter.format_dict(result, format=format, output=output)
+            _exit_on_validation_error(plan)
+            formatter.print_info(
+                f"Dry-run only; pass --apply to upsert object type {api_name}."
+            )
+            return
+        # Never apply a plan Foundry validation already rejected.
+        _exit_on_validation_error(plan)
+        impact = result.get("impact") or {}
+        verification = impact.get("verification") or {}
+        must_verify = verification.get("must_verify_before_merge") or []
+        accepted = False
+        if impact.get("status") == "needs-verification" and must_verify:
+            if not require_confirmation(
+                f"Impact gate for {api_name} reports {len(must_verify)} "
+                "unresolved must_verify_before_merge item(s). Apply the "
+                "upsert anyway?",
+                confirmed=yes,
+                option_name="--yes",
+            ):
+                formatter.print_info("Guarded upsert cancelled")
+                raise typer.Exit(0)
+            accepted = True
+        result = service.apply_object_type_upsert(
+            result, verification_accepted=accepted
+        )
+        formatter.format_dict(result, format=format, output=output)
+        _warn_on_unverified(result.get("upsert") or {})
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        buffer_agent_exception(e, context="object-type-guarded-upsert")
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1) from e
+    except Exception as e:
+        buffer_agent_exception(e, context="object-type-guarded-upsert")
+        formatter.print_error(f"Failed guarded upsert of object type: {e}")
+        raise typer.Exit(1) from e
 
 
 @app.command("object-type-add-property")
@@ -740,7 +890,7 @@ def delete_link_type(
         raise typer.Exit(1) from e
 
 
-@app.command("action-type-upsert")
+@app.command("action-type-upsert", cls=HintedUsageCommand)
 def upsert_action_type(
     ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
     definition: str = typer.Option(
@@ -782,6 +932,8 @@ def upsert_action_type(
         try:
             parsed_definition = json.loads(raw_definition)
         except json.JSONDecodeError as e:
+            if agent_mode_enabled():
+                buffer_agent_exception(e, context="action-type-upsert")
             formatter.print_error(f"Invalid JSON in action type definition: {e}")
             raise typer.Exit(1) from e
 
@@ -791,7 +943,7 @@ def upsert_action_type(
             apply=apply,
         )
         formatter.format_dict(result, format=format, output=output)
-        _exit_on_validation_error(result)
+        _exit_on_validation_error(result, context="action-type-upsert")
         _warn_on_unverified(result)
     except (typer.Exit, typer.Abort):
         raise
@@ -799,6 +951,8 @@ def upsert_action_type(
         formatter.print_error(f"Authentication error: {e}")
         raise typer.Exit(1) from e
     except Exception as e:
+        if agent_mode_enabled():
+            buffer_agent_exception(e, context="action-type-upsert")
         formatter.print_error(f"Failed to upsert action type: {e}")
         raise typer.Exit(1) from e
 
@@ -1367,6 +1521,8 @@ def get_action_type(
         formatter.print_error(f"Authentication error: {e}")
         raise typer.Exit(1)
     except Exception as e:
+        if agent_mode_enabled():
+            buffer_agent_exception(e, context="action-type-get")
         formatter.print_error(f"Failed to get action type: {e}")
         raise typer.Exit(1)
 

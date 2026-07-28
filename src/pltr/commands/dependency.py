@@ -12,6 +12,7 @@ from typing import Any, Callable, NoReturn, Optional
 import typer
 
 from ..utils.agent_output import buffer_agent_payload, resolve_output_format
+from ..utils.error_hints import resolve_error_hint
 from ..auth.base import MissingCredentialsError, ProfileNotFoundError
 from ..auth.manager import AuthManager
 from ..services.dependency import (
@@ -245,7 +246,12 @@ def _fatal_payload(error: BaseException, error_class: str) -> dict[str, Any]:
 
 def _render_fatal(error: BaseException, error_class: str, format_type: str) -> None:
     payload = _fatal_payload(error, error_class)
-    if resolve_output_format(format_type) == "agent":
+    resolved_format = resolve_output_format(format_type)
+    if resolved_format in ("agent", "json"):
+        hint = resolve_error_hint("dependency", exc=error, entry=payload)
+        if hint:
+            payload = {**payload, "hint": hint}
+    if resolved_format == "agent":
         buffer_agent_payload(None, meta={"result_type": "dependency"}, errors=[payload])
     elif format_type == "json":
         typer.echo(json.dumps(payload, indent=2, sort_keys=True))

@@ -290,15 +290,22 @@ def buffer_agent_exception(exc: BaseException, *, context: str = "") -> None:
     ``FoundryApiError`` entries keep Foundry's errorName/errorCode/
     errorInstanceId/safeParameters/validationDetails; anything else degrades
     to a message-only entry. Commands should call this before exiting nonzero
-    so agents get actionable errors instead of an unstructured blob.
+    so agents get actionable errors instead of an unstructured blob. When the
+    (context, failure) pair matches a registered recovery rule the entry also
+    carries a ``hint`` field; unrecognized failures get no hint rather than a
+    speculative one.
     """
     from ..services.errors import FoundryApiError
+    from .error_hints import resolve_error_hint
 
     if isinstance(exc, FoundryApiError):
         entry = exc.error_entry()
     else:
         message = f"{context}: {exc}" if context else str(exc)
         entry = {"type": "error", "message": message}
+    hint = resolve_error_hint(context, exc=exc, entry=entry)
+    if hint:
+        entry["hint"] = hint
     buffer_agent_payload(None, errors=[entry])
 
 

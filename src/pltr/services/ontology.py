@@ -675,7 +675,9 @@ class ObjectTypeService(BaseService):
             obj_type = self.service.Ontology.ObjectType.get(ontology_rid, object_type)
             return self._format_object_type_info(obj_type)
         except Exception as e:
-            raise RuntimeError(f"Failed to get object type {object_type}: {e}")
+            # Chain explicitly so callers (e.g. guarded upsert preflight) can
+            # distinguish a typed not-found from other failures.
+            raise RuntimeError(f"Failed to get object type {object_type}: {e}") from e
 
     def create_object_type(
         self,
