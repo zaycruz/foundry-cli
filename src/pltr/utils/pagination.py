@@ -257,6 +257,7 @@ class IteratorPaginationHandler:
         max_pages = config.effective_max_pages()
         next_token = None
         has_more = False
+        page_size = config.page_size or 20  # Default page size
 
         try:
             # Collect items from the iterator
@@ -264,7 +265,6 @@ class IteratorPaginationHandler:
                 all_items.append(item)
 
                 # Check if we've completed a "page" worth of items
-                page_size = config.page_size or 20  # Default page size
                 if len(all_items) % page_size == 0:
                     page_num += 1
 
