@@ -65,6 +65,7 @@ class ObjectTypeNotFoundError(RuntimeError):
     load failures.
     """
 
+
 _COMMON_ERROR_MESSAGES = {
     "InvalidObjectTypeId": (
         "Foundry rejected the generated object type ID for this ontology namespace"
@@ -1586,9 +1587,7 @@ class ObjectTypeService(BaseService):
             )
         return entry
 
-    def load_object_type_state(
-        self, object_type_id: str
-    ) -> Mapping[str, Any]:
+    def load_object_type_state(self, object_type_id: str) -> Mapping[str, Any]:
         """Load an object type's current state by internal ObjectTypeId.
 
         Read-only preflight for guarded mutations. Raises

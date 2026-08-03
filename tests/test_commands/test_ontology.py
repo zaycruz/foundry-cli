@@ -1810,9 +1810,7 @@ def test_guarded_upsert_apply_executes_when_gate_is_clean(mock_guarded_service):
     assert result.exit_code == 0
     mock_instance.apply_object_type_upsert.assert_called_once()
     assert (
-        mock_instance.apply_object_type_upsert.call_args.kwargs[
-            "verification_accepted"
-        ]
+        mock_instance.apply_object_type_upsert.call_args.kwargs["verification_accepted"]
         is False
     )
 
@@ -1862,9 +1860,7 @@ def test_guarded_upsert_yes_records_operator_acceptance(mock_guarded_service):
 
     assert result.exit_code == 0
     assert (
-        mock_instance.apply_object_type_upsert.call_args.kwargs[
-            "verification_accepted"
-        ]
+        mock_instance.apply_object_type_upsert.call_args.kwargs["verification_accepted"]
         is True
     )
 
@@ -2048,9 +2044,7 @@ def test_guarded_delete_plan_default_makes_no_mutation(
 ):
     """Default invocation composes the plan and never calls apply."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite()
-    )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite()
     mock_guarded_mutation_service.return_value = mock_instance
 
     result = runner.invoke(app, _guarded_delete_args())
@@ -2070,9 +2064,7 @@ def test_guarded_delete_plan_default_makes_no_mutation(
 def test_guarded_delete_apply_requires_yes(mock_guarded_mutation_service):
     """Destructive apply without --yes prompts; declining cancels the delete."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite()
-    )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite()
     mock_guarded_mutation_service.return_value = mock_instance
 
     result = runner.invoke(app, _guarded_delete_args("--apply"), input="n\n")
@@ -2085,14 +2077,10 @@ def test_guarded_delete_apply_requires_yes(mock_guarded_mutation_service):
 def test_guarded_delete_apply_yes_executes(mock_guarded_mutation_service):
     """--apply --yes deletes; a clean gate records no verification acceptance."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite()
-    )
-    mock_instance.apply_object_type_delete.return_value = (
-        _guarded_delete_composite(
-            applied=True,
-            readback={"status": "verified-removed", "detail": "not found"},
-        )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite()
+    mock_instance.apply_object_type_delete.return_value = _guarded_delete_composite(
+        applied=True,
+        readback={"status": "verified-removed", "detail": "not found"},
     )
     mock_guarded_mutation_service.return_value = mock_instance
 
@@ -2101,9 +2089,7 @@ def test_guarded_delete_apply_yes_executes(mock_guarded_mutation_service):
     assert result.exit_code == 0
     mock_instance.apply_object_type_delete.assert_called_once()
     assert (
-        mock_instance.apply_object_type_delete.call_args.kwargs[
-            "verification_accepted"
-        ]
+        mock_instance.apply_object_type_delete.call_args.kwargs["verification_accepted"]
         is False
     )
 
@@ -2123,11 +2109,9 @@ def test_guarded_delete_needs_verification_acceptance_recorded(
     )
     mock_instance = Mock()
     mock_instance.prepare_object_type_delete.return_value = gated
-    mock_instance.apply_object_type_delete.return_value = (
-        _guarded_delete_composite(
-            applied=True,
-            readback={"status": "verified-removed", "detail": "not found"},
-        )
+    mock_instance.apply_object_type_delete.return_value = _guarded_delete_composite(
+        applied=True,
+        readback={"status": "verified-removed", "detail": "not found"},
     )
     mock_guarded_mutation_service.return_value = mock_instance
 
@@ -2135,9 +2119,7 @@ def test_guarded_delete_needs_verification_acceptance_recorded(
 
     assert result.exit_code == 0
     assert (
-        mock_instance.apply_object_type_delete.call_args.kwargs[
-            "verification_accepted"
-        ]
+        mock_instance.apply_object_type_delete.call_args.kwargs["verification_accepted"]
         is True
     )
 
@@ -2163,19 +2145,17 @@ def test_guarded_delete_not_found_preflight_fails(mock_guarded_mutation_service)
 def test_guarded_delete_skip_impact_gate_forwarded(mock_guarded_mutation_service):
     """--skip-impact-gate is forwarded to the service as an explicit opt-out."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite(
-            impact={
-                "skipped": True,
-                "status": "skipped",
-                "reason": "--skip-impact-gate",
-            },
-            gate={
-                "impact_gate": "skipped-requested",
-                "verification_required": False,
-                "verification_accepted": False,
-            },
-        )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite(
+        impact={
+            "skipped": True,
+            "status": "skipped",
+            "reason": "--skip-impact-gate",
+        },
+        gate={
+            "impact_gate": "skipped-requested",
+            "verification_required": False,
+            "verification_accepted": False,
+        },
     )
     mock_guarded_mutation_service.return_value = mock_instance
 
@@ -2183,9 +2163,7 @@ def test_guarded_delete_skip_impact_gate_forwarded(mock_guarded_mutation_service
 
     assert result.exit_code == 0
     assert (
-        mock_instance.prepare_object_type_delete.call_args.kwargs[
-            "skip_impact_gate"
-        ]
+        mock_instance.prepare_object_type_delete.call_args.kwargs["skip_impact_gate"]
         is True
     )
 
@@ -2195,17 +2173,13 @@ def test_guarded_delete_apply_result_includes_readback(
 ):
     """The applied composite carries the verified-removed read-back."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite()
-    )
-    mock_instance.apply_object_type_delete.return_value = (
-        _guarded_delete_composite(
-            applied=True,
-            readback={
-                "status": "verified-removed",
-                "detail": "post-delete load reports the object type as not found",
-            },
-        )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite()
+    mock_instance.apply_object_type_delete.return_value = _guarded_delete_composite(
+        applied=True,
+        readback={
+            "status": "verified-removed",
+            "detail": "post-delete load reports the object type as not found",
+        },
     )
     mock_guarded_mutation_service.return_value = mock_instance
 
@@ -2224,9 +2198,7 @@ def test_guarded_delete_change_and_change_type_forwarded(
 ):
     """Explicit --change/--change-type reach the impact gate."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite()
-    )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite()
     mock_guarded_mutation_service.return_value = mock_instance
 
     result = runner.invoke(
@@ -2247,16 +2219,14 @@ def test_guarded_delete_plan_validation_error_exits(
 ):
     """A failed delete validation exits 1 before any confirmation prompt."""
     mock_instance = Mock()
-    mock_instance.prepare_object_type_delete.return_value = (
-        _guarded_delete_composite(
-            plan={
-                "mode": "dry-run",
-                "validation": {
-                    "status": "error",
-                    "errors": ["dependent link types still reference this type"],
-                },
-            }
-        )
+    mock_instance.prepare_object_type_delete.return_value = _guarded_delete_composite(
+        plan={
+            "mode": "dry-run",
+            "validation": {
+                "status": "error",
+                "errors": ["dependent link types still reference this type"],
+            },
+        }
     )
     mock_guarded_mutation_service.return_value = mock_instance
 

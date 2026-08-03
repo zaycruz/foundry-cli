@@ -82,9 +82,7 @@ class TestResolveErrorHint:
         assert resolve_error_hint("object-type-delete", exc=error) is None
 
     def test_generic_error_in_get_context_gets_no_hint(self):
-        assert (
-            resolve_error_hint("object-type-get", exc=RuntimeError("boom")) is None
-        )
+        assert resolve_error_hint("object-type-get", exc=RuntimeError("boom")) is None
 
     def test_upsert_validation_and_usage_entries(self):
         assert (
@@ -109,8 +107,7 @@ class TestResolveErrorHint:
 
     def test_unrelated_error_in_upsert_context_gets_no_hint(self):
         assert (
-            resolve_error_hint("object-type-upsert", exc=RuntimeError("boom"))
-            is None
+            resolve_error_hint("object-type-upsert", exc=RuntimeError("boom")) is None
         )
 
     def test_no_context_no_hint(self):
@@ -146,7 +143,14 @@ class TestDependencyBranchHint:
 
     def test_branch_name_failure_carries_rid_hint(self):
         result = self._invoke(
-            ["dependency", "object-type", ONTOLOGY_RID, "Employee", "--branch", "master"]
+            [
+                "dependency",
+                "object-type",
+                ONTOLOGY_RID,
+                "Employee",
+                "--branch",
+                "master",
+            ]
         )
         assert result.exit_code == 1
         envelope = _envelope(result)
@@ -222,7 +226,8 @@ class TestOntologyGetNotFoundHint:
                 "connection reset"
             )
             result = runner.invoke(
-                app, ["--agent", "ontology", "object-type-get", ONTOLOGY_RID, "Employee"]
+                app,
+                ["--agent", "ontology", "object-type-get", ONTOLOGY_RID, "Employee"],
             )
         assert result.exit_code == 1
         assert _hints(result) == []

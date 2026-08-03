@@ -238,8 +238,7 @@ def test_prepare_carries_coverage_gaps_into_caveats(mock_guarded_service):
     assert result["impact"]["status"] == "needs-verification"
     assert result["gate"]["verification_required"] is True
     assert any(
-        "partial" in caveat and "uncertain" in caveat
-        for caveat in result["caveats"]
+        "partial" in caveat and "uncertain" in caveat for caveat in result["caveats"]
     )
 
 
@@ -436,9 +435,7 @@ def test_prepare_delete_not_found_fails_typed(mock_guarded_service):
         patch("pltr.services.guarded_upsert.DependencyGraphService") as dependency_cls,
     ):
         with pytest.raises(ObjectTypeNotFoundError):
-            mock_guarded_service.prepare_object_type_delete(
-                **_prepare_delete_kwargs()
-            )
+            mock_guarded_service.prepare_object_type_delete(**_prepare_delete_kwargs())
 
     dependency_cls.assert_not_called()
     object_types.delete_object_type.assert_not_called()
@@ -447,17 +444,13 @@ def test_prepare_delete_not_found_fails_typed(mock_guarded_service):
 def test_prepare_delete_propagates_other_load_errors(mock_guarded_service):
     """Load failures that are not not-found propagate unchanged."""
     object_types = Mock()
-    object_types.load_object_type_state.side_effect = RuntimeError(
-        "permission denied"
-    )
+    object_types.load_object_type_state.side_effect = RuntimeError("permission denied")
     with patch(
         "pltr.services.guarded_upsert.ObjectTypeService",
         return_value=object_types,
     ):
         with pytest.raises(RuntimeError, match="permission denied") as exc_info:
-            mock_guarded_service.prepare_object_type_delete(
-                **_prepare_delete_kwargs()
-            )
+            mock_guarded_service.prepare_object_type_delete(**_prepare_delete_kwargs())
 
     assert not isinstance(exc_info.value, ObjectTypeNotFoundError)
     object_types.delete_object_type.assert_not_called()

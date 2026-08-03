@@ -249,9 +249,7 @@ class ProposalService(BaseService):
         """Lazily build the global-proposal delegate for the same profile."""
 
         if self._global_proposal_service is None:
-            self._global_proposal_service = GlobalProposalService(
-                profile=self.profile
-            )
+            self._global_proposal_service = GlobalProposalService(profile=self.profile)
         return self._global_proposal_service
 
     @staticmethod
@@ -394,9 +392,7 @@ class ProposalService(BaseService):
         """Dry-run plan for ``comment`` (code-pr only)."""
 
         self._require_reachable(proposal_type, ProposalAction.COMMENT)
-        return self._repository().create_pull_request_comment_plan(
-            proposal_id, message
-        )
+        return self._repository().create_pull_request_comment_plan(proposal_id, message)
 
     def comment(
         self,

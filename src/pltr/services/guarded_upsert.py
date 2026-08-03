@@ -299,8 +299,7 @@ class GuardedMutationService(BaseService):
             readback = {
                 "status": "not-verified",
                 "detail": (
-                    "read-back via SDK ontologies ObjectType.get failed: "
-                    f"{error}"
+                    f"read-back via SDK ontologies ObjectType.get failed: {error}"
                 ),
             }
 
@@ -442,16 +441,12 @@ class GuardedMutationService(BaseService):
             object_types.load_object_type_state(request["objectTypeId"])
             readback: Dict[str, Any] = {
                 "status": "not-verified",
-                "detail": (
-                    "object type still loads after the delete was applied"
-                ),
+                "detail": ("object type still loads after the delete was applied"),
             }
         except ObjectTypeNotFoundError:
             readback = {
                 "status": "verified-removed",
-                "detail": (
-                    "post-delete load reports the object type as not found"
-                ),
+                "detail": ("post-delete load reports the object type as not found"),
             }
 
         gate = prepared.setdefault("gate", {})

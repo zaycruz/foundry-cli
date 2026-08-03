@@ -112,6 +112,46 @@ def invocation_args(path: Tuple[str, ...]) -> List[str]:
     return args
 
 
+def _offline_documentation_service() -> MagicMock:
+    """Keep the all-command contract test offline."""
+    service = MagicMock()
+    service.topic.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+        "pages": [],
+    }
+    service.fetch_page.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+    }
+    service.summaries.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+        "sections": [],
+    }
+    service.search.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+        "results": [],
+    }
+    return service
+
+
+def _offline_developer_console_service() -> MagicMock:
+    """Keep developer-console commands offline in the contract test."""
+    service = MagicMock()
+    unavailable = {
+        "status": "unavailable",
+        "reason": "developer-console network disabled in contract test",
+    }
+    service.get_connection_context.return_value = unavailable
+    service.generate_react_scaffold.return_value = unavailable
+    service.generate_sdk.return_value = unavailable
+    service.get_sdk.return_value = unavailable
+    service.install_sdk_package.return_value = unavailable
+    return service
+
+
 def test_app_exposes_commands():
     """A silent zero-command walk would make every assertion below vacuous."""
     assert len(all_command_paths()) > 100
@@ -127,7 +167,17 @@ def test_agent_stdout_is_one_envelope(path: Tuple[str, ...]):
     # command down its error branch. That branch is exactly where the
     # concatenated-envelope bug lived, so it is the right thing to measure.
     argv = ["--agent", *path, *invocation_args(path)]
-    with patch("pltr.auth.storage.CredentialStorage", MagicMock()):
+    with (
+        patch("pltr.auth.storage.CredentialStorage", MagicMock()),
+        patch(
+            "pltr.commands.docs._service",
+            return_value=_offline_documentation_service(),
+        ),
+        patch(
+            "pltr.commands.dev_console.DeveloperConsoleService",
+            return_value=_offline_developer_console_service(),
+        ),
+    ):
         result = runner.invoke(app, argv, catch_exceptions=True)
 
     stdout = result.stdout
@@ -164,7 +214,17 @@ def test_most_commands_reach_their_body():
         if path[0] in NOT_INVOCABLE:
             continue
         argv = ["--agent", *path, *invocation_args(path)]
-        with patch("pltr.auth.storage.CredentialStorage", MagicMock()):
+        with (
+            patch("pltr.auth.storage.CredentialStorage", MagicMock()),
+            patch(
+                "pltr.commands.docs._service",
+                return_value=_offline_documentation_service(),
+            ),
+            patch(
+                "pltr.commands.dev_console.DeveloperConsoleService",
+                return_value=_offline_developer_console_service(),
+            ),
+        ):
             result = runner.invoke(app, argv, catch_exceptions=True)
         if result.stdout.strip():
             reached += 1

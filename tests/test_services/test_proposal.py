@@ -156,11 +156,10 @@ def test_provider_errors_map_to_stable_categories(error, expected_type):
 
 @pytest.fixture
 def delegates():
-    with patch(
-        "pltr.services.proposal.RepositoryService"
-    ) as repository_class, patch(
-        "pltr.services.proposal.GlobalProposalService"
-    ) as global_proposal_class:
+    with (
+        patch("pltr.services.proposal.RepositoryService") as repository_class,
+        patch("pltr.services.proposal.GlobalProposalService") as global_proposal_class,
+    ):
         yield repository_class, global_proposal_class
 
 
@@ -273,9 +272,7 @@ def test_create_global_proposal_defaults_merge_target_to_main(delegates):
     )
 
     assert (
-        global_proposal_class.return_value.create_proposal.call_args.kwargs[
-            "merge_to"
-        ]
+        global_proposal_class.return_value.create_proposal.call_args.kwargs["merge_to"]
         == "main"
     )
 
@@ -313,9 +310,7 @@ def test_list_code_pr_delegates_with_repository_filter(delegates):
     result = service.list(ProposalType.CODE_PR, parent_rid="repo-rid")
 
     assert result == [{"rid": "pr-1"}]
-    repository_class.return_value.list_pull_requests.assert_called_once_with(
-        "repo-rid"
-    )
+    repository_class.return_value.list_pull_requests.assert_called_once_with("repo-rid")
 
 
 @pytest.mark.parametrize("proposal_type", list(ProposalType))

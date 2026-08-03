@@ -113,7 +113,15 @@ def test_create_defaults_to_dry_run_plan(proposal_service):
             call(ProposalType.GLOBAL_PROPOSAL, "gp-1", parent_rid="ontology"),
         ),
         (
-            ["comment", "code-pr", "12", "Looks good", "--parent-rid", "repo", "--apply"],
+            [
+                "comment",
+                "code-pr",
+                "12",
+                "Looks good",
+                "--parent-rid",
+                "repo",
+                "--apply",
+            ],
             "comment",
             call(ProposalType.CODE_PR, "12", "Looks good", parent_rid="repo"),
         ),

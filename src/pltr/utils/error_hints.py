@@ -87,9 +87,7 @@ def _chain_error_names(exc: Optional[BaseException]) -> Iterator[str]:
             yield sdk_name
 
 
-def _is_branch_misuse(
-    exc: Optional[BaseException], entry: Mapping[str, Any]
-) -> bool:
+def _is_branch_misuse(exc: Optional[BaseException], entry: Mapping[str, Any]) -> bool:
     if entry.get("error_class") == "branch-not-found":
         return True
     return "BranchNotFound" in _chain_error_names(exc)
