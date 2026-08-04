@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestStreamsCommands:
@@ -17,7 +17,7 @@ class TestStreamsCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock StreamsService."""
-        with patch("pltr.commands.streams.StreamsService") as MockService:
+        with patch("foundry_cli.commands.streams.StreamsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc

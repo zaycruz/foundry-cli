@@ -3,7 +3,7 @@ Tests for authentication base classes.
 """
 
 import pytest
-from pltr.auth.base import (
+from foundry_cli.auth.base import (
     AuthProvider,
     AuthError,
     InvalidCredentialsError,

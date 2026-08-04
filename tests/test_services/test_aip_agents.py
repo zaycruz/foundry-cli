@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pltr.services.aip_agents import AipAgentsService
-from pltr.utils.pagination import PaginationConfig
+from foundry_cli.services.aip_agents import AipAgentsService
+from foundry_cli.utils.pagination import PaginationConfig
 
 
 class TestAipAgentsService:
@@ -22,7 +22,7 @@ class TestAipAgentsService:
     @pytest.fixture
     def service(self, mock_client):
         """Create AipAgentsService with mocked client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = mock_client
             service = AipAgentsService()
             return service

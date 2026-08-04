@@ -11,14 +11,14 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     AnalysisContext,
     BudgetExhausted,
     DependencyGraphService,
     DependencyTarget,
     DiscoveryBudget,
 )
-from pltr.services.dependency_internal_specs import (
+from foundry_cli.services.dependency_internal_specs import (
     ACP_OPERATION_SPECS,
     CONJURE_POST_OPERATION_SPECS,
     CONSUMER_CHARACTERIZATION_OPERATION_SPECS,
@@ -26,13 +26,13 @@ from pltr.services.dependency_internal_specs import (
     TRANSFORM_LINEAGE_GET_OPERATION_SPECS,
     InternalOperationSpec,
 )
-from pltr.services.dependency_providers import (
+from foundry_cli.services.dependency_providers import (
     ConjureRestProvider,
     ResultSemantics,
     SdkProvider,
     classify_conjure_response,
 )
-from pltr.services.foundry_internal_client import (
+from foundry_cli.services.foundry_internal_client import (
     FoundryInternalClient,
     TokenExpiredError,
 )

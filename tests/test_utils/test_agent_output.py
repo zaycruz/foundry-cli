@@ -5,7 +5,7 @@ from io import StringIO
 
 import pytest
 
-from pltr.utils.agent_output import (
+from foundry_cli.utils.agent_output import (
     AgentPolicyError,
     configure_agent_settings,
     flush_agent_output,
@@ -13,7 +13,7 @@ from pltr.utils.agent_output import (
     render_agent_json,
     require_confirmation,
 )
-from pltr.utils.formatting import OutputFormatter
+from foundry_cli.utils.formatting import OutputFormatter
 
 
 def test_agent_json_has_stable_envelope_and_redacts_credentials() -> None:
@@ -24,7 +24,7 @@ def test_agent_json_has_stable_envelope_and_redacts_credentials() -> None:
     )
 
     payload = json.loads(rendered)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"] == {"name": "example", "token": "[REDACTED]"}
     assert payload["meta"] == {"operation": "test"}
     assert payload["warnings"] == []
@@ -62,7 +62,7 @@ def test_formatter_uses_agent_envelope_when_enabled(capsys) -> None:
     assert rendered is not None
     assert capsys.readouterr().out == ""
     payload = json.loads(rendered)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"] == {"value": 3}
     assert payload["meta"]["result_type"] == "dict"
 
@@ -104,8 +104,8 @@ def test_redact_value_scrubs_credentials_embedded_in_strings() -> None:
 
 
 def test_buffer_agent_exception_emits_typed_foundry_error() -> None:
-    from pltr.services.errors import FoundryApiError
-    from pltr.utils.agent_output import buffer_agent_exception
+    from foundry_cli.services.errors import FoundryApiError
+    from foundry_cli.utils.agent_output import buffer_agent_exception
 
     configure_agent_settings(enabled=True)
     try:

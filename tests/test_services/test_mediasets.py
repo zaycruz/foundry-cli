@@ -5,13 +5,13 @@ Tests for mediasets service.
 import pytest
 from unittest.mock import Mock, MagicMock, patch
 
-from pltr.services.mediasets import MediaSetsService
+from foundry_cli.services.mediasets import MediaSetsService
 
 
 @pytest.fixture
 def mock_mediasets_service():
     """Create a mocked MediaSetsService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_media_sets = Mock()
@@ -48,7 +48,7 @@ def sample_media_reference_response():
 
 def test_mediasets_service_initialization():
     """Test MediaSetsService initialization."""
-    with patch("pltr.services.base.AuthManager"):
+    with patch("foundry_cli.services.base.AuthManager"):
         service = MediaSetsService()
         assert service is not None
 

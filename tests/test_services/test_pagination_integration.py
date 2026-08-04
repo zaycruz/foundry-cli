@@ -3,8 +3,8 @@ Integration tests for pagination in BaseService.
 """
 
 from unittest.mock import Mock
-from src.pltr.services.base import BaseService
-from src.pltr.utils.pagination import PaginationConfig, PaginationResult
+from src.foundry_cli.services.base import BaseService
+from src.foundry_cli.utils.pagination import PaginationConfig, PaginationResult
 
 
 class MockIterator:

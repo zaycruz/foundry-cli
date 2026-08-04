@@ -3,7 +3,7 @@ Tests for profile management.
 """
 
 import pytest
-from pltr.config.profiles import ProfileManager
+from foundry_cli.config.profiles import ProfileManager
 
 
 class TestProfileManager:
@@ -145,7 +145,7 @@ class TestProfileManager:
 
         # Environment variable should take precedence
         with pytest.MonkeyPatch.context() as m:
-            m.setenv("PLTR_PROFILE", "env_profile")
+            m.setenv("FOUNDRY_PROFILE", "env_profile")
 
             assert manager.get_active_profile() == "env_profile"
 
@@ -157,7 +157,7 @@ class TestProfileManager:
         manager.set_default("default_profile")
 
         with pytest.MonkeyPatch.context() as m:
-            m.setenv("PLTR_PROFILE", "nonexistent_profile")
+            m.setenv("FOUNDRY_PROFILE", "nonexistent_profile")
 
             # Should fall back to default since env profile doesn't exist
             assert manager.get_active_profile() == "default_profile"
@@ -170,7 +170,7 @@ class TestProfileManager:
 
     def test_profiles_persistence(self, temp_config_dir):
         """Test that profiles are persisted across instances."""
-        from pltr.config.settings import Settings
+        from foundry_cli.config.settings import Settings
 
         config_dir = temp_config_dir / "test_profiles"
 
@@ -194,7 +194,7 @@ class TestProfileManager:
 
     def test_corrupted_profiles_file_fallback(self, temp_config_dir):
         """Test that corrupted profiles file falls back to empty state."""
-        from pltr.config.settings import Settings
+        from foundry_cli.config.settings import Settings
 
         config_dir = temp_config_dir / "test_corrupted_profiles"
         config_dir.mkdir(parents=True)

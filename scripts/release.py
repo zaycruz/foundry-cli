@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Release script for pltr-cli
+Release script for foundry-cli
 
 Usage:
     # Interactive mode (for humans)
@@ -59,11 +59,11 @@ def update_version_in_pyproject(new_version):
 
 
 def update_version_in_init_py(new_version):
-    """Update __version__ in src/pltr/__init__.py"""
-    init_py_path = Path("src/pltr/__init__.py")
+    """Update __version__ in src/foundry_cli/__init__.py"""
+    init_py_path = Path("src/foundry_cli/__init__.py")
 
     if not init_py_path.exists():
-        print("Error: src/pltr/__init__.py not found")
+        print("Error: src/foundry_cli/__init__.py not found")
         sys.exit(1)
 
     # Read the current content
@@ -75,19 +75,19 @@ def update_version_in_init_py(new_version):
     if re.search(pattern, content):
         updated_content = re.sub(pattern, replacement, content)
         init_py_path.write_text(updated_content)
-        print(f"Updated src/pltr/__init__.py __version__ to {new_version}")
+        print(f"Updated src/foundry_cli/__init__.py __version__ to {new_version}")
         return
 
     metadata_pattern = r'__version__ = version\("foundry-cli"\)'
     if re.search(metadata_pattern, content):
         print(
-            "src/pltr/__init__.py derives __version__ from package metadata; "
+            "src/foundry_cli/__init__.py derives __version__ from package metadata; "
             "pyproject.toml is the version source"
         )
         return
 
     print(
-        "Error: Could not find a supported __version__ definition in src/pltr/__init__.py"
+        "Error: Could not find a supported __version__ definition in src/foundry_cli/__init__.py"
     )
     sys.exit(1)
 
@@ -177,7 +177,7 @@ def update_uv_lock():
 def create_release_commit_and_tag(version, release_type, push_mode="ask"):
     """Create release commit and tag"""
     # Stage the version file changes
-    run_git_command("git add pyproject.toml src/pltr/__init__.py uv.lock")
+    run_git_command("git add pyproject.toml src/foundry_cli/__init__.py uv.lock")
 
     # Create release commit
     commit_message = f"{release_type}: Release version {version}"
@@ -254,7 +254,7 @@ def _publish_notice() -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create a release for pltr-cli")
+    parser = argparse.ArgumentParser(description="Create a release for foundry-cli")
     parser.add_argument("--version", help="Specific version to release (e.g., 1.0.0)")
     parser.add_argument(
         "--type",
@@ -335,7 +335,7 @@ def main():
     if args.dry_run:
         print("\nDry run mode - would perform these actions:")
         print(f"1. Update pyproject.toml version to {new_version}")
-        print(f"2. Update src/pltr/__init__.py __version__ to {new_version}")
+        print(f"2. Update src/foundry_cli/__init__.py __version__ to {new_version}")
         print("3. Update uv.lock file")
         print(f"4. Create git commit: '{release_type}: Release version {new_version}'")
         print(f"5. Create git tag: v{new_version}")
@@ -363,7 +363,7 @@ def main():
     print(f"\nAbout to create release {new_version}")
     print("This will:")
     print(f"1. Update pyproject.toml version to {new_version}")
-    print(f"2. Update src/pltr/__init__.py __version__ to {new_version}")
+    print(f"2. Update src/foundry_cli/__init__.py __version__ to {new_version}")
     print("3. Update uv.lock file")
     print(f"4. Create git commit and tag v{new_version}")
     if args.push:

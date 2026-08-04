@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pltr.services.dev_console import (
+from foundry_cli.services.dev_console import (
     COORDINATES_UNRESOLVED_REASON,
     DeveloperConsoleService,
     SdkDefinitionDriftError,
@@ -40,7 +40,7 @@ def _definition(**overrides):
 
 @pytest.fixture()
 def storage():
-    with patch("pltr.services.dev_console.CredentialStorage") as storage_cls:
+    with patch("foundry_cli.services.dev_console.CredentialStorage") as storage_cls:
         storage_cls.return_value.get_profile.return_value = {
             "host": "foundry.example.com",
             "token": "abc",
@@ -183,7 +183,7 @@ def test_build_install_plan_resolves_coordinates_and_registry_urls(storage):
 
 
 def test_install_defaults_to_dry_run_and_executes_nothing(storage):
-    with patch("pltr.services.dev_console.subprocess.run") as run:
+    with patch("foundry_cli.services.dev_console.subprocess.run") as run:
         result = _planning_service().install_sdk_package(APP_RID)
 
     assert result["status"] == "dry-run"
@@ -191,7 +191,7 @@ def test_install_defaults_to_dry_run_and_executes_nothing(storage):
 
 
 def test_explicit_dry_run_wins_over_yes(storage):
-    with patch("pltr.services.dev_console.subprocess.run") as run:
+    with patch("foundry_cli.services.dev_console.subprocess.run") as run:
         result = _planning_service().install_sdk_package(
             APP_RID, yes=True, dry_run=True
         )
@@ -217,7 +217,7 @@ def test_unrecognized_definition_shape_reports_residual_gap(storage):
 def test_pip_install_with_target_uses_current_interpreter_without_sudo(storage):
     completed = Mock(returncode=0, stdout="ok", stderr="")
     with patch(
-        "pltr.services.dev_console.subprocess.run", return_value=completed
+        "foundry_cli.services.dev_console.subprocess.run", return_value=completed
     ) as run:
         result = _planning_service().install_sdk_package(
             APP_RID, target=Path("/tmp/sdk-target")
@@ -248,7 +248,7 @@ def test_npm_without_target_is_refused_and_marks_failure(storage):
     ]
     completed = Mock(returncode=0, stdout="ok", stderr="")
     with patch(
-        "pltr.services.dev_console.subprocess.run", return_value=completed
+        "foundry_cli.services.dev_console.subprocess.run", return_value=completed
     ) as run:
         result = service.install_sdk_package(APP_RID, yes=True)
 
@@ -264,7 +264,7 @@ def test_pip_without_target_refused_outside_virtualenv(storage):
         (200, _definition(packages=[{"type": "pypi", "name": "my-app-sdk"}]), "{}"),
     ]
     with (
-        patch("pltr.services.dev_console.subprocess.run") as run,
+        patch("foundry_cli.services.dev_console.subprocess.run") as run,
         patch.object(sys, "prefix", "/usr"),
         patch.object(sys, "base_prefix", "/usr"),
     ):
@@ -282,7 +282,7 @@ def test_subprocess_failure_marks_install_failed(storage):
         (200, _definition(packages=[{"type": "pypi", "name": "my-app-sdk"}]), "{}"),
     ]
     completed = Mock(returncode=1, stdout="", stderr="boom")
-    with patch("pltr.services.dev_console.subprocess.run", return_value=completed):
+    with patch("foundry_cli.services.dev_console.subprocess.run", return_value=completed):
         result = service.install_sdk_package(APP_RID, target=Path("/tmp/t"))
 
     assert result["status"] == "failed"
@@ -478,9 +478,9 @@ def test_sdk_generate_apply_posts_exact_contract_body_and_polls_to_success():
         (200, _sdks_page(_sdk_record_payload(npm_status="success")), "{}"),
     ]
     with (
-        patch("pltr.services.dev_console.time.sleep") as sleep,
+        patch("foundry_cli.services.dev_console.time.sleep") as sleep,
         patch(
-            "pltr.services.dev_console.time.monotonic",
+            "foundry_cli.services.dev_console.time.monotonic",
             side_effect=[0.0, 5.0, 30.0],
         ),
     ):
@@ -519,9 +519,9 @@ def test_sdk_generate_apply_tolerates_minted_record_missing_from_a_poll_page():
         (200, _sdks_page(_sdk_record_payload(npm_status="success")), "{}"),
     ]
     with (
-        patch("pltr.services.dev_console.time.sleep"),
+        patch("foundry_cli.services.dev_console.time.sleep"),
         patch(
-            "pltr.services.dev_console.time.monotonic",
+            "foundry_cli.services.dev_console.time.monotonic",
             side_effect=[0.0, 5.0, 30.0],
         ),
     ):
@@ -552,7 +552,7 @@ def test_sdk_generate_apply_non_success_terminal_status_is_failed():
         (200, _sdk_record_payload(npm_status="requested"), "{}"),
         (200, _sdks_page(_sdk_record_payload(npm_status="failure")), "{}"),
     ]
-    with patch("pltr.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]):
+    with patch("foundry_cli.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]):
         result = service.generate_sdk(APP_RID, apply=True)
 
     assert result["status"] == "failed"
@@ -567,9 +567,9 @@ def test_sdk_generate_apply_times_out_while_still_pending():
         (200, _sdks_page(_sdk_record_payload(npm_status="inProgress")), "{}"),
     ]
     with (
-        patch("pltr.services.dev_console.time.sleep"),
+        patch("foundry_cli.services.dev_console.time.sleep"),
         patch(
-            "pltr.services.dev_console.time.monotonic",
+            "foundry_cli.services.dev_console.time.monotonic",
             side_effect=[0.0, 200.0],
         ),
     ):
@@ -587,7 +587,7 @@ def test_sdk_generate_apply_fails_loud_when_poll_page_drifts():
         (200, _sdk_record_payload(npm_status="requested"), "{}"),
         (200, {"unexpected": []}, "{}"),
     ]
-    with patch("pltr.services.dev_console.time.monotonic", side_effect=[0.0]):
+    with patch("foundry_cli.services.dev_console.time.monotonic", side_effect=[0.0]):
         with pytest.raises(SdkDefinitionDriftError, match="'sdks' list"):
             service.generate_sdk(APP_RID, apply=True)
 

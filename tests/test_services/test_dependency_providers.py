@@ -7,26 +7,26 @@ from unittest.mock import Mock
 
 import pytest
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     SDK_OPERATION_SPECS,
     AnalysisContext,
     DependencyGraphService,
     DependencyTarget,
     DiscoveryBudget,
 )
-from pltr.services.dependency_internal_specs import (
+from foundry_cli.services.dependency_internal_specs import (
     ACP_OPERATION_SPECS,
     CONJURE_POST_OPERATION_SPECS,
     CONSUMER_CHARACTERIZATION_OPERATION_SPECS,
     GRAPHQL_OPERATION_SPECS,
     TRANSFORM_LINEAGE_GET_OPERATION_SPECS,
 )
-from pltr.services.dependency_providers import (
+from foundry_cli.services.dependency_providers import (
     ConjureRestProvider,
     ProviderResult,
     SdkProvider,
 )
-from pltr.services.foundry_internal_client import GraphQLResult
+from foundry_cli.services.foundry_internal_client import GraphQLResult
 
 
 def _context() -> AnalysisContext:

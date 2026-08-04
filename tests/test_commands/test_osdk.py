@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 runner = CliRunner()
@@ -69,7 +69,7 @@ EXAMPLES = {
 
 
 def test_context_command():
-    with patch("pltr.commands.osdk.OsdkService") as service:
+    with patch("foundry_cli.commands.osdk.OsdkService") as service:
         service.return_value.sdk_context.return_value = CONTEXT
         result = runner.invoke(app, ["osdk", "context", "--profile", "qa"])
     assert result.exit_code == 0, result.output
@@ -80,7 +80,7 @@ def test_context_command():
 
 
 def test_context_ambiguous_exits_nonzero_and_lists_choices():
-    with patch("pltr.commands.osdk.OsdkService") as service:
+    with patch("foundry_cli.commands.osdk.OsdkService") as service:
         service.return_value.sdk_context.return_value = {
             "status": "ambiguous",
             "reason": "multiple ontologies are visible",
@@ -96,7 +96,7 @@ def test_context_ambiguous_exits_nonzero_and_lists_choices():
 
 
 def test_examples_command_marks_generated_bindings():
-    with patch("pltr.commands.osdk.OsdkService") as service:
+    with patch("foundry_cli.commands.osdk.OsdkService") as service:
         service.return_value.sdk_examples.return_value = EXAMPLES
         result = runner.invoke(app, ["osdk", "examples"])
     assert result.exit_code == 0, result.output
@@ -108,12 +108,12 @@ def test_examples_command_marks_generated_bindings():
 
 
 def test_examples_agent_envelope():
-    with patch("pltr.commands.osdk.OsdkService") as service:
+    with patch("foundry_cli.commands.osdk.OsdkService") as service:
         service.return_value.sdk_examples.return_value = EXAMPLES
         result = runner.invoke(app, ["--agent", "osdk", "examples"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"]["binding_examples"][0]["generated"] is True
     assert payload["meta"]["result_type"] == "osdk-examples"
 
@@ -124,7 +124,7 @@ def test_examples_invalid_language_rejected():
 
 
 def test_osdk_commands_registered():
-    from pltr.capabilities import registered_command_paths
+    from foundry_cli.capabilities import registered_command_paths
 
     paths = registered_command_paths()
     assert {"osdk context", "osdk examples"} <= paths

@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch, mock_open
 from typer.testing import CliRunner
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestFunctionsCommands:
@@ -17,7 +17,7 @@ class TestFunctionsCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock FunctionsService."""
-        with patch("pltr.commands.functions.FunctionsService") as MockService:
+        with patch("foundry_cli.commands.functions.FunctionsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc
@@ -129,7 +129,7 @@ class TestFunctionsCommands:
         # Assert
         assert result.exit_code == 0
         # Verify service was initialized with profile
-        from pltr.commands.functions import FunctionsService
+        from foundry_cli.commands.functions import FunctionsService
 
         FunctionsService.assert_called_with(profile="test-profile")
 
@@ -549,7 +549,7 @@ class TestFunctionsCommands:
         # Assert
         assert result.exit_code == 0
         # Verify service was initialized with profile
-        from pltr.commands.functions import FunctionsService
+        from foundry_cli.commands.functions import FunctionsService
 
         FunctionsService.assert_called_with(profile="test-profile")
 
@@ -640,7 +640,7 @@ class TestFunctionsSearchCommand:
     @pytest.fixture
     def mock_service(self):
         """Create mock FunctionsService."""
-        with patch("pltr.commands.functions.FunctionsService") as MockService:
+        with patch("foundry_cli.commands.functions.FunctionsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc

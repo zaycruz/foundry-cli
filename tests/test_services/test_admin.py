@@ -5,7 +5,7 @@ Tests for Admin service.
 import pytest
 from unittest.mock import Mock
 
-from pltr.services.admin import AdminService
+from foundry_cli.services.admin import AdminService
 
 
 class TestAdminService:

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from foundry_sdk._core import ResourceIterator
 from unittest.mock import Mock, patch
-from pltr.services.models import ModelsService
+from foundry_cli.services.models import ModelsService
 
 
 class TestModelsService:
@@ -23,7 +23,7 @@ class TestModelsService:
     @pytest.fixture
     def service(self, mock_client):
         """Create ModelsService with mocked client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = mock_client
             service = ModelsService()
             return service

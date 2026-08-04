@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pltr.services.proposal import (
+from foundry_cli.services.proposal import (
     MCP_VERIFIED_CAPABILITIES,
     SDK_REACHABLE_CAPABILITIES,
     ProposalAction,
@@ -157,8 +157,8 @@ def test_provider_errors_map_to_stable_categories(error, expected_type):
 @pytest.fixture
 def delegates():
     with (
-        patch("pltr.services.proposal.RepositoryService") as repository_class,
-        patch("pltr.services.proposal.GlobalProposalService") as global_proposal_class,
+        patch("foundry_cli.services.proposal.RepositoryService") as repository_class,
+        patch("foundry_cli.services.proposal.GlobalProposalService") as global_proposal_class,
     ):
         yield repository_class, global_proposal_class
 

@@ -12,9 +12,9 @@ from typing import Any, Mapping, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_REFERENCE_DIR = PROJECT_ROOT / "skills" / "pltr-cli" / "reference"
+DEFAULT_REFERENCE_DIR = PROJECT_ROOT / "skills" / "foundry-cli" / "reference"
 TOKEN_RE = re.compile(r""""[^"]*"|'[^']*'|`[^`]*`|[^\s]+""")
-PLTR_RE = re.compile(r"(?<![\w-])pltr\b(?P<rest>[^\n`]*)")
+FOUNDRY_RE = re.compile(r"(?<![\w-])foundry\b(?P<rest>[^\n`]*)")
 COMMAND_TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
@@ -62,7 +62,7 @@ def load_manifest(path: Path) -> frozenset[str]:
     if not path.is_file():
         raise DriftCheckError(
             f"Manifest file not found: {path}. "
-            "Run `uv run pltr agent-manifest` or pass --manifest PATH."
+            "Run `uv run foundry agent-manifest` or pass --manifest PATH."
         )
 
     try:
@@ -79,21 +79,21 @@ def load_manifest(path: Path) -> frozenset[str]:
 def load_manifest_from_cli(project_root: Path = PROJECT_ROOT) -> frozenset[str]:
     """Load every visible executable command from the live CLI tree.
 
-    `pltr agent-manifest` contains only typed commands that are safe for
+    `foundry agent-manifest` contains only typed commands that are safe for
     dynamic agent-tool registration. The skill reference covers the complete
     CLI, so its drift gate must inspect the complete Click surface instead.
     """
     _ = project_root
     from typer.main import get_command
 
-    from pltr.cli import app
-    from pltr.commands.agent_manifest import iter_executable_commands
+    from foundry_cli.cli import app
+    from foundry_cli.commands.agent_manifest import iter_executable_commands
 
     return frozenset(path for path, _ in iter_executable_commands(get_command(app)))
 
 
-def _tokens_after_pltr(line: str) -> list[str]:
-    match = PLTR_RE.search(line)
+def _tokens_after_foundry(line: str) -> list[str]:
+    match = FOUNDRY_RE.search(line)
     if match is None:
         return []
     return TOKEN_RE.findall(match.group("rest"))
@@ -138,7 +138,7 @@ def extract_reference_paths(
     for document in sorted(reference_dir.glob("*.md")):
         paths: set[str] = set()
         for line in document.read_text().splitlines():
-            tokens = _tokens_after_pltr(line)
+            tokens = _tokens_after_foundry(line)
             path = _path_for_invocation(tokens, manifest_paths)
             if path is not None:
                 paths.add(path)

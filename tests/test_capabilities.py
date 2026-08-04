@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from pltr.capabilities import (
+from foundry_cli.capabilities import (
     CAPABILITIES,
     ManifestValidationError,
     capability_manifest,

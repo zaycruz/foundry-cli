@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from pltr.services.documentation import (
+from foundry_cli.services.documentation import (
     DocumentationService,
     _normalize_page_path,
     extract_code_blocks,

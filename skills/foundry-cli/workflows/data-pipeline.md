@@ -1,0 +1,245 @@
+# Data Pipeline Workflows
+
+ETL pipelines, scheduled jobs, and data quality workflows.
+
+## ETL Pipeline Script
+
+```bash
+#!/bin/bash
+# pipeline.sh - Daily data extraction pipeline
+
+# Set environment
+export FOUNDRY_TOKEN="$PRODUCTION_TOKEN"
+export FOUNDRY_HOST="foundry.company.com"
+
+# 1. Extract data
+echo "Extracting daily sales data..."
+foundry sql execute "
+  SELECT date, product_id, quantity, revenue
+  FROM sales_data
+  WHERE date = CURRENT_DATE - 1
+" --format csv --output daily_sales.csv
+
+# 2. Extract related data
+echo "Extracting product information..."
+foundry ontology object-list ri.ontology.main.ontology.products Product \
+  --properties "id,name,category,price" \
+  --format json --output products.json
+
+# 3. Generate summary report
+echo "Generating summary..."
+foundry sql execute "
+  SELECT
+    category,
+    SUM(quantity) as total_quantity,
+    SUM(revenue) as total_revenue,
+    COUNT(DISTINCT product_id) as unique_products
+  FROM sales_data s
+  JOIN product_data p ON s.product_id = p.id
+  WHERE s.date = CURRENT_DATE - 1
+  GROUP BY category
+  ORDER BY total_revenue DESC
+" --format table
+
+echo "Pipeline completed."
+```
+
+## Data Quality Monitoring
+
+```bash
+#!/bin/bash
+# data_quality_check.sh
+
+DATASET="critical_dataset"
+
+# 1. Check for null values
+echo "Checking nulls..."
+foundry sql execute "
+  SELECT
+    'null_check' as check_type,
+    SUM(CASE WHEN important_field IS NULL THEN 1 ELSE 0 END) as null_count,
+    COUNT(*) as total_count
+  FROM $DATASET
+"
+
+# 2. Check for duplicates
+echo "Checking duplicates..."
+foundry sql execute "
+  SELECT
+    'duplicate_check' as check_type,
+    COUNT(*) - COUNT(DISTINCT id) as duplicate_count
+  FROM $DATASET
+"
+
+# 3. Check data freshness
+echo "Checking freshness..."
+foundry sql execute "
+  SELECT
+    'freshness_check' as check_type,
+    MAX(updated_date) as latest_update,
+    DATEDIFF(CURRENT_DATE, MAX(updated_date)) as days_old
+  FROM $DATASET
+"
+
+# 4. Export data profile
+foundry sql execute "
+  SELECT
+    COUNT(*) as total_rows,
+    COUNT(DISTINCT id) as unique_ids,
+    MIN(created_date) as earliest_record,
+    MAX(created_date) as latest_record
+  FROM $DATASET
+" --format json --output data_profile.json
+```
+
+## CI/CD Data Validation
+
+```bash
+#!/bin/bash
+# validate_data.sh - Use in CI/CD pipeline
+set -e
+
+echo "Validating data quality..."
+
+# Check row counts
+ROW_COUNT=$(foundry sql execute "SELECT COUNT(*) as count FROM production_table" --format json | jq -r '.[0].count')
+
+if [ "$ROW_COUNT" -lt 1000 ]; then
+  echo "ERROR: Row count too low: $ROW_COUNT"
+  exit 1
+fi
+
+# Check for nulls
+NULL_COUNT=$(foundry sql execute "SELECT COUNT(*) as count FROM production_table WHERE critical_field IS NULL" --format json | jq -r '.[0].count')
+
+if [ "$NULL_COUNT" -gt 0 ]; then
+  echo "ERROR: Found $NULL_COUNT null values"
+  exit 1
+fi
+
+echo "Validation passed!"
+```
+
+## Build Management
+
+```bash
+# Search recent builds
+foundry orchestration builds search
+
+# Get build details
+foundry orchestration builds get ri.orchestration.main.build.abc123
+
+# List jobs in build
+foundry orchestration builds jobs ri.orchestration.main.build.abc123
+
+# Create new build
+foundry orchestration builds create '{"dataset_rid": "ri.foundry.main.dataset.abc"}' \
+  --branch production --notifications
+
+# Cancel build if needed
+foundry orchestration builds cancel ri.orchestration.main.build.abc123
+```
+
+## Schedule Management
+
+### Create Daily Schedule
+
+```bash
+foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.daily-data"}' \
+  --name "Daily ETL Pipeline" \
+  --description "Automated daily data processing" \
+  --trigger '{"type": "CRON", "expression": "0 2 * * *"}'
+```
+
+### Manage Schedules
+
+```bash
+# Get schedule info
+foundry orchestration schedules get ri.orchestration.main.schedule.daily-etl
+
+# Run immediately
+foundry orchestration schedules run ri.orchestration.main.schedule.daily-etl
+
+# Pause for maintenance
+foundry orchestration schedules pause ri.orchestration.main.schedule.daily-etl
+
+# Resume
+foundry orchestration schedules unpause ri.orchestration.main.schedule.daily-etl
+
+# Update schedule
+foundry orchestration schedules replace ri.orchestration.main.schedule.daily-etl \
+  '{"type": "BUILD", "target": "ri.foundry.main.dataset.new-pipeline"}' \
+  --name "Updated ETL"
+
+# Delete schedule
+foundry orchestration schedules delete ri.orchestration.main.schedule.old-schedule --yes
+```
+
+## Job Monitoring
+
+```bash
+#!/bin/bash
+# monitor_jobs.sh
+
+BUILD_RID="ri.orchestration.main.build.abc123"
+
+# Get build overview
+foundry orchestration builds get $BUILD_RID
+
+# List all jobs
+foundry orchestration builds jobs $BUILD_RID --format json --output jobs.json
+
+# Get running jobs
+JOB_RIDS=$(cat jobs.json | jq -r '.[] | select(.status == "RUNNING") | .rid' | tr '\n' ',' | sed 's/,$//')
+if [ ! -z "$JOB_RIDS" ]; then
+  foundry orchestration jobs get-batch "$JOB_RIDS"
+fi
+```
+
+## Scheduled Data Exports
+
+```bash
+#!/bin/bash
+# daily_report.sh - Run via cron at 6 AM
+# 0 6 * * * /path/to/daily_report.sh
+
+DATE=$(date +%Y%m%d)
+
+# Export daily metrics
+foundry sql execute "
+  SELECT date, total_sales, total_customers, avg_order_value
+  FROM daily_metrics
+  WHERE date = CURRENT_DATE - 1
+" --format csv --output "daily_report_${DATE}.csv"
+
+echo "Report generated: daily_report_${DATE}.csv"
+```
+
+## External Data Imports
+
+```bash
+# List connections
+foundry connectivity connection list
+
+# List existing file imports for a connection
+foundry connectivity import list-file \
+  --connection ri.conn.main.connection.123 \
+  --format json
+
+# Inspect an existing table import
+foundry connectivity import get-table ri.import.main.table.456 \
+  --connection ri.conn.main.connection.123 \
+  --format json
+```
+
+The pinned SDK requires connection-specific typed models to create imports.
+The generic file/table creation commands are therefore not exposed.
+
+## Best Practices
+
+1. **Use transactions**: For atomic dataset operations
+2. **Set appropriate timeouts**: Increase for complex operations
+3. **Monitor builds**: Check job status for failures
+4. **Use dry-run**: Test copy operations before executing
+5. **Log outputs**: Save command outputs for debugging
+6. **Verify auth first**: Run `foundry verify` at script start

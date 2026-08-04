@@ -5,7 +5,7 @@ Simple integration tests to verify basic CLI functionality.
 import pytest
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestSimpleIntegration:
@@ -20,7 +20,7 @@ class TestSimpleIntegration:
         """Test that help command works."""
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "pltr" in result.output.lower() or "foundry" in result.output.lower()
+        assert "foundry" in result.output.lower()
 
     def test_configure_help_works(self, runner):
         """Test that configure help works."""

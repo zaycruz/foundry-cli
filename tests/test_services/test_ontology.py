@@ -8,8 +8,8 @@ import pytest
 import requests
 from unittest.mock import Mock, patch
 
-from pltr.services.errors import FoundryApiError
-from pltr.services.ontology import (
+from foundry_cli.services.errors import FoundryApiError
+from foundry_cli.services.ontology import (
     OntologyService,
     ObjectTypeService,
     OntologyObjectService,
@@ -28,7 +28,7 @@ def _http_error(status_code: int, message: str) -> requests.HTTPError:
 @pytest.fixture
 def mock_ontology_service():
     """Create a mocked OntologyService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -45,7 +45,7 @@ def mock_ontology_service():
 @pytest.fixture
 def mock_object_type_service():
     """Create a mocked ObjectTypeService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -65,7 +65,7 @@ def mock_object_type_service():
 @pytest.fixture
 def mock_ontology_object_service():
     """Create a mocked OntologyObjectService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -83,7 +83,7 @@ def mock_ontology_object_service():
 @pytest.fixture
 def mock_action_service():
     """Create a mocked ActionService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -100,7 +100,7 @@ def mock_action_service():
 @pytest.fixture
 def mock_query_service():
     """Create a mocked QueryService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -197,7 +197,7 @@ def sample_query_result():
 # OntologyService Tests
 def test_ontology_service_initialization():
     """Test OntologyService initialization."""
-    with patch("pltr.services.base.AuthManager"):
+    with patch("foundry_cli.services.base.AuthManager"):
         service = OntologyService()
         assert service is not None
         assert service.auth_manager is not None
@@ -331,7 +331,7 @@ def test_upsert_object_type_dry_run_is_the_default(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -375,7 +375,7 @@ def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -465,7 +465,7 @@ def test_upsert_object_type_apply_reports_unverified_read_back(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -615,7 +615,7 @@ def test_upsert_object_type_dry_run_plans_update_for_existing_type(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -672,7 +672,7 @@ def test_upsert_object_type_apply_updates_existing_type(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -717,7 +717,7 @@ def test_upsert_object_type_update_fails_when_state_cannot_load(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="Could not load the current state"),
@@ -746,7 +746,7 @@ def test_upsert_object_type_update_noop_skips_modify(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -784,7 +784,7 @@ def test_upsert_object_type_update_refuses_backing_dataset_change(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="cannot change the backing dataset"),
@@ -813,7 +813,7 @@ def test_upsert_object_type_update_refuses_primary_key_change(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="cannot change the primary key"),
@@ -841,7 +841,7 @@ def test_upsert_object_type_surfaces_missing_dataset_schema(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(
@@ -884,7 +884,7 @@ def test_delete_object_type_dry_run_is_the_default(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -916,7 +916,7 @@ def test_delete_object_type_apply_verifies_gone(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -950,7 +950,7 @@ def test_delete_object_type_apply_reports_still_present(mock_object_type_service
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -977,7 +977,7 @@ def test_upsert_link_type_builds_verified_one_to_many_shape(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_link_type(
@@ -1031,7 +1031,7 @@ def test_upsert_link_type_apply_verifies_via_dry_run(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_link_type(
@@ -1060,7 +1060,7 @@ def test_delete_link_type_apply_verifies_gone(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_link_type(
@@ -1092,8 +1092,8 @@ def test_delete_link_type_rejects_api_name(mock_object_type_service):
 # Action type upsert/delete tests
 def _action_type_definition() -> dict:
     return {
-        "apiName": "pltr-test-action",
-        "displayMetadata": {"displayName": "PLTR Test"},
+        "apiName": "foundry-test-action",
+        "displayMetadata": {"displayName": "FOUNDRY Test"},
         "logic": {
             "rules": [
                 {
@@ -1117,7 +1117,7 @@ def test_action_type_create_normalization_rewrites_validation_keys():
     """Non-UUID validations keys are rewritten and ordering kept in sync."""
     create = ActionService._normalize_action_type_create(_action_type_definition())
 
-    assert create["apiName"] == "pltr-test-action"
+    assert create["apiName"] == "foundry-test-action"
     (new_key,) = create["validations"].keys()
     assert new_key != "always"
     uuid.UUID(new_key)  # raises if not a UUID
@@ -1157,7 +1157,7 @@ def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_action_type(
@@ -1166,7 +1166,7 @@ def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
         )
 
     assert result["mode"] == "dry-run"
-    assert result["apiName"] == "pltr-test-action"
+    assert result["apiName"] == "foundry-test-action"
     modification_request = mock_client.conjure.call_args.kwargs["json_body"][
         "modificationRequest"
     ]
@@ -1187,7 +1187,7 @@ def test_upsert_action_type_apply_verifies_read_back(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -1203,7 +1203,7 @@ def test_upsert_action_type_apply_verifies_read_back(mock_action_service):
     assert result["mode"] == "applied"
     assert result["verification"]["status"] == "verified"
     mock_get.assert_called_once_with(
-        "ri.ontology.main.ontology.test", "pltr-test-action"
+        "ri.ontology.main.ontology.test", "foundry-test-action"
     )
 
 
@@ -1221,14 +1221,14 @@ def test_delete_action_type_resolves_rid_and_verifies_gone(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(ActionService, "get_action_type", return_value={"rid": rid}),
     ):
         result = service.delete_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
-            action_type="pltr-test-action",
+            action_type="foundry-test-action",
             apply=True,
         )
 
@@ -1408,7 +1408,7 @@ def test_list_objects(mock_ontology_object_service, sample_object):
 
 def test_get_object():
     """Test getting a specific object."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -1769,7 +1769,7 @@ def test_get_link_type_error(mock_object_type_service):
 @pytest.fixture
 def mock_action_type_full_metadata_service():
     """Create a mocked ActionService with an ActionTypeFullMetadata client."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         mock_client = Mock()
         mock_ontologies = Mock()
         mock_metadata_class = Mock()
@@ -1870,7 +1870,7 @@ def test_upsert_object_type_schema_error_includes_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -1899,7 +1899,7 @@ def test_upsert_object_type_unrelated_error_has_no_hint(mock_object_type_service
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -1929,7 +1929,7 @@ def test_upsert_link_type_missing_object_type_includes_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_link_type(
@@ -1957,7 +1957,7 @@ def test_upsert_action_type_missing_object_type_includes_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_action_type(
@@ -1984,7 +1984,7 @@ def test_delete_object_type_dependent_link_types_include_reverse_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -2040,7 +2040,7 @@ def test_add_property_dry_run_request_shape(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.add_property_to_object_type(
@@ -2109,7 +2109,7 @@ def test_add_property_apply_verifies_read_back(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.add_property_to_object_type(
@@ -2144,7 +2144,7 @@ def test_add_property_branch_rid_passthrough(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.add_property_to_object_type(
@@ -2177,7 +2177,7 @@ def test_add_property_branch_unsupported_is_typed(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(FoundryApiError) as exc_info,
@@ -2212,7 +2212,7 @@ def test_add_property_refuses_interfaces(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="implements"),
@@ -2242,7 +2242,7 @@ def test_add_property_refuses_shared_property_types(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="shared property types"),
@@ -2267,7 +2267,7 @@ def test_add_property_refuses_existing_property(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="already has a property"),
@@ -2294,7 +2294,7 @@ def test_resolve_object_type_by_api_name(mock_object_type_service):
     mock_client.conjure.side_effect = [_bulk_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_object_type(
@@ -2327,7 +2327,7 @@ def test_resolve_object_type_by_rid(mock_object_type_service):
     mock_client.conjure.side_effect = [_bulk_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_object_type(
@@ -2356,7 +2356,7 @@ def test_resolve_property(mock_object_type_service):
     mock_client.conjure.side_effect = [_bulk_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_property(
@@ -2388,7 +2388,7 @@ def test_resolve_property_missing(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="has no property"),
@@ -2501,7 +2501,7 @@ def test_update_action_type_dry_run_merges_status_and_display(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2576,7 +2576,7 @@ def test_update_action_type_replaces_rules_with_function_rule(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2609,7 +2609,7 @@ def test_update_action_type_function_rule_requires_rid_and_version(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2665,7 +2665,7 @@ def test_update_action_type_parameter_add(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2720,7 +2720,7 @@ def test_update_action_type_parameter_remove_and_reorder(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2758,7 +2758,7 @@ def test_update_action_type_validations_add_remove(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2807,7 +2807,7 @@ def test_update_action_type_validations_cannot_remove_all(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2850,7 +2850,7 @@ def test_update_action_type_apply_verifies_read_back(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2898,7 +2898,7 @@ def test_update_action_type_dry_run_blocks_apply_on_error(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2932,7 +2932,7 @@ def test_resolve_action_type_by_api_name(mock_action_service):
     mock_client.conjure.side_effect = [_action_type_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_action_type(

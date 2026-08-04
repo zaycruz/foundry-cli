@@ -4,7 +4,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 
-from pltr.utils.alias_resolver import resolve_command_aliases, inject_alias_resolution
+from foundry_cli.utils.alias_resolver import resolve_command_aliases, inject_alias_resolution
 
 
 class TestAliasResolver:
@@ -16,7 +16,7 @@ class TestAliasResolver:
 
     def test_resolve_no_alias(self):
         """Test resolving when no alias exists."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = "dataset"
             mock_manager.return_value = manager
@@ -28,7 +28,7 @@ class TestAliasResolver:
 
     def test_resolve_simple_alias(self):
         """Test resolving a simple alias."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = "dataset get"
             mock_manager.return_value = manager
@@ -39,7 +39,7 @@ class TestAliasResolver:
 
     def test_resolve_complex_alias(self):
         """Test resolving an alias with multiple parts."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = "sql execute --format json"
             mock_manager.return_value = manager
@@ -56,7 +56,7 @@ class TestAliasResolver:
 
     def test_resolve_alias_with_quotes(self):
         """Test resolving an alias containing quoted arguments."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = 'dataset create "My Dataset"'
             mock_manager.return_value = manager
@@ -73,7 +73,7 @@ class TestAliasResolver:
 
     def test_skip_alias_command(self):
         """Test that 'alias' command itself is not resolved."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             args = ["alias", "add", "ds", "dataset"]
             result = resolve_command_aliases(args)
             assert result == args
@@ -81,7 +81,7 @@ class TestAliasResolver:
 
     def test_skip_help_command(self):
         """Test that help commands are not resolved."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             args = ["--help"]
             result = resolve_command_aliases(args)
             assert result == args
@@ -93,7 +93,7 @@ class TestAliasResolver:
 
     def test_skip_version_command(self):
         """Test that version command is not resolved."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             args = ["--version"]
             result = resolve_command_aliases(args)
             assert result == args
@@ -101,7 +101,7 @@ class TestAliasResolver:
 
     def test_skip_completion_command(self):
         """Test that completion command is not resolved."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             args = ["completion", "install"]
             result = resolve_command_aliases(args)
             assert result == args
@@ -109,7 +109,7 @@ class TestAliasResolver:
 
     def test_invalid_alias_syntax(self):
         """Test handling of invalid alias syntax."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             # Return an alias with invalid shell syntax
             manager.resolve_alias.return_value = 'invalid "unclosed quote'
@@ -122,14 +122,14 @@ class TestAliasResolver:
 
     def test_resolve_from_sys_argv(self):
         """Test resolving from sys.argv when no args provided."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = "dataset get"
             mock_manager.return_value = manager
 
             original_argv = sys.argv
             try:
-                sys.argv = ["pltr", "ds", "rid"]
+                sys.argv = ["foundry", "ds", "rid"]
                 result = resolve_command_aliases()
                 assert result == ["dataset", "get", "rid"]
             finally:
@@ -137,22 +137,22 @@ class TestAliasResolver:
 
     def test_inject_alias_resolution(self):
         """Test injecting alias resolution into sys.argv."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = "dataset get"
             mock_manager.return_value = manager
 
             original_argv = sys.argv
             try:
-                sys.argv = ["pltr", "ds", "rid"]
+                sys.argv = ["foundry", "ds", "rid"]
                 inject_alias_resolution()
-                assert sys.argv == ["pltr", "dataset", "get", "rid"]
+                assert sys.argv == ["foundry", "dataset", "get", "rid"]
             finally:
                 sys.argv = original_argv
 
     def test_nested_alias_resolution(self):
         """Test that nested aliases are fully resolved."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             # The manager should handle nested resolution internally
             manager.resolve_alias.return_value = "sql execute --format table"
@@ -164,7 +164,7 @@ class TestAliasResolver:
 
     def test_alias_with_empty_resolution(self):
         """Test alias that resolves to same value (no change)."""
-        with patch("pltr.utils.alias_resolver.AliasManager") as mock_manager:
+        with patch("foundry_cli.utils.alias_resolver.AliasManager") as mock_manager:
             manager = MagicMock()
             manager.resolve_alias.return_value = "normalcommand"
             mock_manager.return_value = manager

@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.resource import ResourceService
+from foundry_cli.services.resource import ResourceService
 
 
 class TestResourceService:
@@ -21,7 +21,7 @@ class TestResourceService:
     @pytest.fixture
     def mock_auth_manager(self, mock_client):
         """Create a mock auth manager."""
-        with patch("pltr.services.base.AuthManager") as MockAuthManager:
+        with patch("foundry_cli.services.base.AuthManager") as MockAuthManager:
             mock_auth_manager = Mock()
             mock_auth_manager.get_client.return_value = mock_client
             MockAuthManager.return_value = mock_auth_manager

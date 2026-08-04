@@ -2,13 +2,13 @@
 
 An **agent-native** command-line interface for Palantir Foundry.
 
-> **Derivative work.** `foundry-cli` began as a fork of [`anjor/pltr-cli`](https://github.com/anjor/pltr-cli) by [@anjor](https://github.com/anjor), who wrote the original CLI. It has since been detached from the fork network and is maintained independently, with its own release line and distribution name. The console command is still `pltr`. MIT-licensed, same as the original — see [LICENSE](LICENSE), which carries both copyrights.
+> **Derivative work.** `foundry-cli` began as a fork of the original CLI by [@anjor](https://github.com/anjor). It has since been detached from the fork network and is maintained independently, with its own release line and distribution name. The console command is `foundry`. MIT-licensed, same as the original — see [LICENSE](LICENSE), which carries both copyrights.
 
 `foundry-cli` wraps the official [`foundry-platform-sdk`](https://github.com/palantir/foundry-platform-python) and adds three things:
 
-1. **A stable machine contract.** Every command can emit one JSON envelope (`pltr-agent-v1`) with `--agent`, so an autonomous caller never has to parse tables or scrape text.
-2. **A read-only dependency and change-impact gate.** Before you touch a Foundry resource, `pltr dependency` tells you what breaks — with explicit coverage gaps, provenance, and a CI exit code.
-3. **A drop-in skill bundle.** `skills/pltr-cli/` teaches any coding agent (Claude, Codex, others) how to drive the CLI safely.
+1. **A stable machine contract.** Every command can emit one JSON envelope (`foundry-agent-v1`) with `--agent`, so an autonomous caller never has to parse tables or scrape text.
+2. **A read-only dependency and change-impact gate.** Before you touch a Foundry resource, `foundry dependency` tells you what breaks — with explicit coverage gaps, provenance, and a CI exit code.
+3. **A drop-in skill bundle.** `skills/foundry-cli/` teaches any coding agent (Claude, Codex, others) how to drive the CLI safely.
 
 **Why this exists.** The JSON contract, the change-impact gate, and the skill bundle let an autonomous agent operate Foundry safely and cheaply, with no human in the loop. The full interactive surface — Rich tables, the shell, multi-profile switching, and the commands across datasets, SQL, ontology, orchestration, filesystem, and admin — works the same way.
 
@@ -18,32 +18,38 @@ An **agent-native** command-line interface for Palantir Foundry.
 
 ### One-paste install — hand this to your agent
 
-Copy the block below into Claude Code, Codex, or any coding agent. It installs, authenticates, and verifies `pltr` for you:
+Copy the block below into Claude Code, Codex, or any coding agent. It installs, authenticates, and verifies `foundry` for you:
 
 ```
-Install the pltr CLI (Palantir Foundry) for me, end to end:
+Install the foundry CLI (Palantir Foundry) for me, end to end:
 1. Install from git: `uv pip install "git+https://github.com/zaycruz/foundry-cli"` (fall back to `pip install "git+https://github.com/zaycruz/foundry-cli"` if uv is missing).
-2. Confirm it works: run `pltr --help` and show me the command groups.
-3. Set up auth: ask me for my Foundry host and API token, then export FOUNDRY_HOST and FOUNDRY_TOKEN, or run `pltr configure configure`. I may have more than one Foundry environment — support named profiles.
-4. Verify the connection: run `pltr verify`.
-5. For automation, note that every command accepts `--agent` for a stable JSON envelope; run `pltr --agent agent-manifest` to show the machine-readable command surface.
+2. Confirm it works: run `foundry --help` and show me the command groups.
+3. Set up auth: ask me for my Foundry host and API token, then export FOUNDRY_HOST and FOUNDRY_TOKEN, or run `foundry configure configure`. I may have more than one Foundry environment — support named profiles.
+4. Verify the connection: run `foundry verify`.
+5. For automation, note that every command accepts `--agent` for a stable JSON envelope; run `foundry --agent agent-manifest` to show the machine-readable command surface.
 ```
 
 ### Install it yourself
 
-Installed from git; not published to PyPI, so install it by URL. The command is `pltr`.
+Install the published package from PyPI. The command is `foundry`.
 
 ```bash
-uv pip install "git+https://github.com/zaycruz/foundry-cli"
+uv tool install foundry-cli
 ```
 
-Or clone for development:
+To install the current source directly from Git, or to clone for development:
+
+```bash
+uv tool install "git+https://github.com/zaycruz/foundry-cli"
+```
+
+For an editable development checkout:
 
 ```bash
 git clone https://github.com/zaycruz/foundry-cli.git
 cd foundry-cli
 uv sync
-uv run pltr --help
+uv run foundry --help
 ```
 
 ---
@@ -52,7 +58,7 @@ uv run pltr --help
 
 ```bash
 # Interactive setup (token or OAuth2). Credentials go in the system keyring, never plain text.
-pltr configure configure
+foundry configure configure
 
 # Or use environment variables (CI / automation):
 export FOUNDRY_TOKEN="your-api-token"
@@ -61,7 +67,7 @@ export FOUNDRY_HOST="foundry.company.com"
 # so an exported variable never overrides a stored profile.
 
 # Confirm it works:
-pltr verify
+foundry verify
 ```
 
 OAuth2 uses `FOUNDRY_CLIENT_ID` and `FOUNDRY_CLIENT_SECRET` instead of `FOUNDRY_TOKEN`.
@@ -74,42 +80,42 @@ Nine capability areas and two global flags:
 
 | Area | What you get |
 |------|--------------|
-| Machine output | `--agent` on agent-aware commands → one `pltr-agent-v1` JSON envelope |
+| Machine output | `--agent` on agent-aware commands → one `foundry-agent-v1` JSON envelope |
 | Non-interactive mode | `--non-interactive` — no prompts, no envelope switch |
-| Change impact | `pltr dependency` — 6 target types, evidence graph, CI exit codes |
-| Grammar discovery | `pltr agent-manifest`, `pltr capabilities` |
-| Resource search | `pltr search` — title or path-scoped paginated discovery |
-| Lineage | `pltr lineage graph` |
-| Proposals | `pltr proposal` — 9 subcommands |
-| Namespaces | `pltr namespace list` |
-| Notepads | `pltr notepad list`, `pltr notepad get` |
-| Agent skill bundle | `skills/pltr-cli/` — workflows + 17 references |
+| Change impact | `foundry dependency` — 6 target types, evidence graph, CI exit codes |
+| Grammar discovery | `foundry agent-manifest`, `foundry capabilities` |
+| Resource search | `foundry search` — title or path-scoped paginated discovery |
+| Lineage | `foundry lineage graph` |
+| Proposals | `foundry proposal` — 9 subcommands |
+| Namespaces | `foundry namespace list` |
+| Notepads | `foundry notepad list`, `foundry notepad get` |
+| Agent skill bundle | `skills/foundry-cli/` — workflows + 17 references |
 | Tracing | optional Langfuse |
 | Leaf commands | 236 |
 
 ### Change-impact gate
 
-`pltr dependency` resolves a Foundry target, walks a bounded dependency graph, and reports what breaks — with explicit coverage gaps, provenance, and a CI exit code. It never mutates Foundry. Six targets: `resource`, `object-type`, `property`, `link-type`, `action-type`, `query-type`. [Details below](#dependency-and-change-impact-analysis).
+`foundry dependency` resolves a Foundry target, walks a bounded dependency graph, and reports what breaks — with explicit coverage gaps, provenance, and a CI exit code. It never mutates Foundry. Six targets: `resource`, `object-type`, `property`, `link-type`, `action-type`, `query-type`. [Details below](#dependency-and-change-impact-analysis).
 
 ### Machine-readable grammar
 
-`pltr agent-manifest` emits every registered command as deterministic JSON, so an agent discovers the surface without parsing `--help` text. `pltr capabilities` is a parity scorecard against Palantir's published MCP tool catalog, not a list of this CLI's commands. [Details below](#agent-interface).
+`foundry agent-manifest` emits every registered command as deterministic JSON, so an agent discovers the surface without parsing `--help` text. `foundry capabilities` is a parity scorecard against Palantir's published MCP tool catalog, not a list of this CLI's commands. [Details below](#agent-interface).
 
 ### Proposals
 
-`pltr proposal` drives the full review lifecycle for code pull requests and Ontology Global Proposals: `create`, `list`, `get`, `comment`, `approve`, `request-changes`, `merge`, `accept`, `close`.
+`foundry proposal` drives the full review lifecycle for code pull requests and Ontology Global Proposals: `create`, `list`, `get`, `comment`, `approve`, `request-changes`, `merge`, `accept`, `close`.
 
 ### Lineage and discovery
 
-- `pltr lineage graph <rid>` — build a bounded graph from native filesystem relationships.
-- `pltr search <text>` — search by title, or add `--path-prefix` for bounded paginated resource discovery.
-- `pltr namespace list` — list Compass namespaces via the verified internal hierarchy API.
-- `pltr notepad list --path-prefix <path>` — enumerate notepads without guessing an instance root.
-- `pltr notepad get <rid>` — read a notepad's latest body and its embedded resource references.
+- `foundry lineage graph <rid>` — build a bounded graph from native filesystem relationships.
+- `foundry search <text>` — search by title, or add `--path-prefix` for bounded paginated resource discovery.
+- `foundry namespace list` — list Compass namespaces via the verified internal hierarchy API.
+- `foundry notepad list --path-prefix <path>` — enumerate notepads without guessing an instance root.
+- `foundry notepad get <rid>` — read a notepad's latest body and its embedded resource references.
 
 ### Agent skill bundle
 
-`skills/pltr-cli/` is a drop-in, model-agnostic bundle that teaches any coding agent to drive `pltr` safely — including the mandatory change-impact gate before any Foundry mutation. [Details below](#skill-bundle-for-coding-agents).
+`skills/foundry-cli/` is a drop-in, model-agnostic bundle that teaches any coding agent to drive `foundry` safely — including the mandatory change-impact gate before any Foundry mutation. [Details below](#skill-bundle-for-coding-agents).
 
 ---
 
@@ -118,16 +124,16 @@ Nine capability areas and two global flags:
 Add the global `--agent` flag to any command. The command then returns a single stable JSON envelope on stdout instead of a table:
 
 ```bash
-pltr --agent agent-manifest
-pltr --agent resource list --folder-rid ri.compass.main.folder.0
-pltr --agent dataset files list ri.foundry.main.dataset.abc123 --page-size 50
+foundry --agent agent-manifest
+foundry --agent resource list --folder-rid ri.compass.main.folder.0
+foundry --agent dataset files list ri.foundry.main.dataset.abc123 --page-size 50
 ```
 
 Every envelope has the same shape:
 
 ```json
 {
-  "schema_version": "pltr-agent-v1",
+  "schema_version": "foundry-agent-v1",
   "data": {},
   "meta": {},
   "warnings": [],
@@ -140,7 +146,7 @@ Every envelope has the same shape:
 **Contract guarantees:**
 
 - **Exactly one document.** `json.loads(stdout)` succeeds for every command. Status messages that a human sees as separate lines are collected into `meta.messages` (each with a `level`) rather than emitted as extra JSON documents. Human-readable output, progress spinners and Rich tables go to **stderr** under `--agent`, so stdout carries the envelope and nothing else. A contract test invokes every registered command under `--agent` and enforces this.
-- **Stable schema.** `schema_version` is `pltr-agent-v1`. Fields do not move between commands. Additions are additive.
+- **Stable schema.** `schema_version` is `foundry-agent-v1`. Fields do not move between commands. Additions are additive.
 - **Credential redaction.** Any field whose name contains `token`, `secret`, `password`, `private_key`, or `authorization` is replaced with `[REDACTED]`. Pagination cursors (`page_token`) are kept, because a caller needs them to resume.
 - **Resumable pagination.** When a result is paged, `pagination` carries the next cursor.
 - **Non-interactive by default.** `--agent` forbids prompts. A mutation that would normally ask for confirmation fails with a policy error naming the exact flag to pass — `--yes`, `--confirm` or `--force`, depending on the command — and that flag name is checked against the command's real options by a test. The refusal always produces an envelope, but the **exit code is not yet uniform**: it is `1` where the command handles the refusal itself and `2` where it propagates. Branch on the envelope's `errors`, not on the exit code. Use `--non-interactive` to get the same no-prompt behavior without switching output to the envelope.
@@ -150,19 +156,19 @@ Two shapes are worth knowing:
 - If a command reports more than one result in a single run, `data` is a list and `meta.results` holds each result's metadata, positionally aligned with `data`.
 - A few commands still report errors through a plain console rather than the structured path. Their text is wrapped in one envelope with `meta.result_type` set to `"unstructured"` and the message under `errors`. That is a known gap, flagged honestly rather than dressed up as a structured result.
 
-Start every agent session with `pltr --agent agent-manifest` to discover the available command surface: it emits every registered command with its path, arguments and flags.
+Start every agent session with `foundry --agent agent-manifest` to discover the available command surface: it emits every registered command with its path, arguments and flags.
 
-`pltr --agent capabilities` answers a different question. It is a parity scorecard against [Palantir's published MCP tool catalog](https://www.palantir.com/docs/foundry/palantir-mcp/available-tools/): each of the ~73 MCP tools is marked **implemented** (a real CLI command exists), **planned** (a genuine gap), **blocked** (the SDK cannot do it), or **unsupported** (out of scope for a Foundry CLI — documentation retrieval, SDK codegen, dev-console). The implemented-vs-planned split is derived from the live command surface, so it can never disagree with `agent-manifest` about what ships; `blocked` and `unsupported` are classified explicitly (an SDK limit, or out of scope for a CLI) and stay authoritative. On foundry-platform-sdk 1.95.0 that is 20 implemented, 28 planned, 2 blocked, 23 unsupported — the CLI already covers more Foundry operations than the MCP exposes. It does **not** list this CLI's commands; `agent-manifest` does.
+`foundry --agent capabilities` answers a different question. It is a parity scorecard against [Palantir's published MCP tool catalog](https://www.palantir.com/docs/foundry/palantir-mcp/available-tools/): each of the ~73 MCP tools is marked **implemented** (a real CLI command exists), **planned** (a genuine gap), **blocked** (the SDK cannot do it), or **unsupported** (out of scope for a Foundry CLI — documentation retrieval, SDK codegen, dev-console). The implemented-vs-planned split is derived from the live command surface, so it can never disagree with `agent-manifest` about what ships; `blocked` and `unsupported` are classified explicitly (an SDK limit, or out of scope for a CLI) and stay authoritative. On foundry-platform-sdk 1.95.0 that is 20 implemented, 28 planned, 2 blocked, 23 unsupported — the CLI already covers more Foundry operations than the MCP exposes. It does **not** list this CLI's commands; `agent-manifest` does.
 
 ---
 
 ## Dependency and change-impact analysis
 
-`pltr dependency` runs a **read-only, evidence-backed** assessment of one Foundry target. One invocation resolves the target, discovers a bounded dependency graph, writes the complete graph as a JSON artifact, and renders the view you asked for. It never mutates Foundry.
+`foundry dependency` runs a **read-only, evidence-backed** assessment of one Foundry target. One invocation resolves the target, discovers a bounded dependency graph, writes the complete graph as a JSON artifact, and renders the view you asked for. It never mutates Foundry.
 
 ```bash
 # What depends on this dataset? Retain the full evidence graph.
-pltr dependency resource ri.foundry.main.dataset.abc123 \
+foundry dependency resource ri.foundry.main.dataset.abc123 \
   --change "rename a column" \
   --change-type rename \
   --output-mode agent \
@@ -187,32 +193,32 @@ pltr dependency resource ri.foundry.main.dataset.abc123 \
 
 ```bash
 # 1. Capture a baseline before the change (retained artifact).
-pltr dependency property ri.ontology.main.ontology.example Employee email \
+foundry dependency property ri.ontology.main.ontology.example Employee email \
   --change "email string -> struct" --change-type type-change \
   --direction downstream --output-mode agent \
   --graph-output ./employee-email-before.json
 
 # 2. After the change, compare against the baseline and gate CI.
-pltr dependency property ri.ontology.main.ontology.example Employee email \
+foundry dependency property ri.ontology.main.ontology.example Employee email \
   --change "email string -> struct" --change-type type-change \
   --direction downstream \
   --compare-artifact ./employee-email-before.json \
   --output-mode ci --graph-output ./employee-email-after.json
 ```
 
-Artifacts are written atomically with mode `0600`, to `--graph-output` or to `${XDG_STATE_HOME:-~/.local/state}/pltr/dependency/<analysis-id>.json`. Bounds (`--depth`, `--max-nodes`, `--time-budget-seconds`, …) are configurable with hard ceilings.
+Artifacts are written atomically with mode `0600`, to `--graph-output` or to `${XDG_STATE_HOME:-~/.local/state}/foundry/dependency/<analysis-id>.json`. Bounds (`--depth`, `--max-nodes`, `--time-budget-seconds`, …) are configurable with hard ceilings.
 
-Full command reference: [`skills/pltr-cli/reference/dependency-commands.md`](skills/pltr-cli/reference/dependency-commands.md). Full operating sequence: [`skills/pltr-cli/workflows/change-impact-assessment.md`](skills/pltr-cli/workflows/change-impact-assessment.md).
+Full command reference: [`skills/foundry-cli/reference/dependency-commands.md`](skills/foundry-cli/reference/dependency-commands.md). Full operating sequence: [`skills/foundry-cli/workflows/change-impact-assessment.md`](skills/foundry-cli/workflows/change-impact-assessment.md).
 
 ---
 
 ## Skill bundle for coding agents
 
-`skills/pltr-cli/` is the single, model-agnostic source of truth for driving `pltr` from an agent. Point your agent client at it; do not create per-provider copies.
+`skills/foundry-cli/` is the single, model-agnostic source of truth for driving `foundry` from an agent. Point your agent client at it; do not create per-provider copies.
 
-- **[`SKILL.md`](skills/pltr-cli/SKILL.md)** — overview, critical concepts, when to load which reference.
-- **[`AGENTS.md`](AGENTS.md)** — repository rules, including the **mandatory change-impact gate**: assess with `pltr dependency` before proposing or applying any Foundry change, and do not merge while status is `needs-verification`.
-- **`workflows/`** — [change-impact-assessment](skills/pltr-cli/workflows/change-impact-assessment.md), [data-pipeline](skills/pltr-cli/workflows/data-pipeline.md), [data-analysis](skills/pltr-cli/workflows/data-analysis.md), [permission-management](skills/pltr-cli/workflows/permission-management.md).
+- **[`SKILL.md`](skills/foundry-cli/SKILL.md)** — overview, critical concepts, when to load which reference.
+- **[`AGENTS.md`](AGENTS.md)** — repository rules, including the **mandatory change-impact gate**: assess with `foundry dependency` before proposing or applying any Foundry change, and do not merge while status is `needs-verification`.
+- **`workflows/`** — [change-impact-assessment](skills/foundry-cli/workflows/change-impact-assessment.md), [data-pipeline](skills/foundry-cli/workflows/data-pipeline.md), [data-analysis](skills/foundry-cli/workflows/data-analysis.md), [permission-management](skills/foundry-cli/workflows/permission-management.md).
 - **`reference/`** — 17 per-module command references (datasets, SQL, ontology, orchestration, filesystem, admin, connectivity, mediasets, streams, functions, AIP agents, models, language models, dependency).
 
 ---
@@ -222,17 +228,17 @@ Full command reference: [`skills/pltr-cli/reference/dependency-commands.md`](ski
 For interactive work, every command supports `--format table|json|csv`, `--output <file>`, and `--profile <name>`.
 
 ```bash
-pltr sql execute "SELECT * FROM my_table LIMIT 10"
-pltr dataset get ri.foundry.main.dataset.abc123
-pltr ontology list
-pltr orchestration builds search
-pltr folder list ri.compass.main.folder.0        # root folder
-pltr resource-role grant <resource-rid> --principal-id <user-id> --principal-type User --role viewer
-pltr shell                                         # REPL with tab completion + history
-pltr completion install                            # bash / zsh / fish completion
+foundry sql execute "SELECT * FROM my_table LIMIT 10"
+foundry dataset get ri.foundry.main.dataset.abc123
+foundry ontology list
+foundry orchestration builds search
+foundry folder list ri.compass.main.folder.0        # root folder
+foundry resource-role grant <resource-rid> --principal-id <user-id> --principal-type User --role viewer
+foundry shell                                         # REPL with tab completion + history
+foundry completion install                            # bash / zsh / fish completion
 ```
 
-Full command list: `pltr --help`, or per command `pltr <command> --help`.
+Full command list: `foundry --help`, or per command `foundry <command> --help`.
 
 ---
 
@@ -241,16 +247,16 @@ Full command list: `pltr --help`, or per command `pltr <command> --help`.
 Manage multiple Foundry environments as named **profiles** — switch the default, or pick one per command:
 
 ```bash
-pltr configure configure          # add or edit a profile (interactive)
-pltr configure list               # list profiles
-pltr configure use <name>         # switch the default profile
-pltr configure delete <name>      # remove a profile
-pltr <command> --profile <name>   # use a specific profile for one command
+foundry configure configure          # add or edit a profile (interactive)
+foundry configure list               # list profiles
+foundry configure use <name>         # switch the default profile
+foundry configure delete <name>      # remove a profile
+foundry <command> --profile <name>   # use a specific profile for one command
 ```
 
-- **Profiles:** `~/.config/pltr/profiles.json`
+- **Profiles:** `~/.config/foundry/profiles.json`
 - **Credentials:** encrypted in the system keyring
-- **Shell history:** `~/.config/pltr/repl_history`
+- **Shell history:** `~/.config/foundry/repl_history`
 
 ### Optional Langfuse tracing
 
@@ -277,7 +283,7 @@ uv run ruff check src/ && uv run ruff format src/
 uv run mypy src/
 ```
 
-**Architecture** is layered: CLI (Typer) → command layer (validation) → service layer (`foundry-platform-sdk`) → auth (keyring). Agent output and dependency analysis live in `src/pltr/utils/` and `src/pltr/services/`. See [`CONCEPTS.md`](CONCEPTS.md).
+**Architecture** is layered: CLI (Typer) → command layer (validation) → service layer (`foundry-platform-sdk`) → auth (keyring). Agent output and dependency analysis live in `src/foundry_cli/utils/` and `src/foundry_cli/services/`. See [`CONCEPTS.md`](CONCEPTS.md).
 
 When extending the SDK surface, be exact about what Foundry exposes and preserve explicit gaps instead of guessing — see [`AGENTS.md`](AGENTS.md).
 
@@ -285,4 +291,4 @@ When extending the SDK surface, be exact about what Foundry exposes and preserve
 
 MIT. See [LICENSE](LICENSE), which retains the original copyright of [@anjor](https://github.com/anjor) alongside the current maintainer's.
 
-Derived from [`anjor/pltr-cli`](https://github.com/anjor/pltr-cli). Built on the official [Palantir Foundry Platform Python SDK](https://github.com/palantir/foundry-platform-python).
+Derived from the original CLI by [@anjor](https://github.com/anjor). Built on the official [Palantir Foundry Platform Python SDK](https://github.com/palantir/foundry-platform-python).

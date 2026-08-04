@@ -11,10 +11,10 @@ from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 import pytest
 
-from pltr.cli import app
-from pltr.config.profiles import ProfileManager
-from pltr.config.settings import Settings
-from pltr.auth.storage import CredentialStorage
+from foundry_cli.cli import app
+from foundry_cli.config.profiles import ProfileManager
+from foundry_cli.config.settings import Settings
+from foundry_cli.auth.storage import CredentialStorage
 
 
 class TestCLIIntegration:
@@ -53,7 +53,7 @@ class TestCLIIntegration:
         """Test that help command works."""
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "Palantir Foundry CLI" in result.output or "pltr" in result.output
+        assert "Palantir Foundry CLI" in result.output or "foundry" in result.output
         assert "configure" in result.output
         assert "dataset" in result.output
 
@@ -61,7 +61,7 @@ class TestCLIIntegration:
         """Test version display."""
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert result.output == f"pltr {version('foundry-cli')}\n"
+        assert result.output == f"foundry {version('foundry-cli')}\n"
 
     @pytest.mark.skip(
         reason="Requires real credentials and network access - skipped in CI"
@@ -90,7 +90,7 @@ class TestCLIIntegration:
                 profile_manager.set_default("test")
 
             # Mock successful verification
-            with patch("pltr.commands.verify.requests.get") as mock_get:
+            with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {
@@ -129,7 +129,7 @@ class TestCLIIntegration:
                 profile_manager.set_default("test")
 
             # Mock failed verification
-            with patch("pltr.commands.verify.requests.get") as mock_get:
+            with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 401
                 mock_response.text = "Invalid credentials"
@@ -142,7 +142,7 @@ class TestCLIIntegration:
     @pytest.mark.skip(
         reason="Requires real profile and service integration - skipped in CI"
     )
-    @patch("pltr.services.dataset.DatasetService")
+    @patch("foundry_cli.services.dataset.DatasetService")
     def test_dataset_get_command(self, mock_dataset_service, runner, temp_config_dir):
         """Test dataset get command with mocked response."""
         with patch.object(Settings, "_get_config_dir", return_value=temp_config_dir):
@@ -180,7 +180,7 @@ class TestCLIIntegration:
     @pytest.mark.skip(
         reason="Requires real profile and service integration - skipped in CI"
     )
-    @patch("pltr.services.sql.SqlService")
+    @patch("foundry_cli.services.sql.SqlService")
     def test_sql_execute_command(self, mock_sql_service, runner, temp_config_dir):
         """Test SQL execute command with mocked response."""
         with patch.object(Settings, "_get_config_dir", return_value=temp_config_dir):
@@ -221,7 +221,7 @@ class TestCLIIntegration:
     @pytest.mark.skip(
         reason="Requires real profile and service integration - skipped in CI"
     )
-    @patch("pltr.services.ontology.OntologyService")
+    @patch("foundry_cli.services.ontology.OntologyService")
     def test_ontology_list_command(
         self, mock_ontology_service, runner, temp_config_dir
     ):
@@ -314,7 +314,7 @@ class TestCLIIntegration:
             profile_manager.add_profile("test")
             profile_manager.set_default("test")
 
-            with patch("pltr.services.dataset.DatasetService") as mock_dataset_service:
+            with patch("foundry_cli.services.dataset.DatasetService") as mock_dataset_service:
                 # Service mocking handles authentication internally
                 # Mock dataset service
                 mock_service = Mock()
@@ -371,9 +371,9 @@ class TestCLIIntegration:
     )
     def test_environment_variable_override(self, runner, monkeypatch):
         """Test that environment profile variable works."""
-        monkeypatch.setenv("PLTR_PROFILE", "env-profile")
+        monkeypatch.setenv("FOUNDRY_PROFILE", "env-profile")
 
-        with patch("pltr.auth.storage.CredentialStorage") as mock_storage:
+        with patch("foundry_cli.auth.storage.CredentialStorage") as mock_storage:
             mock_storage_instance = Mock()
             mock_storage_instance.get_profile.return_value = {
                 "auth_type": "token",
@@ -382,12 +382,12 @@ class TestCLIIntegration:
             }
             mock_storage.return_value = mock_storage_instance
 
-            with patch("pltr.config.profiles.ProfileManager") as mock_profile_manager:
+            with patch("foundry_cli.config.profiles.ProfileManager") as mock_profile_manager:
                 mock_pm = Mock()
                 mock_pm.get_active_profile.return_value = "env-profile"
                 mock_profile_manager.return_value = mock_pm
 
-                with patch("pltr.commands.verify.requests.get") as mock_get:
+                with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                     mock_response = Mock()
                     mock_response.status_code = 200
                     mock_response.json.return_value = {

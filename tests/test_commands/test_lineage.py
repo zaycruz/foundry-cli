@@ -6,8 +6,8 @@ from typer.testing import CliRunner
 
 from io import StringIO
 
-from pltr.commands.lineage import app
-from pltr.utils.agent_output import flush_agent_output
+from foundry_cli.commands.lineage import app
+from foundry_cli.utils.agent_output import flush_agent_output
 
 runner = CliRunner()
 
@@ -21,8 +21,8 @@ def test_lineage_graph_agent_output_contains_coverage() -> None:
         "pagination": {"has_more": False},
     }
     with (
-        patch("pltr.commands.lineage.LineageService") as service_class,
-        patch("pltr.commands.lineage.agent_mode_enabled", return_value=True),
+        patch("foundry_cli.commands.lineage.LineageService") as service_class,
+        patch("foundry_cli.commands.lineage.agent_mode_enabled", return_value=True),
     ):
         service_class.return_value.get_resource_graph.return_value = graph
 
@@ -37,7 +37,7 @@ def test_lineage_graph_agent_output_contains_coverage() -> None:
 
 def test_lineage_graph_forwards_limits() -> None:
     graph = {"nodes": [], "edges": [], "coverage": {}, "pagination": {}}
-    with patch("pltr.commands.lineage.LineageService") as service_class:
+    with patch("foundry_cli.commands.lineage.LineageService") as service_class:
         service_class.return_value.get_resource_graph.return_value = graph
 
         result = runner.invoke(

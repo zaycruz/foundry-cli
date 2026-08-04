@@ -9,10 +9,10 @@ from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 import pytest
 
-from pltr.cli import app
-from pltr.config.profiles import ProfileManager
-from pltr.config.settings import Settings
-from pltr.auth.storage import CredentialStorage
+from foundry_cli.cli import app
+from foundry_cli.config.profiles import ProfileManager
+from foundry_cli.config.settings import Settings
+from foundry_cli.auth.storage import CredentialStorage
 
 
 class TestAuthenticationFlow:
@@ -42,11 +42,11 @@ class TestAuthenticationFlow:
     def test_token_auth_configuration_flow(self, runner, temp_config_dir):
         """Test complete token authentication configuration flow."""
         with patch.object(Settings, "_get_config_dir", return_value=temp_config_dir):
-            with patch("pltr.config.settings.Settings") as mock_storage_settings:
+            with patch("foundry_cli.config.settings.Settings") as mock_storage_settings:
                 mock_storage_settings.return_value._get_config_dir.return_value = (
                     temp_config_dir
                 )
-                with patch("pltr.config.profiles.Settings") as mock_profile_settings:
+                with patch("foundry_cli.config.profiles.Settings") as mock_profile_settings:
                     mock_profile_settings.return_value._get_config_dir.return_value = (
                         temp_config_dir
                     )
@@ -82,7 +82,7 @@ class TestAuthenticationFlow:
                         assert "test-profile" in profiles
 
                     # Test authentication with the configured profile
-                    with patch("pltr.commands.verify.requests.get") as mock_get:
+                    with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                         mock_response = Mock()
                         mock_response.status_code = 200
                         mock_response.json.return_value = {
@@ -107,7 +107,7 @@ class TestAuthenticationFlow:
                 Settings, "_get_config_dir", return_value=temp_config_dir
             ):
                 # Test OAuth configuration
-                with patch("pltr.commands.configure.Prompt.ask") as mock_prompt:
+                with patch("foundry_cli.commands.configure.Prompt.ask") as mock_prompt:
                     # Mock user inputs
                     mock_prompt.side_effect = [
                         "oauth",  # Auth type
@@ -134,7 +134,7 @@ class TestAuthenticationFlow:
                     }
                     mock_post.return_value = mock_token_response
 
-                    with patch("pltr.commands.verify.requests.get") as mock_get:
+                    with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                         mock_response = Mock()
                         mock_response.status_code = 200
                         mock_response.json.return_value = {
@@ -201,7 +201,7 @@ class TestAuthenticationFlow:
             assert result.exit_code == 0
 
             # Verify default profile is used
-            with patch("pltr.commands.verify.requests.get") as mock_get:
+            with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {"username": "staging.user"}
@@ -212,7 +212,7 @@ class TestAuthenticationFlow:
                 assert result.exit_code == 0
 
             # Test explicit profile selection
-            with patch("pltr.commands.verify.requests.get") as mock_get:
+            with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {"username": "prod.user"}
@@ -225,11 +225,11 @@ class TestAuthenticationFlow:
         reason="Requires specific credential mocking setup - skipped in CI"
     )
     def test_environment_variable_authentication(self, runner, monkeypatch):
-        """Test authentication using environment variables (via PLTR_PROFILE)."""
+        """Test authentication using environment variables (via FOUNDRY_PROFILE)."""
         # Create a profile via environment variable
-        monkeypatch.setenv("PLTR_PROFILE", "env-profile")
+        monkeypatch.setenv("FOUNDRY_PROFILE", "env-profile")
 
-        with patch("pltr.auth.storage.CredentialStorage") as mock_storage:
+        with patch("foundry_cli.auth.storage.CredentialStorage") as mock_storage:
             mock_storage_instance = Mock()
             mock_storage_instance.get_profile.return_value = {
                 "auth_type": "token",
@@ -238,12 +238,12 @@ class TestAuthenticationFlow:
             }
             mock_storage.return_value = mock_storage_instance
 
-            with patch("pltr.config.profiles.ProfileManager") as mock_profile_manager:
+            with patch("foundry_cli.config.profiles.ProfileManager") as mock_profile_manager:
                 mock_pm = Mock()
                 mock_pm.get_active_profile.return_value = "env-profile"
                 mock_profile_manager.return_value = mock_pm
 
-                with patch("pltr.commands.verify.requests.get") as mock_get:
+                with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                     mock_response = Mock()
                     mock_response.status_code = 200
                     mock_response.json.return_value = {
@@ -280,7 +280,7 @@ class TestAuthenticationFlow:
                 "FOUNDRY_HOST", "https://env-override.palantirfoundry.com"
             )
 
-            with patch("pltr.commands.verify.requests.get") as mock_get:
+            with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {
@@ -309,7 +309,7 @@ class TestAuthenticationFlow:
             profile_manager.add_profile("test")
             profile_manager.set_default("test")
 
-            with patch("pltr.commands.verify.requests.get") as mock_get:
+            with patch("foundry_cli.commands.verify.requests.get") as mock_get:
                 # Simulate token expiration error
                 mock_response = Mock()
                 mock_response.status_code = 401
@@ -349,7 +349,7 @@ class TestAuthenticationFlow:
             profile_manager.add_profile("keep-profile")
 
             # Test deletion with confirmation
-            with patch("pltr.commands.configure.Confirm.ask") as mock_confirm:
+            with patch("foundry_cli.commands.configure.Confirm.ask") as mock_confirm:
                 mock_confirm.return_value = True
 
                 result = runner.invoke(app, ["configure", "delete", "temp-profile"])
@@ -364,7 +364,7 @@ class TestAuthenticationFlow:
     @pytest.mark.skip(reason="Requires specific credential state - skipped in CI")
     def test_missing_credentials_error(self, runner):
         """Test error handling when no credentials are configured."""
-        with patch("pltr.auth.manager.AuthManager") as mock_auth_manager:
+        with patch("foundry_cli.auth.manager.AuthManager") as mock_auth_manager:
             mock_auth_manager_instance = Mock()
             mock_auth_manager_instance.get_current_profile.return_value = None
             mock_auth_manager.return_value = mock_auth_manager_instance
@@ -382,7 +382,7 @@ class TestAuthenticationFlow:
             with patch.object(
                 Settings, "_get_config_dir", return_value=temp_config_dir
             ):
-                with patch("pltr.commands.configure.Prompt.ask") as mock_prompt:
+                with patch("foundry_cli.commands.configure.Prompt.ask") as mock_prompt:
                     # Mock user inputs with valid host (no validation implemented yet)
                     mock_prompt.side_effect = [
                         "token",  # Auth type

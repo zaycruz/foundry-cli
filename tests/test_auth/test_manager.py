@@ -4,10 +4,10 @@ Tests for authentication manager.
 
 import pytest
 from unittest.mock import Mock, patch
-from pltr.auth.manager import AuthManager
-from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
-from pltr.auth.token import TokenAuthProvider
-from pltr.auth.oauth import OAuthClientProvider
+from foundry_cli.auth.manager import AuthManager
+from foundry_cli.auth.base import ProfileNotFoundError, MissingCredentialsError
+from foundry_cli.auth.token import TokenAuthProvider
+from foundry_cli.auth.oauth import OAuthClientProvider
 
 
 class TestAuthManager:
@@ -16,8 +16,8 @@ class TestAuthManager:
     def test_init(self):
         """Test initialization."""
         with (
-            patch("pltr.auth.manager.CredentialStorage") as mock_storage_class,
-            patch("pltr.auth.manager.ProfileManager") as mock_profile_class,
+            patch("foundry_cli.auth.manager.CredentialStorage") as mock_storage_class,
+            patch("foundry_cli.auth.manager.ProfileManager") as mock_profile_class,
         ):
             manager = AuthManager()
 
@@ -26,8 +26,8 @@ class TestAuthManager:
             mock_storage_class.assert_called_once()
             mock_profile_class.assert_called_once()
 
-    @patch("pltr.auth.manager.CredentialStorage")
-    @patch("pltr.auth.manager.ProfileManager")
+    @patch("foundry_cli.auth.manager.CredentialStorage")
+    @patch("foundry_cli.auth.manager.ProfileManager")
     def test_get_client_with_explicit_profile(
         self, mock_profile_class, mock_storage_class
     ):
@@ -47,7 +47,7 @@ class TestAuthManager:
         mock_storage.get_profile.return_value = credentials
 
         # Mock the token provider
-        with patch("pltr.auth.manager.TokenAuthProvider") as mock_token_provider_class:
+        with patch("foundry_cli.auth.manager.TokenAuthProvider") as mock_token_provider_class:
             mock_provider = Mock()
             mock_client = Mock()
             mock_provider.get_client.return_value = mock_client
@@ -67,8 +67,8 @@ class TestAuthManager:
             # Verify client was returned
             assert result == mock_client
 
-    @patch("pltr.auth.manager.CredentialStorage")
-    @patch("pltr.auth.manager.ProfileManager")
+    @patch("foundry_cli.auth.manager.CredentialStorage")
+    @patch("foundry_cli.auth.manager.ProfileManager")
     def test_get_client_with_default_profile(
         self, mock_profile_class, mock_storage_class
     ):
@@ -90,7 +90,7 @@ class TestAuthManager:
         }
         mock_storage.get_profile.return_value = credentials
 
-        with patch("pltr.auth.manager.TokenAuthProvider") as mock_token_provider_class:
+        with patch("foundry_cli.auth.manager.TokenAuthProvider") as mock_token_provider_class:
             mock_provider = Mock()
             mock_client = Mock()
             mock_provider.get_client.return_value = mock_client
@@ -105,8 +105,8 @@ class TestAuthManager:
 
             assert result == mock_client
 
-    @patch("pltr.auth.manager.CredentialStorage")
-    @patch("pltr.auth.manager.ProfileManager")
+    @patch("foundry_cli.auth.manager.CredentialStorage")
+    @patch("foundry_cli.auth.manager.ProfileManager")
     def test_get_client_no_profile_configured(
         self, mock_profile_class, mock_storage_class
     ):
@@ -125,8 +125,8 @@ class TestAuthManager:
         ):
             manager.get_client()
 
-    @patch("pltr.auth.manager.CredentialStorage")
-    @patch("pltr.auth.manager.ProfileManager")
+    @patch("foundry_cli.auth.manager.CredentialStorage")
+    @patch("foundry_cli.auth.manager.ProfileManager")
     def test_get_client_profile_not_found(self, mock_profile_class, mock_storage_class):
         """Test error when profile is not found."""
         mock_storage = Mock()
@@ -235,7 +235,7 @@ class TestAuthManager:
         ):
             manager._create_provider(credentials)
 
-    @patch("pltr.auth.manager.ProfileManager")
+    @patch("foundry_cli.auth.manager.ProfileManager")
     def test_get_current_profile(self, mock_profile_class):
         """Test getting current profile."""
         mock_profile_manager = Mock()

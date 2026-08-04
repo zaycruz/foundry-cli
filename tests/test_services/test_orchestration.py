@@ -33,19 +33,19 @@ from foundry_sdk.v2.orchestration.models import (
     UserScope,
 )
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     AnalysisContext,
     DependencyGraphService,
     DependencyTarget,
 )
-from pltr.services.orchestration import OrchestrationService
-from pltr.utils.pagination import PaginationConfig
+from foundry_cli.services.orchestration import OrchestrationService
+from foundry_cli.utils.pagination import PaginationConfig
 
 
 @pytest.fixture
 def mock_orchestration_service():
     """Create a mocked OrchestrationService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_orchestration = Mock()
@@ -160,7 +160,7 @@ def sample_schedule():
 
 def test_orchestration_service_initialization():
     """Test OrchestrationService initialization."""
-    with patch("pltr.services.base.AuthManager"):
+    with patch("foundry_cli.services.base.AuthManager"):
         service = OrchestrationService()
         assert service is not None
 

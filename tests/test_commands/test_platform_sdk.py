@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 runner = CliRunner()
@@ -61,7 +61,7 @@ METHOD_REF = {
 
 
 def test_api_list_table():
-    with patch("pltr.commands.platform_sdk.PlatformSdkService") as service:
+    with patch("foundry_cli.commands.platform_sdk.PlatformSdkService") as service:
         service.return_value.list_apis.return_value = LISTING
         result = runner.invoke(app, ["platform-sdk", "api", "list"])
     assert result.exit_code == 0, result.output
@@ -70,7 +70,7 @@ def test_api_list_table():
 
 
 def test_api_list_json():
-    with patch("pltr.commands.platform_sdk.PlatformSdkService") as service:
+    with patch("foundry_cli.commands.platform_sdk.PlatformSdkService") as service:
         service.return_value.list_apis.return_value = LISTING
         result = runner.invoke(app, ["platform-sdk", "api", "list", "--format", "json"])
     assert result.exit_code == 0, result.output
@@ -79,7 +79,7 @@ def test_api_list_json():
 
 
 def test_api_reference_method():
-    with patch("pltr.commands.platform_sdk.PlatformSdkService") as service:
+    with patch("foundry_cli.commands.platform_sdk.PlatformSdkService") as service:
         service.return_value.api_reference.return_value = METHOD_REF
         result = runner.invoke(
             app, ["platform-sdk", "api", "reference", "ontologies.Ontology.get"]
@@ -93,7 +93,7 @@ def test_api_reference_method():
 
 
 def test_api_reference_not_found_exits_nonzero():
-    with patch("pltr.commands.platform_sdk.PlatformSdkService") as service:
+    with patch("foundry_cli.commands.platform_sdk.PlatformSdkService") as service:
         service.return_value.api_reference.return_value = {
             "status": "not-found",
             "reason": "no namespace 'nope' in the installed SDK",
@@ -106,18 +106,18 @@ def test_api_reference_not_found_exits_nonzero():
 
 
 def test_agent_envelope():
-    with patch("pltr.commands.platform_sdk.PlatformSdkService") as service:
+    with patch("foundry_cli.commands.platform_sdk.PlatformSdkService") as service:
         service.return_value.list_apis.return_value = LISTING
         result = runner.invoke(app, ["--agent", "platform-sdk", "api", "list"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"]["version"] == "1.95.0"
     assert payload["meta"]["result_type"] == "platform-sdk-apis"
 
 
 def test_platform_sdk_commands_registered():
-    from pltr.capabilities import registered_command_paths
+    from foundry_cli.capabilities import registered_command_paths
 
     paths = registered_command_paths()
     assert {"platform-sdk api list", "platform-sdk api reference"} <= paths

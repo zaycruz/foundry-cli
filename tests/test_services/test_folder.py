@@ -5,13 +5,13 @@ Tests for folder service.
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.folder import FolderService
+from foundry_cli.services.folder import FolderService
 
 
 @pytest.fixture
 def mock_folder_service():
     """Create a mock folder service with mocked client."""
-    with patch("pltr.services.base.AuthManager") as MockAuthManager:
+    with patch("foundry_cli.services.base.AuthManager") as MockAuthManager:
         mock_client = Mock()
         mock_filesystem = Mock()
         mock_folder_class = Mock()

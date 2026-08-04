@@ -24,8 +24,8 @@ def test_drift_check_passes_against_fixture_manifest(tmp_path, capsys) -> None:
         tmp_path,
         """
 ```bash
-pltr dataset list
-pltr ontology object-type-list ONTOLOGY_RID
+foundry dataset list
+foundry ontology object-type-list ONTOLOGY_RID
 ```
 """,
     )
@@ -51,7 +51,7 @@ def test_drift_check_accepts_typed_manifest_paths(tmp_path, capsys) -> None:
         )
     )
     reference_dir = _write_reference_dir(
-        tmp_path, "`pltr dataset list`\n`pltr ontology object-type-list RID`\n"
+        tmp_path, "`foundry dataset list`\n`foundry ontology object-type-list RID`\n"
     )
 
     result = main(["--manifest", str(manifest), "--reference-dir", str(reference_dir)])
@@ -62,7 +62,7 @@ def test_drift_check_accepts_typed_manifest_paths(tmp_path, capsys) -> None:
 
 def test_drift_check_reports_reference_and_manifest_drift(tmp_path, capsys) -> None:
     reference_dir = _write_reference_dir(
-        tmp_path, "`pltr dataset list`\n`pltr legacy show RID`\n"
+        tmp_path, "`foundry dataset list`\n`foundry legacy show RID`\n"
     )
 
     result = main(
@@ -78,7 +78,7 @@ def test_drift_check_reports_reference_and_manifest_drift(tmp_path, capsys) -> N
 
 
 def test_drift_check_missing_manifest_is_actionable(tmp_path, capsys) -> None:
-    reference_dir = _write_reference_dir(tmp_path, "`pltr dataset list`\n")
+    reference_dir = _write_reference_dir(tmp_path, "`foundry dataset list`\n")
     missing_manifest = tmp_path / "missing-manifest.json"
 
     result = main(
@@ -88,4 +88,4 @@ def test_drift_check_missing_manifest_is_actionable(tmp_path, capsys) -> None:
     captured = capsys.readouterr()
     assert result == 1
     assert "Manifest file not found" in captured.err
-    assert "uv run pltr agent-manifest" in captured.err
+    assert "uv run foundry agent-manifest" in captured.err

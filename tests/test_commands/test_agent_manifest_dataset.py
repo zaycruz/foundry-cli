@@ -4,7 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 runner = CliRunner()

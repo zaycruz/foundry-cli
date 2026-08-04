@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 from foundry_sdk.v2.filesystem.models import PrincipalWithId, ResourceRole
 
-from pltr.services.resource_role import ResourceRoleService
+from foundry_cli.services.resource_role import ResourceRoleService
 
 
 RESOURCE_RID = "ri.compass.main.dataset.123"
@@ -28,7 +28,7 @@ class TestResourceRoleService:
     @pytest.fixture
     def mock_auth_manager(self, mock_client):
         """Create a mock auth manager."""
-        with patch("pltr.services.base.AuthManager") as mock_auth_manager_class:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth_manager_class:
             mock_auth_manager = Mock()
             mock_auth_manager.get_client.return_value = mock_client
             mock_auth_manager_class.return_value = mock_auth_manager

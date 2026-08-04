@@ -6,8 +6,8 @@ import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.commands.mediasets import app
-from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
+from foundry_cli.commands.mediasets import app
+from foundry_cli.auth.base import ProfileNotFoundError, MissingCredentialsError
 
 runner = CliRunner()
 
@@ -15,7 +15,7 @@ runner = CliRunner()
 @pytest.fixture
 def mock_mediasets_service():
     """Mock MediaSetsService for command tests."""
-    with patch("pltr.commands.mediasets.MediaSetsService") as mock_service_class:
+    with patch("foundry_cli.commands.mediasets.MediaSetsService") as mock_service_class:
         mock_service = Mock()
         mock_service_class.return_value = mock_service
         yield mock_service

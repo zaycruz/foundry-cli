@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestWidgetsCommands:
@@ -21,7 +21,7 @@ class TestWidgetsCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock WidgetsService."""
-        with patch("pltr.commands.widgets.WidgetsService") as MockService:
+        with patch("foundry_cli.commands.widgets.WidgetsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc
@@ -414,7 +414,7 @@ class TestWidgetsCommands:
         mock_service.get_widget_set.return_value = widget_set_result
         output_file = tmp_path / "widget_set.json"
 
-        with patch("pltr.commands.widgets.formatter") as mock_formatter:
+        with patch("foundry_cli.commands.widgets.formatter") as mock_formatter:
             result = runner.invoke(
                 app,
                 [
@@ -443,7 +443,7 @@ class TestWidgetsCommands:
         mock_service.list_releases.return_value = releases_result
         output_file = tmp_path / "releases.json"
 
-        with patch("pltr.commands.widgets.formatter") as mock_formatter:
+        with patch("foundry_cli.commands.widgets.formatter") as mock_formatter:
             result = runner.invoke(
                 app,
                 [

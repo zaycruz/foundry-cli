@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 import typer
 from typer.testing import CliRunner
 
-from pltr.commands.global_branch import app
-from pltr.services.global_branching import (
+from foundry_cli.commands.global_branch import app
+from foundry_cli.services.global_branching import (
     GlobalBranchNotFoundError,
     GlobalBranchShapeError,
 )
@@ -29,7 +29,7 @@ class TestGlobalBranchGetCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_get_success(self, mock_service_class):
         """Test loading a global branch."""
         mock_service = Mock()
@@ -41,7 +41,7 @@ class TestGlobalBranchGetCommand:
         assert result.exit_code == 0
         mock_service.get_branch.assert_called_once_with(BRANCH_RID)
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_get_json_format(self, mock_service_class):
         """Test get with JSON output."""
         mock_service = Mock()
@@ -55,7 +55,7 @@ class TestGlobalBranchGetCommand:
         assert result.exit_code == 0
         assert BRANCH_RID in result.stdout
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_get_not_found(self, mock_service_class):
         """Test get when no branch exists for the RID."""
         mock_service = Mock()
@@ -69,7 +69,7 @@ class TestGlobalBranchGetCommand:
         assert result.exit_code == 1
         assert "No branch found" in result.stdout
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_get_unverified_shape(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -83,7 +83,7 @@ class TestGlobalBranchGetCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_get_error(self, mock_service_class):
         """Test get error handling."""
         mock_service = Mock()
@@ -95,7 +95,7 @@ class TestGlobalBranchGetCommand:
         assert result.exit_code == 1
         assert "Error loading global branch" in result.stdout
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_get_with_profile(self, mock_service_class):
         """Test get with a specific profile."""
         mock_service = Mock()
@@ -119,7 +119,7 @@ class TestGlobalBranchCreateCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_create_defaults_to_plan(self, mock_service_class):
         """Test that create without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -145,7 +145,7 @@ class TestGlobalBranchCreateCommand:
             "my-branch", "", self.ONTOLOGY_RID, None
         )
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_create_apply_sends(self, mock_service_class):
         """Test that --apply issues the real create."""
         mock_service = Mock()
@@ -172,10 +172,10 @@ class TestGlobalBranchCreateCommand:
             "my-branch", "", self.ONTOLOGY_RID, None
         )
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_create_apply_agent_format(self, mock_service_class):
         """Test the applied create records an agent payload with the new RID."""
-        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -208,7 +208,7 @@ class TestGlobalBranchCreateCommand:
         assert envelope["meta"]["branch_rid"] == BRANCH_RID
         assert envelope["meta"]["write_verified"] is True
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_create_add_resource_plan(self, mock_service_class):
         """Test repeatable --add-resource reaches the plan as a list."""
         mock_service = Mock()
@@ -238,7 +238,7 @@ class TestGlobalBranchCreateCommand:
             ["ri.foundry.main.dataset.aaa", "ri.foundry.main.dataset.bbb"],
         )
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_create_add_resource_apply(self, mock_service_class):
         """Test --apply --add-resource reaches the create as a list."""
         mock_service = Mock()
@@ -267,7 +267,7 @@ class TestGlobalBranchCreateCommand:
             "my-branch", "", self.ONTOLOGY_RID, ["ri.foundry.main.dataset.aaa"]
         )
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_create_apply_error(self, mock_service_class):
         """Test create error handling on --apply."""
         mock_service = Mock()
@@ -297,7 +297,7 @@ class TestGlobalBranchCloseCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_close_defaults_to_plan(self, mock_service_class):
         """Test that close without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -308,7 +308,7 @@ class TestGlobalBranchCloseCommand:
         assert result.exit_code == 0
         mock_service.close_branch.assert_not_called()
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_close_apply_requires_yes(self, mock_service_class):
         """Test that --apply without --yes asks, and 'n' cancels."""
         mock_service = Mock()
@@ -323,7 +323,7 @@ class TestGlobalBranchCloseCommand:
         assert result.exit_code == 1
         mock_service.close_branch.assert_not_called()
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_close_apply_yes_sends(self, mock_service_class):
         """Test that --apply --yes issues the close."""
         mock_service = Mock()
@@ -341,7 +341,7 @@ class TestGlobalBranchCloseCommand:
         assert result.exit_code == 0
         mock_service.close_branch.assert_called_once_with(BRANCH_RID)
 
-    @patch("pltr.commands.global_branch.GlobalBranchService")
+    @patch("foundry_cli.commands.global_branch.GlobalBranchService")
     def test_close_not_found(self, mock_service_class):
         """Test close when no branch exists for the RID."""
         mock_service = Mock()

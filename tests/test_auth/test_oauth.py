@@ -7,8 +7,8 @@ import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import patch, Mock
-from pltr.auth.oauth import OAuthClientProvider
-from pltr.auth.base import MissingCredentialsError, InvalidCredentialsError
+from foundry_cli.auth.oauth import OAuthClientProvider
+from foundry_cli.auth.base import MissingCredentialsError, InvalidCredentialsError
 
 
 class TestOAuthClientProvider:

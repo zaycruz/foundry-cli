@@ -7,20 +7,20 @@ from unittest.mock import patch
 
 import pytest
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     AnalysisContext,
     ArgumentObservation,
     DependencyGraphService,
     OperationProvenance,
 )
-from pltr.services.dependency_internal_specs import (
+from foundry_cli.services.dependency_internal_specs import (
     ACP_OPERATION_SPECS,
     CONJURE_POST_OPERATION_SPECS,
     CONSUMER_CHARACTERIZATION_OPERATION_SPECS,
     GRAPHQL_OPERATION_SPECS,
     TRANSFORM_LINEAGE_GET_OPERATION_SPECS,
 )
-from pltr.utils.dependency_artifacts import (
+from foundry_cli.utils.dependency_artifacts import (
     ArtifactWriteError,
     artifact_identity,
     default_artifact_path,
@@ -172,7 +172,7 @@ def test_default_path_uses_xdg_state_home(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     assert (
         default_artifact_path("dep-123")
-        == (tmp_path / "pltr" / "dependency" / "dep-123.json").resolve()
+        == (tmp_path / "foundry" / "dependency" / "dep-123.json").resolve()
     )
 
 

@@ -4,7 +4,7 @@ import pytest
 import json
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestDataHealthCommands:
@@ -18,7 +18,7 @@ class TestDataHealthCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock DataHealthService."""
-        with patch("pltr.commands.data_health.DataHealthService") as MockService:
+        with patch("foundry_cli.commands.data_health.DataHealthService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc

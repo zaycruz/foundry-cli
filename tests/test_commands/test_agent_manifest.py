@@ -5,8 +5,8 @@ import json
 import click
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.commands.agent_manifest import build_manifest
+from foundry_cli.cli import app
+from foundry_cli.commands.agent_manifest import build_manifest
 
 
 runner = CliRunner()
@@ -21,7 +21,7 @@ def test_manifest_contains_registered_commands_and_flags() -> None:
     payload = _manifest(runner.invoke(app, ["agent-manifest"]))
 
     assert set(payload) == {"schemaVersion", "commands"}
-    assert payload["schemaVersion"] == "pltr-cli-tool-manifest-v1"
+    assert payload["schemaVersion"] == "foundry-cli-tool-manifest-v1"
     commands = {tuple(command["path"]): command for command in payload["commands"]}
 
     object_type_list = commands[("ontology", "object-type-list")]
@@ -147,15 +147,15 @@ def test_manifest_honors_the_shared_agent_output_contract() -> None:
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
-    assert payload["data"]["schemaVersion"] == "pltr-cli-tool-manifest-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
+    assert payload["data"]["schemaVersion"] == "foundry-cli-tool-manifest-v1"
 
 
 def test_manifest_emission_failure_exits_nonzero(monkeypatch) -> None:
     def fail(*args, **kwargs):
         raise RuntimeError("serialization failed")
 
-    monkeypatch.setattr("pltr.commands.agent_manifest.render_manifest", fail)
+    monkeypatch.setattr("foundry_cli.commands.agent_manifest.render_manifest", fail)
 
     result = runner.invoke(app, ["agent-manifest"])
 

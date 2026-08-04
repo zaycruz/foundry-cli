@@ -7,7 +7,7 @@ import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.commands.ontology import app
+from foundry_cli.commands.ontology import app
 
 runner = CliRunner()
 
@@ -16,11 +16,11 @@ runner = CliRunner()
 def mock_services():
     """Mock all ontology services."""
     with (
-        patch("pltr.commands.ontology.OntologyService") as mock_ont_svc,
-        patch("pltr.commands.ontology.ObjectTypeService") as mock_obj_type_svc,
-        patch("pltr.commands.ontology.OntologyObjectService") as mock_obj_svc,
-        patch("pltr.commands.ontology.ActionService") as mock_action_svc,
-        patch("pltr.commands.ontology.QueryService") as mock_query_svc,
+        patch("foundry_cli.commands.ontology.OntologyService") as mock_ont_svc,
+        patch("foundry_cli.commands.ontology.ObjectTypeService") as mock_obj_type_svc,
+        patch("foundry_cli.commands.ontology.OntologyObjectService") as mock_obj_svc,
+        patch("foundry_cli.commands.ontology.ActionService") as mock_action_svc,
+        patch("foundry_cli.commands.ontology.QueryService") as mock_query_svc,
     ):
         yield {
             "ontology": mock_ont_svc,
@@ -149,7 +149,7 @@ def test_create_object_type_command(mock_services):
 
 def test_create_object_type_command_auth_error(mock_services):
     """Test object type create command auth error handling."""
-    from pltr.auth.base import ProfileNotFoundError
+    from foundry_cli.auth.base import ProfileNotFoundError
 
     mock_instance = Mock()
     mock_instance.create_object_type.side_effect = ProfileNotFoundError(
@@ -351,7 +351,7 @@ def test_upsert_object_type_command_apply_error(mock_services):
 
 def test_object_type_upsert_capability_uses_internal_ontology_metadata_api():
     """The live catalog maps upsert to the implemented modifyOntology command."""
-    from pltr.capabilities import all_capabilities
+    from foundry_cli.capabilities import all_capabilities
 
     all_capabilities.cache_clear()
     capability = next(
@@ -406,7 +406,7 @@ def test_create_link_type_command(mock_services):
 
 def test_create_link_type_command_auth_error(mock_services):
     """Test link type create command auth error handling."""
-    from pltr.auth.base import MissingCredentialsError
+    from foundry_cli.auth.base import MissingCredentialsError
 
     mock_instance = Mock()
     mock_instance.create_link_type.side_effect = MissingCredentialsError(
@@ -459,7 +459,7 @@ def test_create_link_type_command_runtime_error(mock_services):
 # Object operation command tests
 def test_list_objects_command(mock_services):
     """Test list objects command."""
-    from src.pltr.utils.pagination import PaginationResult, PaginationMetadata
+    from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
 
     mock_instance = Mock()
     object_data = [
@@ -485,7 +485,7 @@ def test_list_objects_command(mock_services):
 
 def test_list_objects_with_properties(mock_services):
     """Test list objects with specific properties."""
-    from src.pltr.utils.pagination import PaginationResult, PaginationMetadata
+    from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
 
     mock_instance = Mock()
     object_data = [{"employee_id": "EMP001", "name": "John Doe"}]
@@ -809,7 +809,7 @@ def test_execute_query_with_parameters(mock_services):
 # Error handling tests
 def test_authentication_error(mock_services):
     """Test handling of authentication errors."""
-    from pltr.auth.base import ProfileNotFoundError
+    from foundry_cli.auth.base import ProfileNotFoundError
 
     mock_instance = Mock()
     mock_instance.list_ontologies.side_effect = ProfileNotFoundError(
@@ -1190,7 +1190,7 @@ def test_action_type_upsert_command(mock_services, tmp_path):
     definition_file.write_text(
         json.dumps(
             {
-                "apiName": "pltr-test-action",
+                "apiName": "foundry-test-action",
                 "logic": {"rules": []},
                 "validations": {"always": {}},
             }
@@ -1213,7 +1213,7 @@ def test_action_type_upsert_command(mock_services, tmp_path):
     assert result.exit_code == 0
     call_kwargs = mock_instance.upsert_action_type.call_args.kwargs
     assert call_kwargs["ontology_rid"] == "ri.ontology.main.ontology.test"
-    assert call_kwargs["definition"]["apiName"] == "pltr-test-action"
+    assert call_kwargs["definition"]["apiName"] == "foundry-test-action"
     assert call_kwargs["apply"] is False
 
 
@@ -1245,13 +1245,13 @@ def test_action_type_delete_dry_run_default(mock_services):
 
     result = runner.invoke(
         app,
-        ["action-type-delete", "ri.ontology.main.ontology.test", "pltr-test"],
+        ["action-type-delete", "ri.ontology.main.ontology.test", "foundry-test"],
     )
 
     assert result.exit_code == 0
     mock_instance.delete_action_type.assert_called_once_with(
         ontology_rid="ri.ontology.main.ontology.test",
-        action_type="pltr-test",
+        action_type="foundry-test",
         apply=False,
     )
 
@@ -1270,7 +1270,7 @@ def test_action_type_delete_apply_with_yes(mock_services):
         [
             "action-type-delete",
             "ri.ontology.main.ontology.test",
-            "pltr-test",
+            "foundry-test",
             "--apply",
             "--yes",
         ],
@@ -1679,7 +1679,7 @@ def test_resolve_action_type_command(mock_services):
 
 def test_resolve_function_command(mock_services):
     """function resolution delegates to FunctionsService."""
-    with patch("pltr.commands.ontology.FunctionsService") as mock_functions:
+    with patch("foundry_cli.commands.ontology.FunctionsService") as mock_functions:
         mock_instance = Mock()
         mock_instance.resolve_function.return_value = {
             "status": "ok",
@@ -1766,7 +1766,7 @@ def _guarded_composite(**overrides):
 @pytest.fixture
 def mock_guarded_service():
     """Mock the composite GuardedUpsertService."""
-    with patch("pltr.commands.ontology.GuardedUpsertService") as mock_cls:
+    with patch("foundry_cli.commands.ontology.GuardedUpsertService") as mock_cls:
         yield mock_cls
 
 
@@ -2035,7 +2035,7 @@ def _guarded_delete_composite(**overrides):
 @pytest.fixture
 def mock_guarded_mutation_service():
     """Mock the composite GuardedMutationService."""
-    with patch("pltr.commands.ontology.GuardedMutationService") as mock_cls:
+    with patch("foundry_cli.commands.ontology.GuardedMutationService") as mock_cls:
         yield mock_cls
 
 
@@ -2126,7 +2126,7 @@ def test_guarded_delete_needs_verification_acceptance_recorded(
 
 def test_guarded_delete_not_found_preflight_fails(mock_guarded_mutation_service):
     """A missing type fails with the typed not-found, exit 1, no delete."""
-    from pltr.services.ontology import ObjectTypeNotFoundError
+    from foundry_cli.services.ontology import ObjectTypeNotFoundError
 
     mock_instance = Mock()
     mock_instance.prepare_object_type_delete.side_effect = ObjectTypeNotFoundError(

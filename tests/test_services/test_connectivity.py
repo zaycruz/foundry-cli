@@ -7,7 +7,7 @@ import uuid
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
-from pltr.services.connectivity import (
+from foundry_cli.services.connectivity import (
     ConnectivityService,
     EgressPolicyNotFoundError,
     EgressPolicyShapeError,
@@ -18,7 +18,7 @@ from pltr.services.connectivity import (
 class TestConnectivityService:
     """Test cases for ConnectivityService."""
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def setup_method(self, method, mock_client):
         """Set up test fixtures."""
         self.mock_client = mock_client
@@ -49,28 +49,28 @@ class TestConnectivityService:
         with pytest.raises(RuntimeError, match="Connectivity service is not available"):
             _ = service.connections_service
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_service(self, mock_client):
         """Test _get_service returns client."""
         service = ConnectivityService(profile="test")
         result = service._get_service()
         assert result == mock_client
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_connections_service(self, mock_client):
         """Test connections_service property."""
         service = ConnectivityService(profile="test")
         result = service.connections_service
         assert result == mock_client.connections
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_file_imports_service(self, mock_client):
         """Test file_imports_service property."""
         service = ConnectivityService(profile="test")
         result = service.file_imports_service
         assert result == mock_client.connectivity.Connection.FileImport
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_table_imports_service(self, mock_client):
         """Test table_imports_service property."""
         service = ConnectivityService(profile="test")
@@ -120,7 +120,7 @@ class TestConnectivityService:
     ):
         """Test filesystem fallback starts at env-configured folder RID."""
         monkeypatch.setenv(
-            "PLTR_CONNECTIONS_FALLBACK_START_FOLDER_RID",
+            "FOUNDRY_CONNECTIONS_FALLBACK_START_FOLDER_RID",
             "ri.compass.main.folder.custom-start",
         )
 
@@ -198,7 +198,7 @@ class TestConnectivityService:
         with pytest.raises(RuntimeError, match="Unable to list fallback start folder"):
             service.list_connections()
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_connection_success(self, mock_client):
         """Test successful connection retrieval."""
         mock_connection = Mock()
@@ -219,7 +219,7 @@ class TestConnectivityService:
             "ri.conn.main.connection.123"
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_connection_error(self, mock_client):
         """Test connection retrieval error handling."""
         mock_client.connections.Connection.get.side_effect = Exception("Not found")
@@ -228,7 +228,7 @@ class TestConnectivityService:
         with pytest.raises(RuntimeError, match="Failed to get connection"):
             service.get_connection("ri.conn.main.connection.123")
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_execute_file_import_success(self, mock_client):
         """Test successful file import execution."""
         mock_client.connectivity.Connection.FileImport.execute.return_value = (
@@ -246,7 +246,7 @@ class TestConnectivityService:
             file_import_rid="ri.import.main.file.123",
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_execute_table_import_success(self, mock_client):
         """Test successful table import execution."""
         mock_client.connectivity.Connection.TableImport.execute.return_value = (
@@ -263,7 +263,7 @@ class TestConnectivityService:
             table_import_rid="ri.import.main.table.123",
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_list_file_imports_success(self, mock_client):
         """Test successful file imports listing."""
         mock_import = Mock()
@@ -281,7 +281,7 @@ class TestConnectivityService:
             connection_rid="ri.conn.main.connection.123"
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_file_import_success(self, mock_client):
         """Test getting a file import with its parent connection RID."""
         mock_import = Mock()
@@ -299,7 +299,7 @@ class TestConnectivityService:
             file_import_rid="ri.import.main.file.123",
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_list_table_imports_success(self, mock_client):
         """Test listing table imports for a connection."""
         mock_import = Mock()
@@ -317,7 +317,7 @@ class TestConnectivityService:
             connection_rid="ri.conn.main.connection.123"
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_table_import_success(self, mock_client):
         """Test getting a table import with its parent connection RID."""
         mock_import = Mock()
@@ -335,7 +335,7 @@ class TestConnectivityService:
             table_import_rid="ri.import.main.table.123",
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_format_connection_info_complete(self, mock_client):
         """Test connection info formatting with complete data."""
         mock_connection = Mock()
@@ -361,8 +361,8 @@ class TestConnectivityService:
         }
         assert result == expected
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
-    @patch("pltr.services.connectivity.getattr")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.getattr")
     def test_format_connection_info_error(self, mock_getattr, mock_client):
         """Test connection info formatting error fallback."""
         mock_connection = Mock()
@@ -376,7 +376,7 @@ class TestConnectivityService:
         assert "raw" in result
         assert str(mock_connection) in result["raw"]
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_format_import_info_complete(self, mock_client):
         """Test import info formatting with complete data."""
         mock_import = Mock()
@@ -424,7 +424,7 @@ class TestConnectivityService:
             "ri.compass.main.folder.123", "folder"
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_create_connection_success(self, mock_client):
         """Test successful connection creation."""
         mock_connection = Mock()
@@ -455,7 +455,7 @@ class TestConnectivityService:
             worker={"type": "direct"},
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_create_connection_error(self, mock_client):
         """Test connection creation error handling."""
         mock_client.connections.Connection.create.side_effect = Exception(
@@ -471,7 +471,7 @@ class TestConnectivityService:
                 worker={"type": "direct"},
             )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_connection_configuration_success(self, mock_client):
         """Test successful connection configuration retrieval."""
         mock_config = {"host": "localhost", "port": 5432}
@@ -486,7 +486,7 @@ class TestConnectivityService:
             "ri.conn.main.connection.123"
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_get_connection_configuration_error(self, mock_client):
         """Test connection configuration retrieval error handling."""
         mock_client.connections.Connection.get_configuration.side_effect = Exception(
@@ -497,7 +497,7 @@ class TestConnectivityService:
         with pytest.raises(RuntimeError, match="Failed to get configuration"):
             service.get_connection_configuration("ri.conn.main.connection.123")
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_update_export_settings_success(self, mock_client):
         """Test successful export settings update."""
         mock_client.connections.Connection.update_export_settings.return_value = None
@@ -515,7 +515,7 @@ class TestConnectivityService:
             export_settings={"exportsEnabled": True},
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_update_export_settings_error(self, mock_client):
         """Test export settings update error handling."""
         mock_client.connections.Connection.update_export_settings.side_effect = (
@@ -529,7 +529,7 @@ class TestConnectivityService:
                 {"exportsEnabled": True},
             )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_update_secrets_success(self, mock_client):
         """Test successful secrets update."""
         mock_client.connections.Connection.update_secrets.return_value = None
@@ -547,7 +547,7 @@ class TestConnectivityService:
             secrets={"password": "newpass"},
         )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_update_secrets_error(self, mock_client):
         """Test secrets update error handling."""
         mock_client.connections.Connection.update_secrets.side_effect = Exception(
@@ -561,7 +561,7 @@ class TestConnectivityService:
                 {"password": "newpass"},
             )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_upload_custom_jdbc_drivers_success(self, mock_client, tmp_path):
         """Test successful JDBC driver upload."""
         # Create a temporary JAR file
@@ -590,7 +590,7 @@ class TestConnectivityService:
         assert result["rid"] == "ri.conn.main.connection.123"
         mock_client.connections.Connection.upload_custom_jdbc_drivers.assert_called_once()
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_upload_custom_jdbc_drivers_file_not_found(self, mock_client):
         """Test JDBC driver upload with non-existent file."""
         service = ConnectivityService(profile="test")
@@ -600,7 +600,7 @@ class TestConnectivityService:
                 "/nonexistent/path/driver.jar",
             )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_upload_custom_jdbc_drivers_invalid_extension(self, mock_client, tmp_path):
         """Test JDBC driver upload with non-JAR file."""
         # Create a temporary non-JAR file
@@ -614,7 +614,7 @@ class TestConnectivityService:
                 str(txt_file),
             )
 
-    @patch("pltr.services.connectivity.ConnectivityService.client")
+    @patch("foundry_cli.services.connectivity.ConnectivityService.client")
     def test_upload_custom_jdbc_drivers_api_error(self, mock_client, tmp_path):
         """Test JDBC driver upload API error handling."""
         # Create a temporary JAR file
@@ -638,7 +638,7 @@ class TestWebhookRegistryReads:
 
     WEBHOOK_RID = "ri.magritte..webhook.12345678-1234-1234-1234-123456789abc"
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_get_webhook_latest_success(self, mock_client_class):
         """Test fetching the latest webhook version."""
         mock_client = Mock()
@@ -659,7 +659,7 @@ class TestWebhookRegistryReads:
             "GET", f"webhooks/api/registry/v0/{self.WEBHOOK_RID}/latest"
         )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_get_webhook_specific_version(self, mock_client_class):
         """Test fetching a pinned webhook version."""
         mock_client = Mock()
@@ -675,7 +675,7 @@ class TestWebhookRegistryReads:
             "GET", f"webhooks/api/registry/v0/{self.WEBHOOK_RID}/version/1"
         )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_get_webhook_empty_response_is_not_found(self, mock_client_class):
         """Test that an empty (HTTP 204) registry response fails loudly."""
         mock_client = Mock()
@@ -686,7 +686,7 @@ class TestWebhookRegistryReads:
         with pytest.raises(WebhookNotFoundError, match="No webhook found"):
             service.get_webhook(self.WEBHOOK_RID)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_get_webhook_route_not_mounted(self, mock_client_class):
         """Test a clear error when the webhooks API is not mounted."""
         mock_client = Mock()
@@ -701,7 +701,7 @@ class TestWebhookRegistryReads:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.get_webhook(self.WEBHOOK_RID)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_get_webhook_http_error(self, mock_client_class):
         """Test that non-2xx registry responses fail loudly."""
         mock_client = Mock()
@@ -712,7 +712,7 @@ class TestWebhookRegistryReads:
         with pytest.raises(RuntimeError, match="HTTP 500"):
             service.get_webhook(self.WEBHOOK_RID)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_get_webhook_transport_error(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -725,11 +725,11 @@ class TestWebhookRegistryReads:
 
     def test_get_webhook_without_profile_raises(self):
         """Test that a missing profile fails before any network call."""
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         service = ConnectivityService()
         with patch(
-            "pltr.config.profiles.ProfileManager.get_active_profile",
+            "foundry_cli.config.profiles.ProfileManager.get_active_profile",
             return_value=None,
         ):
             with pytest.raises(ProfileNotFoundError, match="No profile specified"):
@@ -751,7 +751,7 @@ class TestEgressPolicyEnsure:
         mock_client.conjure.side_effect = responses
         return mock_client
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_finds_matching_policy(self, mock_client_class):
         """Test that an existing policy covering the hostname is returned."""
         self._mock_client(
@@ -773,7 +773,7 @@ class TestEgressPolicyEnsure:
         assert result["status"] == "exists"
         assert result["policy"] == {"targets": [{"hostname": "api.example.com"}]}
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_matches_hostname_case_insensitively(self, mock_client_class):
         """Test hostname matching is case-insensitive."""
         self._mock_client(
@@ -789,7 +789,7 @@ class TestEgressPolicyEnsure:
 
         assert result["policy_rid"] == self.POLICY_RID
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_no_match_would_create(self, mock_client_class):
         """Test a missing match raises the loud 'would create' error."""
         self._mock_client(
@@ -806,7 +806,7 @@ class TestEgressPolicyEnsure:
         ):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_no_policies_would_create(self, mock_client_class):
         """Test an empty policy inventory raises the 'would create' error."""
         self._mock_client(mock_client_class, [(200, {}, "{}")])
@@ -817,7 +817,7 @@ class TestEgressPolicyEnsure:
         ):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_skips_null_policy_details(self, mock_client_class):
         """Test that null policy detail entries do not crash matching."""
         self._mock_client(
@@ -832,7 +832,7 @@ class TestEgressPolicyEnsure:
         with pytest.raises(EgressPolicyNotFoundError):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_list_unverified_shape(self, mock_client_class):
         """Test that a non-map get-all-policies response fails loudly."""
         self._mock_client(mock_client_class, [(200, ["not-a-map"], "[...]")])
@@ -841,7 +841,7 @@ class TestEgressPolicyEnsure:
         with pytest.raises(EgressPolicyShapeError, match="Unverified"):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_batch_unverified_shape(self, mock_client_class):
         """Test that a non-map get-batch response fails loudly."""
         self._mock_client(
@@ -856,7 +856,7 @@ class TestEgressPolicyEnsure:
         with pytest.raises(EgressPolicyShapeError, match="Unverified"):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_route_not_mounted(self, mock_client_class):
         """Test a clear error when resource-policy-manager is not mounted."""
         self._mock_client(
@@ -868,7 +868,7 @@ class TestEgressPolicyEnsure:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_http_error(self, mock_client_class):
         """Test that non-2xx reads fail loudly."""
         self._mock_client(mock_client_class, [(500, "boom", "boom")])
@@ -877,7 +877,7 @@ class TestEgressPolicyEnsure:
         with pytest.raises(RuntimeError, match="HTTP 500"):
             service.ensure_egress_policy(self.HOSTNAME)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_ensure_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -895,7 +895,7 @@ class TestEgressPolicyEnsure:
             service.ensure_egress_policy("  ")
 
 
-from pltr.services.connectivity import WebhookShapeError  # noqa: E402
+from foundry_cli.services.connectivity import WebhookShapeError  # noqa: E402
 
 SOURCE_RID = "ri.magritte..source.00000000-0000-0000-0000-000000000021"
 
@@ -933,7 +933,7 @@ class TestWebhookWriteService:
 
         assert body["spec"] == override
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_webhook_success(self, mock_client_class):
         """Test creating a webhook returns the raw payload."""
         mock_client = Mock()
@@ -953,7 +953,7 @@ class TestWebhookWriteService:
             == SOURCE_RID
         )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_webhook_permission_denied_is_loud(self, mock_client_class):
         """Test the verified 403 permission boundary surfaces loudly."""
         mock_client = Mock()
@@ -968,7 +968,7 @@ class TestWebhookWriteService:
         with pytest.raises(RuntimeError, match="HTTP 403"):
             service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_webhook_route_not_mounted(self, mock_client_class):
         """Test a clear error when the webhooks API is not mounted."""
         mock_client = Mock()
@@ -983,7 +983,7 @@ class TestWebhookWriteService:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_webhook_empty_2xx_fails_loudly(self, mock_client_class):
         """Test that an empty success payload is a shape error."""
         mock_client = Mock()
@@ -994,7 +994,7 @@ class TestWebhookWriteService:
         with pytest.raises(WebhookShapeError, match="Unverified"):
             service.create_webhook("my-webhook", "MyWebhook", "desc", SOURCE_RID)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_webhook_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -1217,7 +1217,7 @@ class TestWebhookUpdateService:
         "storagePolicy": {},
     }
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_update_webhook_success(self, mock_client_class):
         """Test publish sends {spec} only and returns the raw payload."""
         mock_client = Mock()
@@ -1235,7 +1235,7 @@ class TestWebhookUpdateService:
             json_body={"spec": self.SPEC},
         )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_update_webhook_permission_denied_is_loud(self, mock_client_class):
         """Test a resource-scoped 403 surfaces loudly."""
         mock_client = Mock()
@@ -1250,7 +1250,7 @@ class TestWebhookUpdateService:
         with pytest.raises(RuntimeError, match="HTTP 403"):
             service.update_webhook(WEBHOOK_RID, self.SPEC)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_update_webhook_route_not_mounted(self, mock_client_class):
         """Test a clear error when the webhooks API is not mounted."""
         mock_client = Mock()
@@ -1265,7 +1265,7 @@ class TestWebhookUpdateService:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.update_webhook(WEBHOOK_RID, self.SPEC)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_update_webhook_empty_2xx_fails_loudly(self, mock_client_class):
         """Test that an empty success payload is a shape error."""
         mock_client = Mock()
@@ -1276,7 +1276,7 @@ class TestWebhookUpdateService:
         with pytest.raises(WebhookShapeError, match="Unexpected webhook update"):
             service.update_webhook(WEBHOOK_RID, self.SPEC)
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_update_webhook_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -1309,7 +1309,7 @@ class TestResolveSourceDomainId:
         }
     }
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_resolve_matches_host(self, mock_client_class):
         """Test the full-RID config GET maps host to domainId."""
         mock_client = Mock()
@@ -1325,7 +1325,7 @@ class TestResolveSourceDomainId:
             f"magritte-coordinator/api/source-store/source/{SOURCE_RID}/config",
         )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_resolve_matches_host_case_insensitively(self, mock_client_class):
         """Test host matching is case-insensitive."""
         mock_client = Mock()
@@ -1337,7 +1337,7 @@ class TestResolveSourceDomainId:
             service.resolve_source_domain_id(SOURCE_RID, "Example.INVALID") == DOMAIN_ID
         )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_resolve_no_match_lists_available_hosts(self, mock_client_class):
         """Test a missing host fails loudly with the available hosts."""
         mock_client = Mock()
@@ -1348,7 +1348,7 @@ class TestResolveSourceDomainId:
         with pytest.raises(RuntimeError, match="example.invalid"):
             service.resolve_source_domain_id(SOURCE_RID, "other.invalid")
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_resolve_http_error_is_loud(self, mock_client_class):
         """Test a non-2xx config read fails loudly."""
         mock_client = Mock()
@@ -1413,7 +1413,7 @@ class TestRestSourceCreateService:
         second_id = second["config"]["source"]["config"]["domains"][0]["domainId"]
         assert first_id != second_id
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_rest_source_bare_string_response(self, mock_client_class):
         """Test the bare-string source RID response is unwrapped."""
         mock_client = Mock()
@@ -1439,10 +1439,10 @@ class TestRestSourceCreateService:
         assert args[1] == "magritte-coordinator/api/source-store/source/v3"
         assert kwargs["json_body"]["parentRid"] == PARENT_FOLDER_RID
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_rest_source_object_response_fails_loudly(self, mock_client_class):
         """Test that a non-bare-string 2xx payload is a shape error."""
-        from pltr.services.connectivity import RestSourceShapeError
+        from foundry_cli.services.connectivity import RestSourceShapeError
 
         mock_client = Mock()
         mock_client_class.return_value = mock_client
@@ -1459,7 +1459,7 @@ class TestRestSourceCreateService:
                 [EGRESS_POLICY_RID],
             )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_rest_source_permission_denied_is_loud(self, mock_client_class):
         """Test a magritte:write-resource 403 surfaces loudly."""
         mock_client = Mock()
@@ -1481,7 +1481,7 @@ class TestRestSourceCreateService:
                 [EGRESS_POLICY_RID],
             )
 
-    @patch("pltr.services.connectivity.FoundryInternalClient")
+    @patch("foundry_cli.services.connectivity.FoundryInternalClient")
     def test_create_rest_source_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()

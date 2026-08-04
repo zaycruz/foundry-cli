@@ -11,10 +11,10 @@ from typer.testing import CliRunner
 
 from io import StringIO
 
-from pltr.commands.dataset import app
-from pltr.services.errors import FoundryApiError
-from pltr.utils.agent_output import flush_agent_output
-from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
+from foundry_cli.commands.dataset import app
+from foundry_cli.services.errors import FoundryApiError
+from foundry_cli.utils.agent_output import flush_agent_output
+from foundry_cli.auth.base import ProfileNotFoundError, MissingCredentialsError
 
 runner = CliRunner()
 
@@ -34,7 +34,7 @@ def _plain(text: str) -> str:
 @pytest.fixture
 def mock_dataset_service():
     """Mock DatasetService for command tests."""
-    with patch("pltr.commands.dataset.DatasetService") as mock_service_class:
+    with patch("foundry_cli.commands.dataset.DatasetService") as mock_service_class:
         mock_service = Mock()
         mock_service_class.return_value = mock_service
         yield mock_service
@@ -94,7 +94,7 @@ def test_dataset_stats_success_and_pagination(mock_dataset_service):
     # the buffer here. End-to-end stdout is covered by the envelope contract.
     rendered = flush_agent_output(StringIO())
     assert rendered is not None
-    assert '"schema_version": "pltr-agent-v1"' in rendered
+    assert '"schema_version": "foundry-agent-v1"' in rendered
     assert '"next_page_token": "next"' in rendered
 
 
@@ -454,7 +454,7 @@ def test_schedule_list_passes_public_dictionary_contract_to_formatter(
     ]
     mock_dataset_service.get_schedules.return_value = schedules
 
-    with patch("pltr.commands.dataset.formatter.format_schedules") as format_schedules:
+    with patch("foundry_cli.commands.dataset.formatter.format_schedules") as format_schedules:
         result = runner.invoke(
             app,
             ["schedules", "list", "ri.foundry.main.dataset.input"],
@@ -479,7 +479,7 @@ def test_list_transactions_uses_dataset_wide_service_contract(
     mock_dataset_service.get_transactions.return_value = transactions
 
     with patch(
-        "pltr.commands.dataset.formatter.format_transactions"
+        "foundry_cli.commands.dataset.formatter.format_transactions"
     ) as format_transactions:
         result = runner.invoke(
             app,

@@ -5,8 +5,8 @@ Tests for the read-only repository pull-request commands.
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.commands.repository import app
-from pltr.services.repository import (
+from foundry_cli.commands.repository import app
+from foundry_cli.services.repository import (
     PullRequestNotFoundError,
     PullRequestShapeError,
     RepositoryCloneError,
@@ -34,7 +34,7 @@ class TestPullRequestListCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_list_success(self, mock_service_class):
         """Test listing pull requests."""
         mock_service = Mock()
@@ -46,7 +46,7 @@ class TestPullRequestListCommand:
         assert result.exit_code == 0
         mock_service.list_pull_requests.assert_called_once_with(None)
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_list_with_repository_filter(self, mock_service_class):
         """Test listing with a repository RID filter."""
         mock_service = Mock()
@@ -58,7 +58,7 @@ class TestPullRequestListCommand:
         assert result.exit_code == 0
         mock_service.list_pull_requests.assert_called_once_with(REPO_RID)
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_list_json_format(self, mock_service_class):
         """Test listing with JSON output."""
         mock_service = Mock()
@@ -70,7 +70,7 @@ class TestPullRequestListCommand:
         assert result.exit_code == 0
         assert PR_RID in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_list_shape_error(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -84,7 +84,7 @@ class TestPullRequestListCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_list_error(self, mock_service_class):
         """Test list error handling."""
         mock_service = Mock()
@@ -96,7 +96,7 @@ class TestPullRequestListCommand:
         assert result.exit_code == 1
         assert "Error listing pull requests" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_list_with_profile(self, mock_service_class):
         """Test listing with a specific profile."""
         mock_service = Mock()
@@ -116,7 +116,7 @@ class TestPullRequestGetCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_get_success(self, mock_service_class):
         """Test getting one pull request."""
         mock_service = Mock()
@@ -128,7 +128,7 @@ class TestPullRequestGetCommand:
         assert result.exit_code == 0
         mock_service.get_pull_request.assert_called_once_with(PR_RID)
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_get_json_format(self, mock_service_class):
         """Test get with JSON output."""
         mock_service = Mock()
@@ -142,7 +142,7 @@ class TestPullRequestGetCommand:
         assert result.exit_code == 0
         assert PR_RID in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_get_not_found(self, mock_service_class):
         """Test get when no pull request exists for the RID."""
         mock_service = Mock()
@@ -156,7 +156,7 @@ class TestPullRequestGetCommand:
         assert result.exit_code == 1
         assert "No pull request found" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_get_error(self, mock_service_class):
         """Test get error handling."""
         mock_service = Mock()
@@ -194,7 +194,7 @@ class TestContextCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_context_success(self, mock_service_class):
         """Test getting repository context."""
         mock_service = Mock()
@@ -208,7 +208,7 @@ class TestContextCommand:
             REPO_RID, path="", ref=None, include_tree=True
         )
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_context_json_format(self, mock_service_class):
         """Test context with JSON output."""
         mock_service = Mock()
@@ -220,7 +220,7 @@ class TestContextCommand:
         assert result.exit_code == 0
         assert REPO_RID in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_context_options_forwarded(self, mock_service_class):
         """Test --path/--ref/--no-tree reach the service."""
         mock_service = Mock()
@@ -247,7 +247,7 @@ class TestContextCommand:
             REPO_RID, path="src", ref="refs/tags/0.3.0", include_tree=False
         )
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_context_not_found(self, mock_service_class):
         """Test context when no repository exists for the RID."""
         mock_service = Mock()
@@ -261,7 +261,7 @@ class TestContextCommand:
         assert result.exit_code == 1
         assert "No repository found" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_context_shape_error(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -283,7 +283,7 @@ class TestCloneCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_clone_success(self, mock_service_class, tmp_path):
         """Test cloning into a fresh target directory."""
         mock_service = Mock()
@@ -306,7 +306,7 @@ class TestCloneCommand:
             dry_run=False,
         )
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_clone_dry_run(self, mock_service_class, tmp_path):
         """Test --dry-run forwards and reports the plan."""
         mock_service = Mock()
@@ -334,7 +334,7 @@ class TestCloneCommand:
         _, kwargs = mock_service.clone_repository.call_args
         assert kwargs["dry_run"] is True
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_clone_refuses_overwrite(self, mock_service_class, tmp_path):
         """Test a non-empty target without --force fails loudly."""
         mock_service = Mock()
@@ -350,7 +350,7 @@ class TestCloneCommand:
         assert result.exit_code == 1
         assert "refusing to overwrite" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_clone_error(self, mock_service_class, tmp_path):
         """Test generic clone error handling."""
         mock_service = Mock()
@@ -370,7 +370,7 @@ class TestCreatePythonTransformsCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_default_is_dry_run_plan(self, mock_service_class):
         """Test the default posture prints the dry-run plan, never posts."""
         mock_service = Mock()
@@ -404,7 +404,7 @@ class TestCreatePythonTransformsCommand:
         )
         mock_service.create_python_transforms_repository.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_apply_creates_and_reports_repository(self, mock_service_class):
         """Test --apply forwards to the real create and reports the rid."""
         mock_service = Mock()
@@ -438,7 +438,7 @@ class TestCreatePythonTransformsCommand:
         )
         mock_service.create_python_transforms_plan.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_shape_error_fails_loudly(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -455,7 +455,7 @@ class TestCreatePythonTransformsCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_create_error(self, mock_service_class):
         """Test create error handling."""
         mock_service = Mock()
@@ -487,7 +487,7 @@ class TestPullRequestCreateCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_default_is_dry_run_plan(self, mock_service_class):
         """Test the default posture prints the dry-run plan, never posts."""
         mock_service = Mock()
@@ -528,7 +528,7 @@ class TestPullRequestCreateCommand:
         )
         mock_service.create_pull_request.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_apply_posts_verified_body(self, mock_service_class):
         """Test --apply forwards every option to the real create."""
         mock_service = Mock()
@@ -569,7 +569,7 @@ class TestPullRequestCreateCommand:
         )
         mock_service.create_pull_request_plan.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_create_shape_error(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -595,7 +595,7 @@ class TestPullRequestCreateCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_create_error(self, mock_service_class):
         """Test create error handling."""
         mock_service = Mock()
@@ -627,7 +627,7 @@ class TestPullRequestCommentCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_default_is_dry_run_plan(self, mock_service_class):
         """Test the default posture prints the dry-run plan, never posts."""
         mock_service = Mock()
@@ -653,7 +653,7 @@ class TestPullRequestCommentCommand:
         )
         mock_service.create_pull_request_comment.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_apply_posts_comment(self, mock_service_class):
         """Test --apply forwards to the real comment create."""
         mock_service = Mock()
@@ -675,7 +675,7 @@ class TestPullRequestCommentCommand:
         )
         mock_service.create_pull_request_comment_plan.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_comment_shape_error(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -691,7 +691,7 @@ class TestPullRequestCommentCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_comment_error(self, mock_service_class):
         """Test comment error handling."""
         mock_service = Mock()
@@ -728,7 +728,7 @@ class TestPullRequestCloseCommand:
             "evidence": "contract-verified",
         }
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_default_is_dry_run_plan(self, mock_service_class):
         """Test the default posture prints the dry-run plan, never PUTs."""
         mock_service = Mock()
@@ -744,7 +744,7 @@ class TestPullRequestCloseCommand:
         mock_service.close_pull_request_plan.assert_called_once_with(PR_RID)
         mock_service.close_pull_request.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_apply_requires_yes(self, mock_service_class):
         """Test --apply without --yes prompts and honours a refusal."""
         mock_service = Mock()
@@ -758,7 +758,7 @@ class TestPullRequestCloseCommand:
         assert "Close cancelled" in result.stdout
         mock_service.close_pull_request.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_apply_yes_closes(self, mock_service_class):
         """Test --apply --yes forwards to the real close."""
         mock_service = Mock()
@@ -782,7 +782,7 @@ class TestPullRequestCloseCommand:
         mock_service.close_pull_request.assert_called_once_with(PR_RID)
         mock_service.close_pull_request_plan.assert_not_called()
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_already_closed_reported(self, mock_service_class):
         """Test an already-closed pull request is reported honestly."""
         mock_service = Mock()
@@ -804,7 +804,7 @@ class TestPullRequestCloseCommand:
         assert result.exit_code == 0
         assert "already-closed" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_close_not_found(self, mock_service_class):
         """Test close when no pull request exists for the RID."""
         mock_service = Mock()
@@ -818,7 +818,7 @@ class TestPullRequestCloseCommand:
         assert result.exit_code == 1
         assert "No pull request found" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_close_shape_error(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -834,7 +834,7 @@ class TestPullRequestCloseCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.repository.RepositoryService")
+    @patch("foundry_cli.commands.repository.RepositoryService")
     def test_close_error(self, mock_service_class):
         """Test close error handling."""
         mock_service = Mock()

@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pltr.services.compute import (
+from foundry_cli.services.compute import (
     ComputeModulesError,
     ComputeService,
     ComputeSessionNotFoundError,
@@ -31,7 +31,7 @@ CONTOUR_403 = (
 class TestComputeInfoService:
     """Test cases for read-only status/config loads."""
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_status_success(self, mock_client_class):
         """Test loading status returns the raw payload via the verified path."""
         mock_client = Mock()
@@ -51,7 +51,7 @@ class TestComputeInfoService:
             json_body=None,
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_config_success(self, mock_client_class):
         """Test loading config returns the raw payload via the verified path."""
         mock_client = Mock()
@@ -69,7 +69,7 @@ class TestComputeInfoService:
             json_body=None,
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_status_permission_denied_is_loud(self, mock_client_class):
         """Test the captured 403 contract surfaces honestly, not as not-found."""
         mock_client = Mock()
@@ -82,7 +82,7 @@ class TestComputeInfoService:
         ):
             service.get_status(DEPLOYED_APP_RID, BRANCH)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_status_route_not_mounted(self, mock_client_class):
         """Test a clear error when the multiplexer route is not mounted."""
         mock_client = Mock()
@@ -97,7 +97,7 @@ class TestComputeInfoService:
         with pytest.raises(ComputeModulesError, match="not mounted"):
             service.get_status(DEPLOYED_APP_RID, BRANCH)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_status_unverified_shape(self, mock_client_class):
         """Test that a non-object success payload fails loudly."""
         mock_client = Mock()
@@ -108,7 +108,7 @@ class TestComputeInfoService:
         with pytest.raises(ComputeShapeError, match="Unverified"):
             service.get_status(DEPLOYED_APP_RID, BRANCH)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_config_empty_object_fails_loudly(self, mock_client_class):
         """Test that an empty object is not rendered as a result."""
         mock_client = Mock()
@@ -119,7 +119,7 @@ class TestComputeInfoService:
         with pytest.raises(ComputeShapeError, match="Unverified"):
             service.get_config(DEPLOYED_APP_RID)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_status_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -155,8 +155,8 @@ class TestComputeLogsService:
         ]
         return mock_client
 
-    @patch("pltr.services.compute.time.time", return_value=1_700_000_000.0)
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.time.time", return_value=1_700_000_000.0)
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_logs_two_step_flow(self, mock_client_class, _mock_time):
         """Test session resolution then logs/read/v3 with microsecond range."""
         mock_client = self._client(mock_client_class)
@@ -191,7 +191,7 @@ class TestComputeLogsService:
             expected_to - 24 * 60 * 60 * 1_000_000
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_logs_explicit_range_and_reverse(self, mock_client_class):
         """Test explicit microsecond bounds and reverse chronological order."""
         mock_client = self._client(mock_client_class)
@@ -213,7 +213,7 @@ class TestComputeLogsService:
         }
         assert mock_client.conjure.call_count == 2
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_logs_response_passed_through_raw(self, mock_client_class):
         """Test the bundle-derived step-2 shape is not projected."""
         raw_logs = {"events": [{"payload": {"log": {"time": 1}}}]}
@@ -224,7 +224,7 @@ class TestComputeLogsService:
 
         assert result["response"] == raw_logs
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_logs_no_session_is_loud(self, mock_client_class):
         """Test the captured empty-map response maps to a clear not-found."""
         mock_client = Mock()
@@ -241,7 +241,7 @@ class TestComputeLogsService:
         # Step 2 must never fire without a resolved session.
         mock_client.conjure.assert_called_once()
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_get_logs_malformed_session_payload(self, mock_client_class):
         """Test a surprising step-1 payload fails loudly."""
         mock_client = Mock()
@@ -347,7 +347,7 @@ class TestComputeManagePlans:
 class TestComputeManageWrites:
     """Test cases for start/stop/dev-mode writes (behind --apply)."""
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_start_success(self, mock_client_class):
         """Test start returns the raw submitBuild payload."""
         mock_client = Mock()
@@ -365,7 +365,7 @@ class TestComputeManageWrites:
             json_body=service._start_body(DEPLOYED_APP_RID, BRANCH),
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_start_captured_400_is_loud(self, mock_client_class):
         """Test the captured 400 contract surfaces honestly."""
         mock_client = Mock()
@@ -386,7 +386,7 @@ class TestComputeManageWrites:
         ):
             service.start(DEPLOYED_APP_RID, BRANCH)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_stop_empty_2xx_is_acknowledgment(self, mock_client_class):
         """Test an empty 2xx body maps to an explicit acknowledgment."""
         mock_client = Mock()
@@ -405,7 +405,7 @@ class TestComputeManageWrites:
             "DELETE", f"build2/api/manager/builds/{BUILD_RID}", json_body=None
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_stop_captured_400_is_loud(self, mock_client_class):
         """Test the captured BuildNotFound contract surfaces honestly."""
         mock_client = Mock()
@@ -420,7 +420,7 @@ class TestComputeManageWrites:
         with pytest.raises(ComputeModulesError, match="Build2:BuildNotFound"):
             service.stop(BUILD_RID)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_stop_non_object_2xx_fails_loudly(self, mock_client_class):
         """Test that a non-object success payload is a shape error."""
         mock_client = Mock()
@@ -431,7 +431,7 @@ class TestComputeManageWrites:
         with pytest.raises(ComputeShapeError, match="Unverified"):
             service.stop(BUILD_RID)
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_configure_dev_mode_sends_until(self, mock_client_class):
         """Test dev-mode enable sends the captured body."""
         mock_client = Mock()
@@ -451,7 +451,7 @@ class TestComputeManageWrites:
             json_body={"automaticUpgradesUntil": "2026-07-25T07:00:00Z"},
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_configure_dev_mode_disable_sends_empty_body(self, mock_client_class):
         """Test dev-mode disable omits the field (empty body)."""
         mock_client = Mock()
@@ -468,7 +468,7 @@ class TestComputeManageWrites:
             json_body={},
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_configure_dev_mode_permission_denied_is_loud(self, mock_client_class):
         """Test the captured 403 edit-permission contract surfaces honestly."""
         mock_client = Mock()
@@ -483,7 +483,7 @@ class TestComputeManageWrites:
 class TestComputeExecute:
     """Test cases for function execution (behind --apply)."""
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_execute_json_result(self, mock_client_class):
         """Test a JSON-parsable octet-stream body lands under result."""
         mock_client = Mock()
@@ -506,7 +506,7 @@ class TestComputeExecute:
             },
         )
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_execute_non_json_result(self, mock_client_class):
         """Test a non-JSON octet-stream body lands under resultText."""
         mock_client = Mock()
@@ -522,7 +522,7 @@ class TestComputeExecute:
 
         assert result == {"resultText": "plain text result"}
 
-    @patch("pltr.services.compute.FoundryInternalClient")
+    @patch("foundry_cli.services.compute.FoundryInternalClient")
     def test_execute_captured_403_is_loud(self, mock_client_class):
         """Test the captured submit-permission contract surfaces honestly."""
         mock_client = Mock()
@@ -541,11 +541,11 @@ class TestComputeServiceProfile:
 
     def test_without_profile_raises_before_network(self):
         """Test that a missing profile fails before any network call."""
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         service = ComputeService()
         with patch(
-            "pltr.config.profiles.ProfileManager.get_active_profile",
+            "foundry_cli.config.profiles.ProfileManager.get_active_profile",
             return_value=None,
         ):
             with pytest.raises(ProfileNotFoundError, match="No profile specified"):

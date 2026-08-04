@@ -12,7 +12,7 @@ from foundry_sdk.v2.filesystem import models as filesystem_models
 from foundry_sdk.v2.ontologies import models as ontology_models
 from foundry_sdk.v2.orchestration import models as orchestration_models
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     AGENT_SCHEMA_VERSION,
     CAPABILITY_IDS,
     ACTION_LOGIC_RULE_TYPES,
@@ -40,8 +40,8 @@ from pltr.services.dependency import (
     OperationProvenance,
     classify_exception,
 )
-from pltr.services.orchestration import OrchestrationService
-from pltr.utils.dependency_artifacts import serialize_dependency_result
+from foundry_cli.services.orchestration import OrchestrationService
+from foundry_cli.utils.dependency_artifacts import serialize_dependency_result
 
 
 def context(**budget_values):
@@ -1350,7 +1350,7 @@ def test_missing_reachable_reference_is_invalid_but_unreachable_missing_is_ignor
 
 def test_schedule_reverse_index_empty_success_is_always_partial(monkeypatch):
     monkeypatch.setattr(
-        "pltr.services.dependency.DatasetService.get_schedule_rids_page",
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
         lambda self, **kwargs: {"schedule_rids": [], "next_page_token": None},
     )
     fake_client = SimpleNamespace()
@@ -1457,23 +1457,23 @@ def test_dataset_chain_uses_schedule_action_then_run_build_jobs_outputs(monkeypa
         }
 
     monkeypatch.setattr(
-        "pltr.services.dependency.DatasetService.get_schedule_rids_page", schedules
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page", schedules
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_schedule", schedule
+        "foundry_cli.services.dependency.OrchestrationService.get_schedule", schedule
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_schedule_affected_resources",
+        "foundry_cli.services.dependency.OrchestrationService.get_schedule_affected_resources",
         affected,
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_schedule_runs", runs
+        "foundry_cli.services.dependency.OrchestrationService.get_schedule_runs", runs
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_build", build
+        "foundry_cli.services.dependency.OrchestrationService.get_build", build
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_build_jobs", jobs
+        "foundry_cli.services.dependency.OrchestrationService.get_build_jobs", jobs
     )
     service = DependencyGraphService(client=SimpleNamespace())
     analysis = context()
@@ -1912,7 +1912,7 @@ def test_dataset_discovery_request_exhaustion_terminalizes_schedule_children(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "pltr.services.dependency.DatasetService.get_schedule_rids_page",
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
         lambda self, **kwargs: {
             "schedule_rids": ["schedule-a"],
             "next_page_token": None,
@@ -1922,7 +1922,7 @@ def test_dataset_discovery_request_exhaustion_terminalizes_schedule_children(
         side_effect=AssertionError("detail wrapper must not run after request refusal")
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_schedule", detail
+        "foundry_cli.services.dependency.OrchestrationService.get_schedule", detail
     )
     service = DependencyGraphService(client=SimpleNamespace())
     analysis = context(max_requests=1)
@@ -2288,7 +2288,7 @@ def test_schedule_reverse_index_pages_create_per_subject_conditional_records(
         return {"schedule_rids": ["schedule-b"], "next_page_token": None}
 
     monkeypatch.setattr(
-        "pltr.services.dependency.DatasetService.get_schedule_rids_page", schedules
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page", schedules
     )
     monkeypatch.setattr(
         DependencyGraphService,
@@ -2464,7 +2464,7 @@ def test_every_paginator_refuses_sdk_calls_after_global_capacity_is_spent(
             "next_page_token": "next",
         }
         monkeypatch.setattr(
-            "pltr.services.dependency.DatasetService.get_schedule_rids_page",
+            "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
             lambda self, **kwargs: first_page(**kwargs),
         )
         service = DependencyGraphService(client=SimpleNamespace())
@@ -2999,14 +2999,14 @@ def test_nested_schedule_budget_preserves_reverse_index_evidence_and_stale_gap(
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "pltr.services.dependency.DatasetService.get_schedule_rids_page",
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
         lambda self, **kwargs: {
             "schedule_rids": ["schedule"],
             "next_page_token": None,
         },
     )
     monkeypatch.setattr(
-        "pltr.services.dependency.OrchestrationService.get_schedule",
+        "foundry_cli.services.dependency.OrchestrationService.get_schedule",
         lambda self, **kwargs: {
             "action": {
                 "target": {

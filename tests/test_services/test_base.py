@@ -5,8 +5,8 @@ Tests for base service functionality.
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.base import BaseService
-from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
+from foundry_cli.services.base import BaseService
+from foundry_cli.auth.base import ProfileNotFoundError, MissingCredentialsError
 
 
 class MockService(BaseService):
@@ -29,7 +29,7 @@ def test_base_service_initialization():
     assert service_with_profile.profile == "test"
 
 
-@patch("pltr.services.base.AuthManager")
+@patch("foundry_cli.services.base.AuthManager")
 def test_base_service_client_property(mock_auth_manager):
     """Test client property creates and caches client."""
     mock_client = Mock()
@@ -50,7 +50,7 @@ def test_base_service_client_property(mock_auth_manager):
     assert mock_auth_instance.get_client.call_count == 1
 
 
-@patch("pltr.services.base.AuthManager")
+@patch("foundry_cli.services.base.AuthManager")
 def test_base_service_client_with_profile(mock_auth_manager):
     """Test client property with specific profile."""
     mock_client = Mock()
@@ -65,7 +65,7 @@ def test_base_service_client_with_profile(mock_auth_manager):
     mock_auth_instance.get_client.assert_called_once_with("test-profile")
 
 
-@patch("pltr.services.base.AuthManager")
+@patch("foundry_cli.services.base.AuthManager")
 def test_base_service_client_profile_not_found(mock_auth_manager):
     """Test client property with non-existent profile."""
     mock_auth_instance = Mock()
@@ -80,7 +80,7 @@ def test_base_service_client_profile_not_found(mock_auth_manager):
         service.client
 
 
-@patch("pltr.services.base.AuthManager")
+@patch("foundry_cli.services.base.AuthManager")
 def test_base_service_client_missing_credentials(mock_auth_manager):
     """Test client property with missing credentials."""
     mock_auth_instance = Mock()
@@ -95,7 +95,7 @@ def test_base_service_client_missing_credentials(mock_auth_manager):
         service.client
 
 
-@patch("pltr.services.base.AuthManager")
+@patch("foundry_cli.services.base.AuthManager")
 def test_base_service_service_property(mock_auth_manager):
     """Test service property returns result from _get_service."""
     mock_client = Mock()

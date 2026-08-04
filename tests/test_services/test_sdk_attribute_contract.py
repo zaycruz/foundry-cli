@@ -20,7 +20,7 @@ import pytest
 from foundry_sdk import FoundryClient, UserTokenAuth
 
 
-SERVICES_DIR = Path(__file__).parents[2] / "src" / "pltr" / "services"
+SERVICES_DIR = Path(__file__).parents[2] / "src" / "foundry_cli" / "services"
 PINNED_SDK_VERSION = "1.95.0"
 
 
@@ -179,7 +179,7 @@ def _sdk_attribute_uses() -> list[SdkAttributeUse]:
 
 
 def _real_service_instance(use: SdkAttributeUse, client: FoundryClient) -> object:
-    module = import_module(f"pltr.services.{use.path.stem}")
+    module = import_module(f"foundry_cli.services.{use.path.stem}")
     service_class = getattr(module, use.class_name)
     instance = object.__new__(service_class)
     instance._client = client

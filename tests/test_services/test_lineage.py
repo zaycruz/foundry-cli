@@ -5,13 +5,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pltr.services.lineage import LineageService
+from foundry_cli.services.lineage import LineageService
 
 
 def _service() -> tuple[LineageService, Mock]:
     client = Mock()
     client.filesystem = Mock()
-    with patch("pltr.services.base.AuthManager") as auth:
+    with patch("foundry_cli.services.base.AuthManager") as auth:
         auth.return_value.get_client.return_value = client
         service = LineageService()
         service._client = client

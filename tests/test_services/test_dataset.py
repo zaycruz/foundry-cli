@@ -6,8 +6,8 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from pltr.services.dataset import DatasetService
-from pltr.services.errors import FoundryApiError
+from foundry_cli.services.dataset import DatasetService
+from foundry_cli.services.errors import FoundryApiError
 
 from foundry_sdk.v2.core.models import DatasetSchema
 
@@ -15,7 +15,7 @@ from foundry_sdk.v2.core.models import DatasetSchema
 @pytest.fixture
 def mock_dataset_service():
     """Create a mocked DatasetService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_datasets = Mock()
@@ -122,7 +122,7 @@ def test_get_dataset_stats_propagates_dataset_api_error(mock_dataset_service):
 
 def test_dataset_service_initialization():
     """Test DatasetService initialization."""
-    with patch("pltr.services.base.AuthManager"):
+    with patch("foundry_cli.services.base.AuthManager"):
         service = DatasetService()
         assert service is not None
 
@@ -355,7 +355,7 @@ def test_format_dataset_info(mock_dataset_service, sample_dataset):
 
 def test_format_dataset_info_minimal():
     """Test dataset info formatting with minimal attributes."""
-    with patch("pltr.services.base.AuthManager"):
+    with patch("foundry_cli.services.base.AuthManager"):
         service = DatasetService()
 
         # Create a minimal dataset object

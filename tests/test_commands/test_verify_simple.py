@@ -4,7 +4,7 @@ Simplified tests for verify command.
 
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.commands.verify import app
+from foundry_cli.commands.verify import app
 
 
 class TestVerifyCommandSimple:
@@ -16,7 +16,7 @@ class TestVerifyCommandSimple:
 
     def test_verify_no_profile_configured(self):
         """Test verify when no profile is configured."""
-        with patch("pltr.commands.verify.AuthManager") as mock_auth_manager_class:
+        with patch("foundry_cli.commands.verify.AuthManager") as mock_auth_manager_class:
             # Mock AuthManager to return None for active profile
             mock_auth_manager = Mock()
             mock_auth_manager.get_current_profile.return_value = None
@@ -30,9 +30,9 @@ class TestVerifyCommandSimple:
     def test_verify_success_basic(self):
         """Test basic successful verification."""
         with (
-            patch("pltr.commands.verify.AuthManager") as mock_auth_manager_class,
-            patch("pltr.auth.storage.CredentialStorage") as mock_storage_class,
-            patch("pltr.commands.verify.requests") as mock_requests,
+            patch("foundry_cli.commands.verify.AuthManager") as mock_auth_manager_class,
+            patch("foundry_cli.auth.storage.CredentialStorage") as mock_storage_class,
+            patch("foundry_cli.commands.verify.requests") as mock_requests,
         ):
             # Mock AuthManager
             mock_auth_manager = Mock()
@@ -66,9 +66,9 @@ class TestVerifyCommandSimple:
     def test_verify_401_failure(self):
         """Test verification with 401 authentication failure."""
         with (
-            patch("pltr.commands.verify.AuthManager") as mock_auth_manager_class,
-            patch("pltr.auth.storage.CredentialStorage") as mock_storage_class,
-            patch("pltr.commands.verify.requests") as mock_requests,
+            patch("foundry_cli.commands.verify.AuthManager") as mock_auth_manager_class,
+            patch("foundry_cli.auth.storage.CredentialStorage") as mock_storage_class,
+            patch("foundry_cli.commands.verify.requests") as mock_requests,
         ):
             # Mock AuthManager
             mock_auth_manager = Mock()

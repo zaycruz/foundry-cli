@@ -18,9 +18,9 @@ import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.services.dependency import DependencyFatalError
-from pltr.utils.error_hints import (
+from foundry_cli.cli import app
+from foundry_cli.services.dependency import DependencyFatalError
+from foundry_cli.utils.error_hints import (
     ACTION_TYPE_UPSERT_HINT,
     BRANCH_RID_HINT,
     OBJECT_TYPE_UPSERT_HINT,
@@ -119,11 +119,11 @@ class TestDependencyBranchHint:
 
     def _invoke(self, argv):
         with (
-            patch("pltr.commands.dependency.AuthManager") as auth_constructor,
+            patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
             patch(
-                "pltr.commands.dependency.DependencyGraphService"
+                "foundry_cli.commands.dependency.DependencyGraphService"
             ) as service_constructor,
-            patch("pltr.commands.dependency.FoundryInternalClient"),
+            patch("foundry_cli.commands.dependency.FoundryInternalClient"),
         ):
             auth_manager = auth_constructor.return_value
             auth_manager.get_current_profile.return_value = "active"
@@ -159,11 +159,11 @@ class TestDependencyBranchHint:
 
     def test_other_dependency_fatals_carry_no_hint(self):
         with (
-            patch("pltr.commands.dependency.AuthManager") as auth_constructor,
+            patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
             patch(
-                "pltr.commands.dependency.DependencyGraphService"
+                "foundry_cli.commands.dependency.DependencyGraphService"
             ) as service_constructor,
-            patch("pltr.commands.dependency.FoundryInternalClient"),
+            patch("foundry_cli.commands.dependency.FoundryInternalClient"),
         ):
             auth_manager = auth_constructor.return_value
             auth_manager.get_current_profile.return_value = "active"
@@ -195,13 +195,13 @@ class TestOntologyGetNotFoundHint:
         [
             (
                 "object-type-get",
-                "pltr.commands.ontology.ObjectTypeService",
+                "foundry_cli.commands.ontology.ObjectTypeService",
                 "get_object_type",
                 ObjectTypeNotFound,
             ),
             (
                 "action-type-get",
-                "pltr.commands.ontology.ActionService",
+                "foundry_cli.commands.ontology.ActionService",
                 "get_action_type",
                 ActionTypeNotFound,
             ),
@@ -221,7 +221,7 @@ class TestOntologyGetNotFoundHint:
         assert _hints(result) == [ONTOLOGY_GET_NOT_FOUND_HINT]
 
     def test_generic_get_failure_carries_no_hint(self):
-        with patch("pltr.commands.ontology.ObjectTypeService") as service_constructor:
+        with patch("foundry_cli.commands.ontology.ObjectTypeService") as service_constructor:
             service_constructor.return_value.get_object_type.side_effect = RuntimeError(
                 "connection reset"
             )
@@ -268,7 +268,7 @@ class TestUpsertInvocationHint:
         assert _hints(result) == [ACTION_TYPE_UPSERT_HINT]
 
     def test_dry_run_validation_failure_carries_hint(self):
-        with patch("pltr.commands.ontology.ObjectTypeService") as service_constructor:
+        with patch("foundry_cli.commands.ontology.ObjectTypeService") as service_constructor:
             service_constructor.return_value.upsert_object_type.return_value = {
                 "validation": {
                     "status": "error",

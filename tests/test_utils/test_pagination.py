@@ -2,7 +2,7 @@
 Tests for pagination utilities.
 """
 
-from src.pltr.utils.pagination import (
+from src.foundry_cli.utils.pagination import (
     PaginationConfig,
     PaginationMetadata,
     PaginationResult,

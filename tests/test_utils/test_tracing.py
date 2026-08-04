@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from pltr.utils import tracing
+from foundry_cli.utils import tracing
 
 
 class FakeObservation:
@@ -79,9 +79,9 @@ def test_tracing_emits_redacted_input_and_exit_metadata(
     assert result == "result"
     assert client.start_kwargs == {
         "as_type": "span",
-        "name": "pltr.command",
+        "name": "foundry.command",
         "input": {
-            "command_path": "pltr resource list",
+            "command_path": "foundry resource list",
             "args": [
                 "resource",
                 "list",

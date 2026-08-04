@@ -4,7 +4,7 @@ Tests for settings management.
 
 import pytest
 from pathlib import Path
-from pltr.config.settings import Settings
+from foundry_cli.config.settings import Settings
 
 
 class TestSettings:
@@ -184,11 +184,11 @@ class TestSettings:
             m.setenv("XDG_CONFIG_HOME", str(xdg_dir))
 
             settings = Settings()
-            expected_path = xdg_dir / "pltr"
+            expected_path = xdg_dir / "foundry"
             assert settings.config_dir == expected_path
 
     def test_get_config_dir_home_fallback(self, temp_config_dir):
-        """Test fallback to ~/.config/pltr when XDG_CONFIG_HOME is not set."""
+        """Test fallback to ~/.config/foundry when XDG_CONFIG_HOME is not set."""
 
         home_dir = temp_config_dir / "fake_home"
 
@@ -198,5 +198,5 @@ class TestSettings:
             m.setattr(Path, "home", lambda: home_dir)
 
             settings = Settings()
-            expected_path = home_dir / ".config" / "pltr"
+            expected_path = home_dir / ".config" / "foundry"
             assert settings.config_dir == expected_path

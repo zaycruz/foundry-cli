@@ -5,8 +5,8 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from pltr.commands.proposal import app as proposal_app
-from pltr.services.proposal import (
+from foundry_cli.commands.proposal import app as proposal_app
+from foundry_cli.services.proposal import (
     ProposalAction,
     ProposalRemoteServiceError,
     ProposalType,
@@ -21,7 +21,7 @@ app.add_typer(proposal_app, name="proposal")
 
 @pytest.fixture
 def proposal_service():
-    with patch("pltr.commands.proposal.ProposalService") as service_class:
+    with patch("foundry_cli.commands.proposal.ProposalService") as service_class:
         yield service_class.return_value, service_class
 
 

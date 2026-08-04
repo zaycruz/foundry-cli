@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pltr.services.functions import FunctionsService
+from foundry_cli.services.functions import FunctionsService
 
 
 class TestFunctionsService:
@@ -20,7 +20,7 @@ class TestFunctionsService:
     @pytest.fixture
     def service(self, mock_client):
         """Create FunctionsService with mocked client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = mock_client
             service = FunctionsService()
             return service
@@ -358,14 +358,14 @@ class TestFunctionsServiceSearch:
     @pytest.fixture
     def service(self):
         """Create FunctionsService with a mocked SDK client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = Mock()
             return FunctionsService()
 
     @pytest.fixture
     def mock_search_service(self):
         """Mock the SearchService used for the GraphQL title search."""
-        with patch("pltr.services.functions.SearchService") as MockSearch:
+        with patch("foundry_cli.services.functions.SearchService") as MockSearch:
             yield MockSearch
 
     def test_search_functions_filters_to_functions(self, service, mock_search_service):
@@ -466,7 +466,7 @@ class TestResolveFunction:
 
     @pytest.fixture
     def service(self):
-        with patch("pltr.services.base.AuthManager"):
+        with patch("foundry_cli.services.base.AuthManager"):
             return FunctionsService()
 
     def test_resolve_function_exact_match(self, service):
@@ -483,7 +483,7 @@ class TestResolveFunction:
                 {"name": "myFuncV2", "rid": None, "type": "Function"},
             ],
         }
-        with patch("pltr.services.functions.SearchService") as mock_search:
+        with patch("foundry_cli.services.functions.SearchService") as mock_search:
             mock_search.return_value.search.return_value = search_result
             result = service.resolve_function(api_name="myFunc")
 
@@ -492,7 +492,7 @@ class TestResolveFunction:
         assert result["apiName"] == "myFunc"
 
     def test_resolve_function_no_match_is_inconclusive(self, service):
-        with patch("pltr.services.functions.SearchService") as mock_search:
+        with patch("foundry_cli.services.functions.SearchService") as mock_search:
             mock_search.return_value.search.return_value = {
                 "status": "ok",
                 "reason": None,
@@ -506,7 +506,7 @@ class TestResolveFunction:
         assert "rid" not in result
 
     def test_resolve_function_search_failure_passthrough(self, service):
-        with patch("pltr.services.functions.SearchService") as mock_search:
+        with patch("foundry_cli.services.functions.SearchService") as mock_search:
             mock_search.return_value.search.return_value = {
                 "status": "inconclusive",
                 "reason": "graphql-error",

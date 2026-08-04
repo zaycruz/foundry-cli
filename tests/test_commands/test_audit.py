@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestAuditCommands:
@@ -22,7 +22,7 @@ class TestAuditCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock AuditService."""
-        with patch("pltr.commands.audit.AuditService") as MockService:
+        with patch("foundry_cli.commands.audit.AuditService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc
@@ -318,7 +318,7 @@ class TestAuditCommands:
         mock_service.list_log_files.return_value = logs_result
         output_file = tmp_path / "audit_logs.json"
 
-        with patch("pltr.commands.audit.formatter") as mock_formatter:
+        with patch("foundry_cli.commands.audit.formatter") as mock_formatter:
             result = runner.invoke(
                 app,
                 [

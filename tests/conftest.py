@@ -1,15 +1,15 @@
 """
-Pytest configuration and fixtures for pltr tests.
+Pytest configuration and fixtures for foundry tests.
 """
 
 import os
 
-# Neutralise forced colour before anything imports typer or pltr. Two separate
+# Neutralise forced colour before anything imports typer or foundry_cli. Two separate
 # mechanisms make a fixture too late, so this has to run in the module body:
 #
 #   1. ``typer.rich_utils`` computes FORCE_TERMINAL from these variables at
 #      *module import*. Clearing them afterwards does nothing.
-#   2. ``src/pltr/commands/*`` construct module-level ``Console()`` objects at
+#   2. ``src/foundry_cli/commands/*`` construct module-level ``Console()`` objects at
 #      *collection* time, and ``Console.__init__`` caches the colour system.
 #
 # Under forced colour Rich's option highlighter splits flags into ANSI-separated
@@ -32,10 +32,10 @@ from pathlib import Path  # noqa: E402
 from unittest.mock import Mock, patch  # noqa: E402
 from typing import Generator  # noqa: E402
 
-from pltr.auth.storage import CredentialStorage  # noqa: E402
-from pltr.config.settings import Settings  # noqa: E402
-from pltr.config.profiles import ProfileManager  # noqa: E402
-from pltr.utils.agent_output import configure_agent_settings  # noqa: E402
+from foundry_cli.auth.storage import CredentialStorage  # noqa: E402
+from foundry_cli.config.settings import Settings  # noqa: E402
+from foundry_cli.config.profiles import ProfileManager  # noqa: E402
+from foundry_cli.utils.agent_output import configure_agent_settings  # noqa: E402
 
 
 def test_colour_is_neutralised_for_the_session() -> None:

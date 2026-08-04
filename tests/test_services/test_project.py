@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.project import ProjectService
+from foundry_cli.services.project import ProjectService
 
 
 class TestProjectService:
@@ -22,7 +22,7 @@ class TestProjectService:
     @pytest.fixture
     def mock_auth_manager(self, mock_client):
         """Create a mock auth manager."""
-        with patch("pltr.services.base.AuthManager") as MockAuthManager:
+        with patch("foundry_cli.services.base.AuthManager") as MockAuthManager:
             mock_auth_manager = Mock()
             mock_auth_manager.get_client.return_value = mock_client
             MockAuthManager.return_value = mock_auth_manager
@@ -36,7 +36,7 @@ class TestProjectService:
     @pytest.fixture
     def mock_admin_service(self):
         """Create a mock admin service for current user lookup."""
-        with patch("pltr.services.admin.AdminService") as MockAdminService:
+        with patch("foundry_cli.services.admin.AdminService") as MockAdminService:
             mock_admin = Mock()
             mock_admin.get_current_user.return_value = {"id": "user1"}
             MockAdminService.return_value = mock_admin

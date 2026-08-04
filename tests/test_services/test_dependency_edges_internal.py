@@ -6,14 +6,14 @@ from urllib.parse import quote
 import pytest
 import requests
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     CONSUMER_OSDK_IMPACT_SURFACE,
     TRANSFORM_DATASET_LINEAGE_SURFACE,
     DependencyGraphService,
     DependencyTarget,
     DiscoveryBudget,
 )
-from pltr.services.dependency_internal_specs import (
+from foundry_cli.services.dependency_internal_specs import (
     ACP_OPERATION_SPECS,
     ACP_05_DEPENDENTS_PAGE_BOUNDARY,
     CONJURE_POST_OPERATION_SPECS,
@@ -22,8 +22,8 @@ from pltr.services.dependency_internal_specs import (
     GRAPHQL_OPERATION_SPECS,
     TRANSFORM_LINEAGE_GET_OPERATION_SPECS,
 )
-from pltr.services.dependency_providers import ConjureRestProvider, ProviderResult
-from pltr.services.foundry_internal_client import (
+from foundry_cli.services.dependency_providers import ConjureRestProvider, ProviderResult
+from foundry_cli.services.foundry_internal_client import (
     FoundryInternalClient,
     GraphQLOperation,
     GraphQLResult,
@@ -981,7 +981,7 @@ def test_dataset_collection_preserves_completed_compass_failure():
     service._finish_coverage(record, "unresolved", reason="not-found")
 
     with patch(
-        "pltr.services.dependency.DatasetService.get_schedule_rids_page",
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
         return_value={"schedule_rids": [], "next_page_token": None},
     ):
         service._collect_dataset(
@@ -1162,7 +1162,7 @@ def test_transform_lineage_conjure_2xx_unsafe_semantics_are_inconclusive(
     service, analysis, spec, path = _invoke_acp_01_with_conjure(conjure)
 
     with patch(
-        "pltr.services.dependency_providers.ResultSemantics",
+        "foundry_cli.services.dependency_providers.ResultSemantics",
         return_value=semantics,
     ):
         result = service._invoke_transform_lineage_get(
@@ -2476,8 +2476,8 @@ def test_consumer_nodes_respect_the_user_graph_node_budget():
     )
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_graphql_bulk_demuxes_out_of_order_object_dependents(storage_class, request):
     storage_class.return_value.get_profile.return_value = {
         "host": "https://example.test",

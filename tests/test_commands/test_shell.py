@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from pltr.commands.shell import get_history_file, get_prompt, shell_app
+from foundry_cli.commands.shell import get_history_file, get_prompt, shell_app
 
 
 def strip_ansi_codes(text: str) -> str:
@@ -32,10 +32,10 @@ class TestShellCommand:
         assert isinstance(history_file, Path)
 
         # Should be in the correct location (cross-platform compatible)
-        expected_path = Path.home() / ".config" / "pltr" / "repl_history"
+        expected_path = Path.home() / ".config" / "foundry" / "repl_history"
         assert history_file == expected_path
 
-    @patch("pltr.commands.shell.ProfileManager")
+    @patch("foundry_cli.commands.shell.ProfileManager")
     def test_get_prompt_with_profile(self, mock_profile_manager_class):
         """Test get_prompt function with profile."""
         # Setup mock
@@ -47,11 +47,11 @@ class TestShellCommand:
         prompt = get_prompt()
 
         # Assert
-        assert prompt == "pltr (test-profile)> "
+        assert prompt == "foundry (test-profile)> "
         mock_profile_manager_class.assert_called_once()
         mock_profile_manager.get_active_profile.assert_called_once()
 
-    @patch("pltr.commands.shell.ProfileManager")
+    @patch("foundry_cli.commands.shell.ProfileManager")
     def test_get_prompt_no_profile(self, mock_profile_manager_class):
         """Test get_prompt function without profile."""
         # Setup mock
@@ -63,9 +63,9 @@ class TestShellCommand:
         prompt = get_prompt()
 
         # Assert
-        assert prompt == "pltr> "
+        assert prompt == "foundry> "
 
-    @patch("pltr.commands.shell.ProfileManager")
+    @patch("foundry_cli.commands.shell.ProfileManager")
     def test_get_prompt_exception(self, mock_profile_manager_class):
         """Test get_prompt function when ProfileManager raises exception."""
         # Setup mock to raise exception
@@ -75,7 +75,7 @@ class TestShellCommand:
         prompt = get_prompt()
 
         # Assert
-        assert prompt == "pltr> "
+        assert prompt == "foundry> "
 
     def test_shell_app_help(self):
         """Test shell app help command."""
@@ -121,8 +121,8 @@ class TestShellCommand:
         mock_ctx.invoked_subcommand = None
 
         # Mock the start function
-        with patch("pltr.commands.shell.start") as mock_start:
-            from pltr.commands.shell import shell_callback
+        with patch("foundry_cli.commands.shell.start") as mock_start:
+            from foundry_cli.commands.shell import shell_callback
 
             # Test
             shell_callback(mock_ctx, profile="test-profile")
@@ -137,8 +137,8 @@ class TestShellCommand:
         mock_ctx.invoked_subcommand = "start"
 
         # Mock the start function
-        with patch("pltr.commands.shell.start") as mock_start:
-            from pltr.commands.shell import shell_callback
+        with patch("foundry_cli.commands.shell.start") as mock_start:
+            from foundry_cli.commands.shell import shell_callback
 
             # Test
             shell_callback(mock_ctx, profile="test-profile")
@@ -148,8 +148,8 @@ class TestShellCommand:
 
     def test_interactive_alias(self):
         """Test interactive alias command."""
-        with patch("pltr.commands.shell.start") as mock_start:
-            from pltr.commands.shell import interactive_alias
+        with patch("foundry_cli.commands.shell.start") as mock_start:
+            from foundry_cli.commands.shell import interactive_alias
 
             # Test
             interactive_alias(profile="test-profile")
@@ -163,7 +163,7 @@ class TestShellIntegration:
 
     def test_shell_command_in_main_cli(self):
         """Test that shell command is properly integrated in main CLI."""
-        from pltr.cli import app
+        from foundry_cli.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
@@ -174,7 +174,7 @@ class TestShellIntegration:
 
     def test_shell_subcommand_available(self):
         """Test that shell subcommands are available."""
-        from pltr.cli import app
+        from foundry_cli.cli import app
 
         runner = CliRunner()
         result = runner.invoke(app, ["shell", "--help"])

@@ -5,13 +5,13 @@ Tests for dataset transaction management service methods.
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.dataset import DatasetService
+from foundry_cli.services.dataset import DatasetService
 
 
 @pytest.fixture
 def mock_dataset_service():
     """Create a mocked DatasetService with transaction support."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_datasets = Mock()

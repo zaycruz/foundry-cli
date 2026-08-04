@@ -5,11 +5,11 @@ Tests for the guarded mutation composite services (upsert and delete).
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.guarded_upsert import (
+from foundry_cli.services.guarded_upsert import (
     GuardedUpsertService,
     _is_object_type_not_found,
 )
-from pltr.services.ontology import ObjectTypeNotFoundError
+from foundry_cli.services.ontology import ObjectTypeNotFoundError
 
 
 ONTOLOGY_RID = "ri.ontology.main.ontology.test"
@@ -58,7 +58,7 @@ def _clean_analysis() -> dict:
 @pytest.fixture
 def mock_guarded_service():
     """Create a GuardedUpsertService with profile/host resolution mocked."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         mock_auth.return_value.get_current_profile.return_value = "test-profile"
         mock_auth.return_value.storage.get_profile.return_value = {"host": HOST}
         yield GuardedUpsertService(profile="test-profile")
@@ -108,19 +108,19 @@ def test_prepare_existing_type_runs_impact_gate(mock_guarded_service):
     artifact = {"analysis_id": "dep-1", "path": "/tmp/dep-1.json", "sha256": "abc"}
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ) as dependency_cls,
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value=artifact,
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         result = mock_guarded_service.prepare_object_type_upsert(**_prepare_kwargs())
 
@@ -157,10 +157,10 @@ def test_prepare_net_new_skips_gate_with_caveat(mock_guarded_service):
     object_types.upsert_object_type.return_value = _dry_run_plan()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("pltr.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
     ):
         result = mock_guarded_service.prepare_object_type_upsert(**_prepare_kwargs())
 
@@ -180,10 +180,10 @@ def test_prepare_skip_impact_gate_is_recorded(mock_guarded_service):
     object_types.upsert_object_type.return_value = _dry_run_plan()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("pltr.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
     ):
         result = mock_guarded_service.prepare_object_type_upsert(
             **_prepare_kwargs(skip_impact_gate=True)
@@ -219,19 +219,19 @@ def test_prepare_carries_coverage_gaps_into_caveats(mock_guarded_service):
     dependency.analyze.return_value = analysis
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ),
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value={"analysis_id": "dep-2", "path": "/tmp/d.json", "sha256": "x"},
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         result = mock_guarded_service.prepare_object_type_upsert(**_prepare_kwargs())
 
@@ -247,7 +247,7 @@ def test_prepare_propagates_non_not_found_preflight_errors(mock_guarded_service)
     object_types = Mock()
     object_types.get_object_type.side_effect = RuntimeError("permission denied")
     with patch(
-        "pltr.services.guarded_upsert.ObjectTypeService",
+        "foundry_cli.services.guarded_upsert.ObjectTypeService",
         return_value=object_types,
     ):
         with pytest.raises(RuntimeError, match="permission denied"):
@@ -271,19 +271,19 @@ def test_apply_performs_upsert_and_authoritative_readback(mock_guarded_service):
     dependency.analyze.return_value = _clean_analysis()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ),
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value={"analysis_id": "dep-3", "path": "/tmp/d.json", "sha256": "x"},
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         prepared = mock_guarded_service.prepare_object_type_upsert(**_prepare_kwargs())
         result = mock_guarded_service.apply_object_type_upsert(
@@ -314,19 +314,19 @@ def test_apply_records_unverified_readback(mock_guarded_service):
     dependency.analyze.return_value = _clean_analysis()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ),
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value={"analysis_id": "dep-4", "path": "/tmp/d.json", "sha256": "x"},
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         prepared = mock_guarded_service.prepare_object_type_upsert(**_prepare_kwargs())
         result = mock_guarded_service.apply_object_type_upsert(prepared)
@@ -378,19 +378,19 @@ def test_prepare_delete_existing_type_runs_impact_gate(mock_guarded_service):
     artifact = {"analysis_id": "dep-1", "path": "/tmp/dep-1.json", "sha256": "abc"}
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ) as dependency_cls,
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value=artifact,
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         result = mock_guarded_service.prepare_object_type_delete(
             **_prepare_delete_kwargs()
@@ -429,10 +429,10 @@ def test_prepare_delete_not_found_fails_typed(mock_guarded_service):
     )
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("pltr.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
     ):
         with pytest.raises(ObjectTypeNotFoundError):
             mock_guarded_service.prepare_object_type_delete(**_prepare_delete_kwargs())
@@ -446,7 +446,7 @@ def test_prepare_delete_propagates_other_load_errors(mock_guarded_service):
     object_types = Mock()
     object_types.load_object_type_state.side_effect = RuntimeError("permission denied")
     with patch(
-        "pltr.services.guarded_upsert.ObjectTypeService",
+        "foundry_cli.services.guarded_upsert.ObjectTypeService",
         return_value=object_types,
     ):
         with pytest.raises(RuntimeError, match="permission denied") as exc_info:
@@ -463,10 +463,10 @@ def test_prepare_delete_skip_impact_gate_is_recorded(mock_guarded_service):
     object_types.delete_object_type.return_value = _delete_dry_run_plan()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("pltr.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
     ):
         result = mock_guarded_service.prepare_object_type_delete(
             **_prepare_delete_kwargs(skip_impact_gate=True)
@@ -503,19 +503,19 @@ def test_prepare_delete_carries_coverage_gaps_into_caveats(mock_guarded_service)
     dependency.analyze.return_value = analysis
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ),
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value={"analysis_id": "dep-2", "path": "/tmp/d.json", "sha256": "x"},
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         result = mock_guarded_service.prepare_object_type_delete(
             **_prepare_delete_kwargs()
@@ -548,19 +548,19 @@ def test_apply_delete_verifies_removal_by_readback(mock_guarded_service):
     dependency.analyze.return_value = _clean_analysis()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ),
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value={"analysis_id": "dep-3", "path": "/tmp/d.json", "sha256": "x"},
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         prepared = mock_guarded_service.prepare_object_type_delete(
             **_prepare_delete_kwargs()
@@ -591,19 +591,19 @@ def test_apply_delete_reports_not_verified_when_type_still_loads(
     dependency.analyze.return_value = _clean_analysis()
     with (
         patch(
-            "pltr.services.guarded_upsert.ObjectTypeService",
+            "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
         patch(
-            "pltr.services.guarded_upsert.DependencyGraphService",
+            "foundry_cli.services.guarded_upsert.DependencyGraphService",
             return_value=dependency,
         ),
         patch(
-            "pltr.services.guarded_upsert.write_dependency_artifact",
+            "foundry_cli.services.guarded_upsert.write_dependency_artifact",
             return_value={"analysis_id": "dep-4", "path": "/tmp/d.json", "sha256": "x"},
         ),
-        patch("pltr.services.foundry_internal_client.FoundryInternalClient"),
-        patch("pltr.services.dependency_providers.ConjureRestProvider"),
+        patch("foundry_cli.services.foundry_internal_client.FoundryInternalClient"),
+        patch("foundry_cli.services.dependency_providers.ConjureRestProvider"),
     ):
         prepared = mock_guarded_service.prepare_object_type_delete(
             **_prepare_delete_kwargs()

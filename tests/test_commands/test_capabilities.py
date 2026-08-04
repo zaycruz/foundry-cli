@@ -4,7 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 runner = CliRunner()
@@ -15,7 +15,7 @@ def test_capabilities_agent_output_is_stable_json() -> None:
 
     assert result.exit_code == 0, result.stdout
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     manifest = payload["data"]
     assert manifest["schema_version"] == "foundry-agent-capabilities-v1"
     assert manifest["catalog"]["tool_count"] == 72

@@ -7,13 +7,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pltr.services.foundry_internal_client import (
+from foundry_cli.services.foundry_internal_client import (
     FoundryInternalClient,
     GraphQLOperation,
     GraphQLResult,
     TokenExpiredError,
 )
-from pltr.services.notepad import (
+from foundry_cli.services.notepad import (
     GET_NOTEPAD_CONTENTS_QUERY,
     NOTEPAD_TYPE_NAME,
     NotepadService,
@@ -193,8 +193,8 @@ def _response(status: int, text: str) -> Mock:
     return Mock(status_code=status, text=text)
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_graphql_sse_demuxes_out_of_order_frames(storage_class, request):
     storage_class.return_value.get_profile.return_value = {
         "host": "https://foundry.example/",
@@ -239,8 +239,8 @@ def test_graphql_sse_demuxes_out_of_order_frames(storage_class, request):
     }
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_service_posts_exact_pinned_notepad_query(storage_class, request):
     storage_class.return_value.get_profile.return_value = {
         "host": "https://foundry.example",
@@ -269,8 +269,8 @@ def test_service_posts_exact_pinned_notepad_query(storage_class, request):
     assert "permissions" not in request.call_args.kwargs["json"]["operations"]["0"]
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_multi_operation_500_does_not_expand_into_many_retries(storage_class, request):
     storage_class.return_value.get_profile.return_value = {
         "host": "foundry.example",
@@ -292,8 +292,8 @@ def test_multi_operation_500_does_not_expand_into_many_retries(storage_class, re
     ]
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_graphql_sse_preserves_validation_errors(storage_class, request):
     storage_class.return_value.get_profile.return_value = {
         "host": "foundry.example",
@@ -328,7 +328,7 @@ def test_graphql_sse_preserves_validation_errors(storage_class, request):
         "# disguised by a leading comment\nmutation Write { updateSomething }",
     ],
 )
-@patch("pltr.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
 def test_graphql_transport_rejects_mutations_without_http(request, query):
     with pytest.raises(ValueError, match="only permits GraphQL reads"):
         FoundryInternalClient("qa").graphql(
@@ -341,8 +341,8 @@ def test_graphql_transport_rejects_mutations_without_http(request, query):
 
 
 @pytest.mark.parametrize("status", [401, 403])
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_graphql_auth_failure_is_loud(storage_class, request, status):
     storage_class.return_value.get_profile.return_value = {
         "host": "foundry.example",
@@ -354,8 +354,8 @@ def test_graphql_auth_failure_is_loud(storage_class, request, status):
         FoundryInternalClient("qa").graphql("Read", "query Read { value }", {})
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_graphql_500_retries_single_request_once(storage_class, request):
     storage_class.return_value.get_profile.side_effect = [
         {"host": "foundry.example", "token": "first"},
@@ -384,8 +384,8 @@ def test_graphql_500_retries_single_request_once(storage_class, request):
     )
 
 
-@patch("pltr.services.foundry_internal_client.requests.request")
-@patch("pltr.services.foundry_internal_client.CredentialStorage")
+@patch("foundry_cli.services.foundry_internal_client.requests.request")
+@patch("foundry_cli.services.foundry_internal_client.CredentialStorage")
 def test_graphql_failed_retry_is_classified_without_looping(storage_class, request):
     storage_class.return_value.get_profile.return_value = {
         "host": "foundry.example",

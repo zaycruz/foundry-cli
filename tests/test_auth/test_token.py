@@ -7,8 +7,8 @@ import os
 import sys
 from types import SimpleNamespace
 from unittest.mock import patch, Mock
-from pltr.auth.token import TokenAuthProvider
-from pltr.auth.base import MissingCredentialsError, InvalidCredentialsError
+from foundry_cli.auth.token import TokenAuthProvider
+from foundry_cli.auth.base import MissingCredentialsError, InvalidCredentialsError
 
 
 class TestTokenAuthProvider:

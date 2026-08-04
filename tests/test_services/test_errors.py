@@ -1,6 +1,6 @@
 """Tests for typed Foundry API error preservation."""
 
-from pltr.services.errors import (
+from foundry_cli.services.errors import (
     FoundryApiError,
     foundry_error_from_conjure,
     foundry_error_from_sdk,
