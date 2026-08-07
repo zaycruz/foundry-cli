@@ -8,12 +8,12 @@ view. Rendering never triggers a second discovery pass.
 ## Direct targets
 
 ```bash
-foundry dependency object-type ONTOLOGY_RID OBJECT_TYPE
-foundry dependency property ONTOLOGY_RID OBJECT_TYPE PROPERTY
-foundry dependency link-type ONTOLOGY_RID OBJECT_TYPE LINK_TYPE
-foundry dependency action-type ONTOLOGY_RID ACTION_TYPE
-foundry dependency query-type ONTOLOGY_RID QUERY_TYPE
-foundry dependency resource RESOURCE_RID
+pfoundry dependency object-type ONTOLOGY_RID OBJECT_TYPE
+pfoundry dependency property ONTOLOGY_RID OBJECT_TYPE PROPERTY
+pfoundry dependency link-type ONTOLOGY_RID OBJECT_TYPE LINK_TYPE
+pfoundry dependency action-type ONTOLOGY_RID ACTION_TYPE
+pfoundry dependency query-type ONTOLOGY_RID QUERY_TYPE
+pfoundry dependency resource RESOURCE_RID
 ```
 
 `resource` requires a Compass-resolvable RID. Dataset and third-party-application
@@ -86,7 +86,7 @@ non-regular, or schema-incompatible comparison artifacts fail closed.
 
 ```bash
 # Pre-change baseline for agent reasoning
-foundry dependency property ri.ontology.main.ontology.example Employee email \
+pfoundry dependency property ri.ontology.main.ontology.example Employee email \
   --branch dev \
   --change "change email from string to struct" \
   --change-type type-change \
@@ -95,7 +95,7 @@ foundry dependency property ri.ontology.main.ontology.example Employee email \
   --graph-output ./employee-email-before.json
 
 # Post-change comparison for merge gating
-foundry dependency property ri.ontology.main.ontology.example Employee email \
+pfoundry dependency property ri.ontology.main.ontology.example Employee email \
   --branch dev \
   --change "change email from string to struct" \
   --change-type type-change \

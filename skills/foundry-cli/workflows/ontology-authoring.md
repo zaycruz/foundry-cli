@@ -6,7 +6,7 @@ Use this workflow when creating, evolving, or deleting ontology object types, li
 
 This workflow guarantees that the agent:
 
-- assesses the intended schema change with `foundry dependency` before any mutation and retains the baseline graph artifact;
+- assesses the intended schema change with `pfoundry dependency` before any mutation and retains the baseline graph artifact;
 - discovers the current ontology state read-only before authoring;
 - authors through `modifyOntology` commands in the required publication order, dry-run first;
 - stages work on a Global Branch and ships it through a Global Proposal, both plan-first;
@@ -19,7 +19,7 @@ It does not approve or merge a proposal, and it never passes `--apply` or `--yes
 Follow `workflows/change-impact-assessment.md`. Select the narrowest existing target the change touches and capture the baseline with an explicit change description:
 
 ```bash
-foundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
+pfoundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --profile "$PROFILE" \
   --branch "$BRANCH" \
   --change "add property capacity to Cohort" \
@@ -30,9 +30,9 @@ foundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --output ./ontology-change-agent.json
 ```
 
-Use the target matching the change: `foundry dependency object-type` for object type and property work, `foundry dependency link-type ONTOLOGY_RID OBJECT_TYPE LINK_TYPE` for link types, `foundry dependency action-type ONTOLOGY_RID ACTION_TYPE` for action types. Use `--change-type remove-delete` for deletes and `action-input-change` for action parameter changes.
+Use the target matching the change: `pfoundry dependency object-type` for object type and property work, `pfoundry dependency link-type ONTOLOGY_RID OBJECT_TYPE LINK_TYPE` for link types, `pfoundry dependency action-type ONTOLOGY_RID ACTION_TYPE` for action types. Use `--change-type remove-delete` for deletes and `action-input-change` for action parameter changes.
 
-For a net-new type that does not exist yet, the narrowest target is undiscoverable. Run the gate against the closest existing neighbor (the object types the new link type will connect, or `foundry dependency resource` on the backing dataset) and record the substitution as a coverage gap. Do not skip the gate because the target is new.
+For a net-new type that does not exist yet, the narrowest target is undiscoverable. Run the gate against the closest existing neighbor (the object types the new link type will connect, or `pfoundry dependency resource` on the backing dataset) and record the substitution as a coverage gap. Do not skip the gate because the target is new.
 
 Resolve `must_verify_before_merge` items before applying anything, or obtain explicit operator acceptance.
 
@@ -42,36 +42,36 @@ Read-only discovery. Resolve the ontology RID, then enumerate what exists:
 
 ```bash
 # Resolve the ontology RID for this stack (fails loudly on zero or many)
-foundry ontology rid --profile "$PROFILE"
+pfoundry ontology rid --profile "$PROFILE"
 
 # Or list and pick explicitly
-foundry ontology list --profile "$PROFILE" --format json
+pfoundry ontology list --profile "$PROFILE" --format json
 
 # Inspect the ontology and its object types
-foundry ontology get "$ONTOLOGY_RID" --profile "$PROFILE"
-foundry ontology object-type-list "$ONTOLOGY_RID" --profile "$PROFILE" --format json
+pfoundry ontology get "$ONTOLOGY_RID" --profile "$PROFILE"
+pfoundry ontology object-type-list "$ONTOLOGY_RID" --profile "$PROFILE" --format json
 
 # Read the specific types the change touches
-foundry ontology object-type-get "$ONTOLOGY_RID" Cohort --profile "$PROFILE"
-foundry ontology link-type-get "$ONTOLOGY_RID" Cohort members --profile "$PROFILE"
-foundry ontology action-type-get "$ONTOLOGY_RID" create-cohort --profile "$PROFILE"
+pfoundry ontology object-type-get "$ONTOLOGY_RID" Cohort --profile "$PROFILE"
+pfoundry ontology link-type-get "$ONTOLOGY_RID" Cohort members --profile "$PROFILE"
+pfoundry ontology action-type-get "$ONTOLOGY_RID" create-cohort --profile "$PROFILE"
 ```
 
 Resolve identifiers to RIDs and internal IDs before authoring. Link type upserts and object/link type deletes take internal IDs (for example `ns0abcde.cohort`), not API names:
 
 ```bash
-foundry ontology resolve "$ONTOLOGY_RID" --kind object-type --api-name Cohort --profile "$PROFILE"
-foundry ontology resolve "$ONTOLOGY_RID" --kind property --object-type Cohort --api-name capacity --profile "$PROFILE"
-foundry ontology resolve "$ONTOLOGY_RID" --kind action-type --api-name create-cohort --profile "$PROFILE"
+pfoundry ontology resolve "$ONTOLOGY_RID" --kind object-type --api-name Cohort --profile "$PROFILE"
+pfoundry ontology resolve "$ONTOLOGY_RID" --kind property --object-type Cohort --api-name capacity --profile "$PROFILE"
+pfoundry ontology resolve "$ONTOLOGY_RID" --kind action-type --api-name create-cohort --profile "$PROFILE"
 ```
 
 ## Phase 3: Author object types and properties
 
-Steps 1-2 of the required publication order (backing dataset schema, transaction functions) are outside `foundry ontology`; confirm they are done first. Then run the dry-run plan, review it, and only then apply:
+Steps 1-2 of the required publication order (backing dataset schema, transaction functions) are outside `pfoundry ontology`; confirm they are done first. Then run the dry-run plan, review it, and only then apply:
 
 ```bash
 # Dry-run plan (default; nothing is written)
-foundry ontology object-type-upsert "$ONTOLOGY_RID" \
+pfoundry ontology object-type-upsert "$ONTOLOGY_RID" \
   --api-name Cohort \
   --display-name "Cohort" \
   --primary-key cohortId \
@@ -79,7 +79,7 @@ foundry ontology object-type-upsert "$ONTOLOGY_RID" \
   --profile "$PROFILE"
 
 # Apply only after the plan and the Phase 1 gate are reviewed
-foundry ontology object-type-upsert "$ONTOLOGY_RID" \
+pfoundry ontology object-type-upsert "$ONTOLOGY_RID" \
   --api-name Cohort \
   --display-name "Cohort" \
   --primary-key cohortId \
@@ -93,7 +93,7 @@ When the object type already exists, the upsert switches to the update path and 
 Add properties to an existing object type with the backing column mapping (the column must already exist in the dataset schema):
 
 ```bash
-foundry ontology object-type-add-property "$ONTOLOGY_RID" \
+pfoundry ontology object-type-add-property "$ONTOLOGY_RID" \
   --object-type Cohort \
   --api-name capacity \
   --type INTEGER \
@@ -105,17 +105,17 @@ foundry ontology object-type-add-property "$ONTOLOGY_RID" \
 Deletes are destructive and run in reverse publication order — dependent action types and link types first. The delete target is the internal ObjectTypeId from Phase 2, and the real delete requires both flags:
 
 ```bash
-foundry ontology object-type-delete "$ONTOLOGY_RID" ns0abcde.cohort \
+pfoundry ontology object-type-delete "$ONTOLOGY_RID" ns0abcde.cohort \
   --profile "$PROFILE" --apply --yes
 ```
 
 ## Phase 4: Author link types
 
-Step 4 of the publication order; both object types must already exist. `--from-object-type-id` and `--to-object-type-id` take internal ObjectTypeIds from `foundry ontology resolve`:
+Step 4 of the publication order; both object types must already exist. `--from-object-type-id` and `--to-object-type-id` take internal ObjectTypeIds from `pfoundry ontology resolve`:
 
 ```bash
 # Dry-run plan
-foundry ontology link-type-upsert "$ONTOLOGY_RID" \
+pfoundry ontology link-type-upsert "$ONTOLOGY_RID" \
   --api-name members \
   --from-object-type-id ns0abcde.cohort \
   --to-object-type-id ns0abcde.person \
@@ -127,7 +127,7 @@ foundry ontology link-type-upsert "$ONTOLOGY_RID" \
 Existing link types are not updated; the create validation reports that case explicitly. Deletes take the internal LinkTypeId and require `--apply --yes`:
 
 ```bash
-foundry ontology link-type-delete "$ONTOLOGY_RID" ns0abcde.members \
+pfoundry ontology link-type-delete "$ONTOLOGY_RID" ns0abcde.members \
   --profile "$PROFILE" --apply --yes
 ```
 
@@ -137,10 +137,10 @@ Step 5 of the publication order; referenced object types and link types must exi
 
 ```bash
 # Dry-run plan, then apply
-foundry ontology action-type-upsert "$ONTOLOGY_RID" \
+pfoundry ontology action-type-upsert "$ONTOLOGY_RID" \
   --definition action-type.json \
   --profile "$PROFILE"
-foundry ontology action-type-upsert "$ONTOLOGY_RID" \
+pfoundry ontology action-type-upsert "$ONTOLOGY_RID" \
   --definition action-type.json \
   --profile "$PROFILE" --apply
 ```
@@ -148,7 +148,7 @@ foundry ontology action-type-upsert "$ONTOLOGY_RID" \
 Evolve an existing action type with a partial patch (`logic`, `parameters`, `validations`, `writeAuthorization`, `status`, `displayMetadata`; unknown keys fail loudly):
 
 ```bash
-foundry ontology action-type-update "$ONTOLOGY_RID" \
+pfoundry ontology action-type-update "$ONTOLOGY_RID" \
   --action-type create-cohort \
   --definition patch.json \
   --profile "$PROFILE"
@@ -158,14 +158,14 @@ foundry ontology action-type-update "$ONTOLOGY_RID" \
 Delete by API name, first in reverse publication order:
 
 ```bash
-foundry ontology action-type-delete "$ONTOLOGY_RID" create-cohort \
+pfoundry ontology action-type-delete "$ONTOLOGY_RID" create-cohort \
   --profile "$PROFILE" --apply --yes
 ```
 
 Finish with step 6: validate each touched action without executing it.
 
 ```bash
-foundry ontology action-validate "$ONTOLOGY_RID" create-cohort \
+pfoundry ontology action-validate "$ONTOLOGY_RID" create-cohort \
   '{"cohortId": "test-cohort"}' --profile "$PROFILE"
 ```
 
@@ -177,16 +177,16 @@ Global Branch RIDs use a double dot: `ri.branch..branch.<uuid>`. There are no li
 
 ```bash
 # Dry-run plan (no network request), then apply
-foundry global-branch create "Cohort capacity change" \
+pfoundry global-branch create "Cohort capacity change" \
   --ontology-rid "$ONTOLOGY_RID" \
   --description "Add capacity property and create-cohort action" \
   --profile "$PROFILE"
-foundry global-branch create "Cohort capacity change" \
+pfoundry global-branch create "Cohort capacity change" \
   --ontology-rid "$ONTOLOGY_RID" \
   --profile "$PROFILE" --apply
 
 # Load the branch back by RID
-foundry global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024 \
+pfoundry global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024 \
   --profile "$PROFILE"
 ```
 
@@ -194,7 +194,7 @@ Known capability gaps — document them, do not guess:
 
 - Of the `modifyOntology` authoring commands, only `object-type-add-property` and `action-type-update` accept `--branch-rid`. `object-type-upsert`, `link-type-upsert`, and `action-type-upsert` have no branch targeting flag; writes from them land on the default branch.
 - Whether a Global Branch RID (`ri.branch..branch.*`) is accepted as the `ontologyBranchRid` of `--branch-rid` is not contract-verified. Verify on a non-production stack before relying on it.
-- Closing a branch is destructive: `foundry global-branch close BRANCH_RID --apply --yes`.
+- Closing a branch is destructive: `pfoundry global-branch close BRANCH_RID --apply --yes`.
 
 ## Phase 7: Ship through a Global Proposal
 
@@ -202,27 +202,27 @@ Create the proposal against the branch, plan-first. `--merge-to main` is the def
 
 ```bash
 # Dry-run plan, then apply
-foundry global-proposal create "Ship cohort capacity" \
+pfoundry global-proposal create "Ship cohort capacity" \
   --branch-rid ri.branch..branch.00000000-0000-0000-0000-000000000024 \
   --merge-to main \
   --profile "$PROFILE"
-foundry global-proposal create "Ship cohort capacity" \
+pfoundry global-proposal create "Ship cohort capacity" \
   --branch-rid ri.branch..branch.00000000-0000-0000-0000-000000000024 \
   --profile "$PROFILE" --apply
 
 # Load the proposal back by RID
-foundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
+pfoundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
   --profile "$PROFILE"
 ```
 
-There is no CLI command to approve or merge a proposal; the merge step happens in Foundry outside this workflow. `foundry global-proposal close PROPOSAL_RID --apply --yes` closes without merging and is destructive — confirm with the operator which outcome is intended before running it.
+There is no CLI command to approve or merge a proposal; the merge step happens in Foundry outside this workflow. `pfoundry global-proposal close PROPOSAL_RID --apply --yes` closes without merging and is destructive — confirm with the operator which outcome is intended before running it.
 
 ## Phase 8: Run the post-change comparison gate
 
 After the change is applied (and after the proposal merges, for shipped work), rerun the identical dependency command from Phase 1 — same target, profile, branch, direction, depth, and budgets — with `--compare-artifact` against the retained baseline:
 
 ```bash
-foundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
+pfoundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --profile "$PROFILE" \
   --branch "$BRANCH" \
   --change "add property capacity to Cohort" \

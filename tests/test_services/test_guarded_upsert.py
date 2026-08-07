@@ -94,6 +94,23 @@ def test_is_object_type_not_found_matches_typed_sdk_error():
     assert _is_object_type_not_found(wrapped)
 
 
+def test_is_object_type_not_found_matches_local_service_error():
+    """The service's typed not-found wrapper is detected too."""
+    wrapped = RuntimeError("Failed to get object type ExampleObject: not found")
+    wrapped.__cause__ = ObjectTypeNotFoundError("missing")
+    assert _is_object_type_not_found(wrapped)
+
+
+def test_is_object_type_not_found_matches_sdk_payload_name():
+    """Generic SDK not-found errors are matched by their payload name."""
+    class NotFoundError(Exception):
+        name = "ObjectTypeNotFound"
+
+    wrapped = RuntimeError("not found")
+    wrapped.__cause__ = NotFoundError("missing")
+    assert _is_object_type_not_found(wrapped)
+
+
 def test_is_object_type_not_found_rejects_other_failures():
     assert not _is_object_type_not_found(RuntimeError("permission denied"))
 

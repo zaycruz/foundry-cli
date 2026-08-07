@@ -40,7 +40,7 @@ class DatasetService(BaseService):
             dataset = self.service.Dataset.get(dataset_rid)
             return self._format_dataset_info(dataset)
         except Exception as e:
-            raise RuntimeError(f"Failed to get dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to get dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def get_schema(self, dataset_rid: str) -> Dict[str, Any]:
         """
@@ -61,7 +61,7 @@ class DatasetService(BaseService):
                 "status": "Schema retrieved successfully",
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to get schema for dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to get schema for dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def apply_schema(self, dataset_rid: str, branch: str = "master") -> Dict[str, Any]:
         """
@@ -116,7 +116,7 @@ class DatasetService(BaseService):
                 "version_id": metadata_result.get("versionId"),
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to apply schema for dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to apply schema for dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def _get_schema_response(self, dataset_rid: str, branch: str = "master") -> Any:
         """Fetch the raw GetDatasetSchemaResponse (schema + version_id)."""
@@ -198,7 +198,7 @@ class DatasetService(BaseService):
                 "schema": result,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to set schema for dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to set schema for dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     @staticmethod
     def _serialize_schema(schema: Any) -> Dict[str, Any]:
@@ -338,8 +338,9 @@ class DatasetService(BaseService):
                 branch_name=branch,
             )
         except Exception as e:
+            # The f-string below is an error-context message, never SQL (B608 FP).
             raise foundry_error_from_sdk(
-                e, context=f"Failed to update schema for dataset {dataset_rid}"
+                e, context=f"Failed to update schema for dataset {dataset_rid}"  # nosec B608
             )
 
         read_back = self._get_schema_response(dataset_rid, branch)
@@ -472,7 +473,7 @@ class DatasetService(BaseService):
             )
             return self._format_dataset_info(dataset)
         except Exception as e:
-            raise RuntimeError(f"Failed to create dataset '{name}': {e}")
+            raise RuntimeError(f"Failed to create dataset '{name}': {self._format_error_detail(e)}")
 
     def read_table(self, dataset_rid: str, format: str = "arrow") -> Any:
         """
@@ -488,7 +489,7 @@ class DatasetService(BaseService):
         try:
             return self.service.Dataset.read_table(dataset_rid, format=format)
         except Exception as e:
-            raise RuntimeError(f"Failed to read dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to read dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def preview_data(
         self,
@@ -506,12 +507,13 @@ class DatasetService(BaseService):
             List of dictionaries representing rows
         """
         try:
-            # Use read_table with pandas format for easy conversion
-            df = self.read_table(dataset_rid, format="pandas")
+            # SDK read_table accepts only ARROW/CSV; convert ARROW to pandas rows.
+            table = self.read_table(dataset_rid, format="ARROW")
+            df = table.to_pandas()
             # Limit rows and convert to records
             return df.head(limit).to_dict(orient="records")
         except Exception as e:
-            raise RuntimeError(f"Failed to preview dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to preview dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def delete_dataset(self, dataset_rid: str) -> bool:
         """Move a dataset resource to the Foundry filesystem trash."""
@@ -519,7 +521,7 @@ class DatasetService(BaseService):
             self.client.filesystem.Resource.delete(dataset_rid)
             return True
         except Exception as e:
-            raise RuntimeError(f"Failed to delete dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to delete dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def upload_file(
         self,
@@ -550,11 +552,15 @@ class DatasetService(BaseService):
                 file_content = f.read()
 
             # Use the correct method signature with body parameter
+            # The SDK rejects branchName + transactionRid together. A manually
+            # opened transaction already identifies the branch, so omit the
+            # branch parameter in that mode while preserving the existing
+            # branch-based upload behavior for automatic transactions.
             result = self.service.Dataset.File.upload(
                 dataset_rid=dataset_rid,
                 file_path=file_path.name,  # Just the filename, not full path
                 body=file_content,
-                branch_name=branch,
+                branch_name=None if transaction_rid else branch,
                 transaction_rid=transaction_rid,
             )
 
@@ -636,7 +642,7 @@ class DatasetService(BaseService):
                     "Use the existing transaction with --transaction-rid, or commit/abort it first"
                 )
                 context_hints.append(
-                    "List transactions with: foundry dataset transactions list "
+                    "List transactions with: pfoundry dataset transactions list "
                     + dataset_rid
                 )
 
@@ -700,7 +706,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to download file {file_path} from dataset {dataset_rid}: {e}"
+                f"Failed to download file {file_path} from dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_dataset_stats(
@@ -891,7 +897,7 @@ class DatasetService(BaseService):
                 for file in files
             ]
         except Exception as e:
-            raise RuntimeError(f"Failed to list files in dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to list files in dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def list_files_paginated(
         self,
@@ -938,7 +944,7 @@ class DatasetService(BaseService):
 
             return result
         except Exception as e:
-            raise RuntimeError(f"Failed to list files: {e}")
+            raise RuntimeError(f"Failed to list files: {self._format_error_detail(e)}")
 
     def get_branches(self, dataset_rid: str) -> List[Dict[str, Any]]:
         """
@@ -963,7 +969,7 @@ class DatasetService(BaseService):
                 for branch in branches
             ]
         except Exception as e:
-            raise RuntimeError(f"Failed to get branches for dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to get branches for dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def create_branch(
         self, dataset_rid: str, branch_name: str, parent_branch: str = "master"
@@ -998,7 +1004,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to create branch '{branch_name}' for dataset {dataset_rid}: {e}"
+                f"Failed to create branch '{branch_name}' for dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def create_transaction(
@@ -1034,7 +1040,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to create transaction for dataset {dataset_rid}: {e}"
+                f"Failed to create transaction for dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def commit_transaction(
@@ -1064,7 +1070,7 @@ class DatasetService(BaseService):
                 "success": True,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to commit transaction {transaction_rid}: {e}")
+            raise RuntimeError(f"Failed to commit transaction {transaction_rid}: {self._format_error_detail(e)}")
 
     def abort_transaction(
         self, dataset_rid: str, transaction_rid: str
@@ -1093,7 +1099,7 @@ class DatasetService(BaseService):
                 "success": True,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to abort transaction {transaction_rid}: {e}")
+            raise RuntimeError(f"Failed to abort transaction {transaction_rid}: {self._format_error_detail(e)}")
 
     def get_transaction_status(
         self, dataset_rid: str, transaction_rid: str
@@ -1127,7 +1133,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get transaction status {transaction_rid}: {e}"
+                f"Failed to get transaction status {transaction_rid}: {self._format_error_detail(e)}"
             )
 
     def get_transactions(self, dataset_rid: str) -> List[Dict[str, Any]]:
@@ -1158,7 +1164,7 @@ class DatasetService(BaseService):
             ]
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get transactions for dataset {dataset_rid}: {e}"
+                f"Failed to get transactions for dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_views(self, dataset_rid: str) -> List[Dict[str, Any]]:
@@ -1221,7 +1227,7 @@ class DatasetService(BaseService):
             raise
         except Exception as e:
             raise RuntimeError(
-                f"Failed to create view '{view_name}' for dataset {dataset_rid}: {e}"
+                f"Failed to create view '{view_name}' for dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_schedules(self, dataset_rid: str) -> List[Dict[str, Any]]:
@@ -1262,7 +1268,7 @@ class DatasetService(BaseService):
             ]
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get schedules for dataset {dataset_rid}: {e}"
+                f"Failed to get schedules for dataset {dataset_rid}: {self._format_error_detail(e)}"
             ) from e
 
     def get_schedule_rids_page(
@@ -1296,7 +1302,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get schedule RID page for dataset {dataset_rid}: {e}"
+                f"Failed to get schedule RID page for dataset {dataset_rid}: {self._format_error_detail(e)}"
             ) from e
 
     def get_jobs(
@@ -1329,7 +1335,7 @@ class DatasetService(BaseService):
                 for job in jobs
             ]
         except Exception as e:
-            raise RuntimeError(f"Failed to get jobs for dataset {dataset_rid}: {e}")
+            raise RuntimeError(f"Failed to get jobs for dataset {dataset_rid}: {self._format_error_detail(e)}")
 
     def delete_branch(self, dataset_rid: str, branch_name: str) -> Dict[str, Any]:
         """
@@ -1355,7 +1361,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to delete branch '{branch_name}' from dataset {dataset_rid}: {e}"
+                f"Failed to delete branch '{branch_name}' from dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_branch(self, dataset_rid: str, branch_name: str) -> Dict[str, Any]:
@@ -1383,7 +1389,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get branch '{branch_name}' from dataset {dataset_rid}: {e}"
+                f"Failed to get branch '{branch_name}' from dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_branch_transactions(
@@ -1419,7 +1425,7 @@ class DatasetService(BaseService):
             ]
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get transaction history for branch '{branch_name}' in dataset {dataset_rid}: {e}"
+                f"Failed to get transaction history for branch '{branch_name}' in dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def delete_file(
@@ -1450,7 +1456,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to delete file {file_path} from dataset {dataset_rid}: {e}"
+                f"Failed to delete file {file_path} from dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_file_info(
@@ -1484,7 +1490,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get file info for {file_path} in dataset {dataset_rid}: {e}"
+                f"Failed to get file info for {file_path} in dataset {dataset_rid}: {self._format_error_detail(e)}"
             )
 
     def get_transaction_build(
@@ -1516,7 +1522,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get build for transaction {transaction_rid}: {e}"
+                f"Failed to get build for transaction {transaction_rid}: {self._format_error_detail(e)}"
             )
 
     def get_view(self, view_rid: str, branch: str = "master") -> Dict[str, Any]:
@@ -1544,7 +1550,7 @@ class DatasetService(BaseService):
                 "primary_key": getattr(view, "primary_key", None),
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to get view {view_rid}: {e}")
+            raise RuntimeError(f"Failed to get view {view_rid}: {self._format_error_detail(e)}")
 
     def add_backing_datasets(
         self, view_rid: str, dataset_rids: List[str]
@@ -1579,7 +1585,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to add backing datasets to view {view_rid}: {e}"
+                f"Failed to add backing datasets to view {view_rid}: {self._format_error_detail(e)}"
             )
 
     def remove_backing_datasets(
@@ -1615,7 +1621,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to remove backing datasets from view {view_rid}: {e}"
+                f"Failed to remove backing datasets from view {view_rid}: {self._format_error_detail(e)}"
             )
 
     def replace_backing_datasets(
@@ -1651,7 +1657,7 @@ class DatasetService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to replace backing datasets in view {view_rid}: {e}"
+                f"Failed to replace backing datasets in view {view_rid}: {self._format_error_detail(e)}"
             )
 
     def add_primary_key(self, view_rid: str, key_fields: List[str]) -> Dict[str, Any]:
@@ -1681,7 +1687,7 @@ class DatasetService(BaseService):
                 "result": result,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to add primary key to view {view_rid}: {e}")
+            raise RuntimeError(f"Failed to add primary key to view {view_rid}: {self._format_error_detail(e)}")
 
     def _format_dataset_info(self, dataset: Any) -> Dict[str, Any]:
         """

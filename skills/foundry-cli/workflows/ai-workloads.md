@@ -19,10 +19,10 @@ List models available to the current enrollment and check the status of the spec
 
 ```bash
 # List language models available to the current enrollment
-foundry language-models list --profile "$PROFILE"
+pfoundry language-models list --profile "$PROFILE"
 
 # Check enrollment status for a specific model
-foundry language-models status ri.language-model-service..language-model.abc123 \
+pfoundry language-models status ri.language-model-service..language-model.abc123 \
   --profile "$PROFILE"
 ```
 
@@ -33,7 +33,7 @@ foundry language-models status ri.language-model-service..language-model.abc123 
 Single-turn Q&A:
 
 ```bash
-foundry language-models anthropic messages ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \
   --message "Summarize the key risks in this incident report" \
   --system "You are a concise operations analyst" \
   --temperature 0.2 \
@@ -55,7 +55,7 @@ Multi-turn conversation, tool calling, or extended thinking via `messages-advanc
 #   "maxTokens": 500
 # }
 
-foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
   --request @conversation.json \
   --profile "$PROFILE" \
   --output reply.json
@@ -69,17 +69,17 @@ Single text, batch, and file-based input:
 
 ```bash
 # Single text
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
   --input "Machine learning is fascinating"
 
 # Batch from file (texts.json: ["Text 1", "Text 2", "Text 3"])
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
   --input @texts.json \
   --profile "$PROFILE" \
   --output corpus-embeddings.json
 
 # Embed a query later and compare against the corpus locally
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
   --input "search query" \
   --output query-embedding.json
 ```
@@ -92,15 +92,15 @@ Discover, inspect, then execute. Do not execute a query whose parameters you hav
 
 ```bash
 # 1. Discover the query by name (title search, local filtering, capped at --limit)
-foundry functions search revenue --limit 50 --format json
+pfoundry functions search revenue --limit 50 --format json
 
 # 2. Inspect metadata to learn parameter names and types
-foundry functions query get monthlyReport --format json
+pfoundry functions query get monthlyReport --format json
 # or by RID
-foundry functions query get-by-rid ri.functions.main.query.abc123 --format json
+pfoundry functions query get-by-rid ri.functions.main.query.abc123 --format json
 
 # 3. Execute with typed parameters (inline JSON or @file.json)
-foundry functions query execute monthlyReport \
+pfoundry functions query execute monthlyReport \
   --parameters '{
     "startDate": "2024-01-01",
     "endDate": "2024-01-31",
@@ -112,7 +112,7 @@ foundry functions query execute monthlyReport \
   --output results.json
 
 # Pin a specific version when reproducibility matters
-foundry functions query execute monthlyReport --version 1.0.0 --parameters '{}'
+pfoundry functions query execute monthlyReport --version 1.0.0 --parameters '{}'
 ```
 
 Parameter values are typed JSON: primitives, arrays, structs, dates (`"2024-01-15"`), and timestamps (epoch millis). `functions query execute` runs the query; whether it writes data depends on the query definition, which is why Phase 4 starts with `get`.
@@ -125,22 +125,22 @@ All `aip-agents` commands are read-only:
 AGENT="ri.foundry.main.agent.abc123"
 
 # Agent configuration (latest published version, or pin one)
-foundry aip-agents get $AGENT --format json
-foundry aip-agents get $AGENT --version 1.5 --format json
+pfoundry aip-agents get $AGENT --format json
+pfoundry aip-agents get $AGENT --version 1.5 --format json
 
 # Version history (descending, most recent first)
-foundry aip-agents versions list $AGENT --all --format csv --output versions.csv
+pfoundry aip-agents versions list $AGENT --all --format csv --output versions.csv
 
 # Conversation sessions
-foundry aip-agents sessions list $AGENT --all --format json --output sessions.json
-foundry aip-agents sessions get $AGENT ri.foundry.main.session.xyz789 --format json
+pfoundry aip-agents sessions list $AGENT --all --format json --output sessions.json
+pfoundry aip-agents sessions get $AGENT ri.foundry.main.session.xyz789 --format json
 ```
 
 Compare two agent versions:
 
 ```bash
-foundry aip-agents get $AGENT --version 1.0 --format json --output v1.json
-foundry aip-agents get $AGENT --version 2.0 --format json --output v2.json
+pfoundry aip-agents get $AGENT --version 1.0 --format json --output v1.json
+pfoundry aip-agents get $AGENT --version 2.0 --format json --output v2.json
 diff v1.json v2.json
 ```
 
@@ -152,15 +152,15 @@ Both mutations below lack a dry-run, plan, or confirmation flag in the CLI. Run 
 
 ```bash
 # Enroll/enable a language model for the current enrollment (mutation)
-foundry language-models enroll ri.language-model-service..language-model.abc123 \
+pfoundry language-models enroll ri.language-model-service..language-model.abc123 \
   --profile "$PROFILE"
 
 # Verify the mutation took effect
-foundry language-models status ri.language-model-service..language-model.abc123 \
+pfoundry language-models status ri.language-model-service..language-model.abc123 \
   --profile "$PROFILE"
 
 # Create an ML model container in the registry (mutation)
-foundry models model create "fraud-detector" \
+pfoundry models model create "fraud-detector" \
   --folder ri.compass.main.folder.abc123 \
   --profile "$PROFILE" \
   --format json \
@@ -178,14 +178,14 @@ Read-only inspection of ML models and versions. This is the `models` module (cus
 MODEL="ri.foundry.main.model.abc123"
 
 # Model metadata
-foundry models model get $MODEL --format json
+pfoundry models model get $MODEL --format json
 
 # Version history (token pagination)
-foundry models version list $MODEL --page-size 50 --format json --output versions.json
-foundry models version list $MODEL --page-size 50 --page-token <token-from-previous-response>
+pfoundry models version list $MODEL --page-size 50 --format json --output versions.json
+pfoundry models version list $MODEL --page-size 50 --page-token <token-from-previous-response>
 
 # Specific version details
-foundry models version get $MODEL v1.0.0 --format json --output v1.json
+pfoundry models version get $MODEL v1.0.0 --format json --output v1.json
 ```
 
 ## Capability Gaps

@@ -1,5 +1,5 @@
 """
-Interactive shell (REPL) command for the foundry CLI.
+Interactive shell (REPL) command for the pfoundry CLI.
 Provides an interactive mode with tab completion and command history.
 """
 
@@ -33,11 +33,11 @@ def get_prompt() -> str:
         profile_manager = ProfileManager()
         current_profile = profile_manager.get_active_profile()
         if current_profile:
-            return f"foundry ({current_profile})> "
+            return f"pfoundry ({current_profile})> "
         else:
-            return "foundry> "
+            return "pfoundry> "
     except Exception:
-        return "foundry> "
+        return "pfoundry> "
 
 
 @shell_app.command()
@@ -47,21 +47,21 @@ def start(
     ),
 ) -> None:
     """
-    Start an interactive shell session for foundry CLI.
+    Start an interactive shell session for pfoundry CLI.
 
     Features:
     - Tab completion for all commands
     - Command history (persistent across sessions)
     - Current profile displayed in prompt
-    - All foundry commands available without the 'foundry' prefix
+    - All CLI commands available without the 'pfoundry' prefix
 
     Examples:
         # Start interactive shell
-        $ foundry shell
+        $ pfoundry shell
 
-        # In the shell, run commands without 'foundry' prefix:
-        foundry> dataset get ri.foundry.main.dataset.123
-        foundry> ontology list
+        # In the shell, run commands without 'pfoundry' prefix:
+        pfoundry> dataset get ri.foundry.main.dataset.123
+        pfoundry> ontology list
         foundry> sql execute "SELECT * FROM dataset LIMIT 10"
 
         # Exit the shell:

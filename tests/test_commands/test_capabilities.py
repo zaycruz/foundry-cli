@@ -18,9 +18,9 @@ def test_capabilities_agent_output_is_stable_json() -> None:
     assert payload["schema_version"] == "foundry-agent-v1"
     manifest = payload["data"]
     assert manifest["schema_version"] == "foundry-agent-capabilities-v1"
-    assert manifest["catalog"]["tool_count"] == 72
+    assert manifest["catalog"]["tool_count"] == 73
     assert manifest["catalog"]["workflow_count"] == 1
-    assert manifest["counts"]["total"] == 73
+    assert manifest["counts"]["total"] == 74
     assert manifest["capabilities"][0].keys() >= {
         "capability_id",
         "kind",
@@ -41,7 +41,7 @@ def test_capabilities_table_output_contains_group_summary() -> None:
     assert result.exit_code == 0, result.stdout
     assert "Native Foundry CLI Capabilities" in result.stdout
     assert "Catalog:" in result.stdout
-    assert "Tools: 72" in result.stdout
+    assert "Tools: 73" in result.stdout
     assert "Workflows: 1" in result.stdout
 
 
@@ -55,4 +55,4 @@ def test_capabilities_can_write_agent_output_to_file(tmp_path) -> None:
 
     assert result.exit_code == 0, result.stdout
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["data"]["counts"]["total"] == 73
+    assert payload["data"]["counts"]["total"] == 74

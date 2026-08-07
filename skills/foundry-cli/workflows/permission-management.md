@@ -8,7 +8,7 @@ Setting up access control, permissions, and resource roles.
 
 ```bash
 # 1. Get organization info
-foundry admin org get my-organization
+pfoundry admin org get my-organization
 
 # 2. Create space (requires enrollment-rid, organization, and deletion-policy-org)
 SPACE_RID=$(foundry space create "Data Analytics Team" \
@@ -27,9 +27,9 @@ echo "Created project: $PROJECT_RID"
 
 # 4. Create folder structure
 ROOT_FOLDER=$(foundry folder create "Analytics Work" --format json | jq -r '.rid')
-foundry folder create "Raw Data" --parent-folder $ROOT_FOLDER
-foundry folder create "Processed Data" --parent-folder $ROOT_FOLDER
-foundry folder create "Reports" --parent-folder $ROOT_FOLDER
+pfoundry folder create "Raw Data" --parent-folder $ROOT_FOLDER
+pfoundry folder create "Processed Data" --parent-folder $ROOT_FOLDER
+pfoundry folder create "Reports" --parent-folder $ROOT_FOLDER
 
 echo "Workspace setup complete!"
 ```
@@ -42,10 +42,10 @@ echo "Workspace setup complete!"
 DATASET_RID="ri.foundry.main.dataset.customer-data"
 
 # List all permissions
-foundry resource-role list $DATASET_RID
+pfoundry resource-role list $DATASET_RID
 
 # Filter by users only
-foundry resource-role list $DATASET_RID --principal-type User
+pfoundry resource-role list $DATASET_RID --principal-type User
 ```
 
 ### Grant Permissions
@@ -56,11 +56,11 @@ USER_UUID="12345678-1234-1234-1234-123456789abc"
 GROUP_UUID="87654321-4321-4321-4321-cba987654321"
 
 # Grant to individual users
-foundry resource-role grant "$DATASET_RID" \
+pfoundry resource-role grant "$DATASET_RID" \
   --principal-id "$USER_UUID" --principal-type User --role ROLE_ID
 
 # Grant to groups
-foundry resource-role grant "$DATASET_RID" \
+pfoundry resource-role grant "$DATASET_RID" \
   --principal-id "$GROUP_UUID" --principal-type Group --role ROLE_ID
 ```
 
@@ -71,7 +71,7 @@ DATASET_RID="ri.foundry.main.dataset.customer-data"
 USER_UUID="12345678-1234-1234-1234-123456789abc"
 
 # Revoke individual
-foundry resource-role revoke "$DATASET_RID" \
+pfoundry resource-role revoke "$DATASET_RID" \
   --principal-id "$USER_UUID" --principal-type User --role ROLE_ID
 ```
 
@@ -87,7 +87,7 @@ echo "=== Permission Audit for $DATASET_RID ==="
 echo ""
 
 echo "Current permissions:"
-foundry resource-role list $DATASET_RID --format table
+pfoundry resource-role list $DATASET_RID --format table
 
 echo ""
 echo "Audit complete at $(date)"
@@ -99,38 +99,38 @@ echo "Audit complete at $(date)"
 
 ```bash
 # List all users
-foundry admin user list --format csv --output all_users.csv
+pfoundry admin user list --format csv --output all_users.csv
 
 # Search users
-foundry admin user search "data scientist"
+pfoundry admin user search "data scientist"
 
 # Get user details
-foundry admin user get john.doe@company.com
+pfoundry admin user get john.doe@company.com
 
 # Check user markings/permissions
-foundry admin user markings john.doe@company.com
+pfoundry admin user markings john.doe@company.com
 
 # Current user info
-foundry admin user current
+pfoundry admin user current
 ```
 
 ### Group Management
 
 ```bash
 # List groups
-foundry admin group list
+pfoundry admin group list
 
 # Create new group
-foundry admin group create "Analytics Team" --description "Business analytics team"
+pfoundry admin group create "Analytics Team" --description "Business analytics team"
 
 # Get group details
-foundry admin group get analytics-team
+pfoundry admin group get analytics-team
 
 # Search groups
-foundry admin group search "data"
+pfoundry admin group search "data"
 
 # Delete group
-foundry admin group delete old-team --confirm
+pfoundry admin group delete old-team --confirm
 ```
 
 ## Resource Organization
@@ -139,11 +139,11 @@ foundry admin group delete old-team --confirm
 
 ```bash
 # Search for resources
-foundry resource search "sales" --type dataset --format json --output sales.json
+pfoundry resource search "sales" --type dataset --format json --output sales.json
 
 # Get details for each resource
 for rid in $(cat sales.json | jq -r '.[].rid'); do
-  foundry resource get "$rid" --format json
+  pfoundry resource get "$rid" --format json
 done
 ```
 
@@ -151,7 +151,7 @@ done
 
 ```bash
 # Get details for a resource
-foundry resource get ri.foundry.main.dataset.sales-analytics --format json
+pfoundry resource get ri.foundry.main.dataset.sales-analytics --format json
 ```
 
 ## Security Audit
@@ -165,13 +165,13 @@ DATE=$(date +%Y%m%d)
 echo "Starting security audit..."
 
 # Export all users
-foundry admin user list --format json --output "audit_users_${DATE}.json"
+pfoundry admin user list --format json --output "audit_users_${DATE}.json"
 
 # Export all groups
-foundry admin group list --format json --output "audit_groups_${DATE}.json"
+pfoundry admin group list --format json --output "audit_groups_${DATE}.json"
 
 # Check admin users
-foundry admin user search "admin" --format csv --output "potential_admins_${DATE}.csv"
+pfoundry admin user search "admin" --format csv --output "potential_admins_${DATE}.csv"
 
 echo ""
 echo "Audit files generated:"
@@ -189,8 +189,8 @@ echo "Completed at $(date)"
 ```bash
 DATASET="ri.foundry.main.dataset.production-data"
 
-foundry resource-role grant $DATASET analyst-team Group viewer
-foundry resource-role grant $DATASET junior-analyst User viewer
+pfoundry resource-role grant $DATASET analyst-team Group viewer
+pfoundry resource-role grant $DATASET junior-analyst User viewer
 ```
 
 ### Full Access for Data Engineers
@@ -198,8 +198,8 @@ foundry resource-role grant $DATASET junior-analyst User viewer
 ```bash
 DATASET="ri.foundry.main.dataset.etl-pipeline"
 
-foundry resource-role grant $DATASET data-engineering Group owner
-foundry resource-role grant $DATASET lead-engineer User owner
+pfoundry resource-role grant $DATASET data-engineering Group owner
+pfoundry resource-role grant $DATASET lead-engineer User owner
 ```
 
 ### Temporary Access for Contractors
@@ -208,7 +208,7 @@ foundry resource-role grant $DATASET lead-engineer User owner
 DATASET="ri.foundry.main.dataset.project-data"
 
 # Grant temporary access
-foundry resource-role grant $DATASET contractor@external.com User viewer
+pfoundry resource-role grant $DATASET contractor@external.com User viewer
 
 # Document for later revocation
 echo "contractor@external.com granted viewer access on $(date)" >> access_log.txt

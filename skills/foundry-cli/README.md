@@ -43,4 +43,4 @@ The agent should load this skill and use the change-impact workflow before propo
 
 ## Documentation
 
-Run `foundry --agent skill` for installation and usage guidance.
+Run `pfoundry --agent skill` for installation and usage guidance.

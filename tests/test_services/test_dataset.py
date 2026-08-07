@@ -245,20 +245,46 @@ def test_read_table_arrow_format(mock_dataset_service):
     )
 
 
-def test_read_table_pandas_format(mock_dataset_service):
-    """Test reading dataset as Pandas DataFrame."""
+def test_read_table_csv_format(mock_dataset_service):
+    """Test reading dataset as CSV (the only SDK formats are ARROW and CSV)."""
     service, mock_dataset_class = mock_dataset_service
 
-    # Mock the Dataset.read_table static method response
-    mock_df = Mock()
-    mock_dataset_class.read_table.return_value = mock_df
+    mock_table = Mock()
+    mock_dataset_class.read_table.return_value = mock_table
 
-    result = service.read_table("ri.foundry.main.dataset.test-dataset", format="pandas")
+    result = service.read_table("ri.foundry.main.dataset.test-dataset", format="CSV")
 
-    assert result == mock_df
+    assert result == mock_table
     mock_dataset_class.read_table.assert_called_once_with(
-        "ri.foundry.main.dataset.test-dataset", format="pandas"
+        "ri.foundry.main.dataset.test-dataset", format="CSV"
     )
+
+
+def test_preview_data_converts_arrow_to_pandas(mock_dataset_service):
+    """preview_data must request ARROW (the SDK rejects 'pandas') and convert.
+
+    Regression: the SDK read_table format is Literal['ARROW', 'CSV']; passing
+    'pandas' raised a pydantic ValidationError and broke `dataset preview`.
+    """
+    service, mock_dataset_class = mock_dataset_service
+
+    mock_table = Mock()
+    mock_df = Mock()
+    mock_table.to_pandas.return_value = mock_df
+    mock_df.head.return_value = mock_df
+    mock_df.to_dict.return_value = [{"cohort_id": 1}, {"cohort_id": 2}]
+    mock_dataset_class.read_table.return_value = mock_table
+
+    result = service.preview_data(
+        "ri.foundry.main.dataset.test-dataset", limit=2
+    )
+
+    assert result == [{"cohort_id": 1}, {"cohort_id": 2}]
+    mock_dataset_class.read_table.assert_called_once_with(
+        "ri.foundry.main.dataset.test-dataset", format="ARROW"
+    )
+    mock_table.to_pandas.assert_called_once_with()
+    mock_df.head.assert_called_once_with(2)
 
 
 def test_read_table_error(mock_dataset_service):
@@ -276,13 +302,15 @@ def test_preview_data_success(mock_dataset_service):
     """Test successful dataset preview."""
     service, mock_dataset_class = mock_dataset_service
 
-    # Mock pandas DataFrame
+    # ArrowTableResponse -> to_pandas -> head -> records
+    mock_table = Mock()
     mock_df = Mock()
+    mock_table.to_pandas.return_value = mock_df
     mock_df.head.return_value.to_dict.return_value = [
         {"id": 1, "name": "test1"},
         {"id": 2, "name": "test2"},
     ]
-    mock_dataset_class.read_table.return_value = mock_df
+    mock_dataset_class.read_table.return_value = mock_table
 
     result = service.preview_data("ri.foundry.main.dataset.test-dataset", limit=10)
 
@@ -291,7 +319,7 @@ def test_preview_data_success(mock_dataset_service):
     assert result[0]["name"] == "test1"
     assert result[1]["id"] == 2
     mock_dataset_class.read_table.assert_called_once_with(
-        "ri.foundry.main.dataset.test-dataset", format="pandas"
+        "ri.foundry.main.dataset.test-dataset", format="ARROW"
     )
     mock_df.head.assert_called_once_with(10)
 
@@ -300,16 +328,20 @@ def test_preview_data_custom_limit(mock_dataset_service):
     """Test dataset preview with custom limit."""
     service, mock_dataset_class = mock_dataset_service
 
-    # Mock pandas DataFrame
+    mock_table = Mock()
     mock_df = Mock()
+    mock_table.to_pandas.return_value = mock_df
     mock_df.head.return_value.to_dict.return_value = [
         {"id": 1, "name": "test1"},
     ]
-    mock_dataset_class.read_table.return_value = mock_df
+    mock_dataset_class.read_table.return_value = mock_table
 
     result = service.preview_data("ri.foundry.main.dataset.test-dataset", limit=5)
 
     assert len(result) == 1
+    mock_dataset_class.read_table.assert_called_once_with(
+        "ri.foundry.main.dataset.test-dataset", format="ARROW"
+    )
     mock_df.head.assert_called_once_with(5)
 
 
@@ -317,16 +349,17 @@ def test_preview_data_empty_dataset(mock_dataset_service):
     """Test preview of empty dataset."""
     service, mock_dataset_class = mock_dataset_service
 
-    # Mock empty DataFrame
+    mock_table = Mock()
     mock_df = Mock()
+    mock_table.to_pandas.return_value = mock_df
     mock_df.head.return_value.to_dict.return_value = []
-    mock_dataset_class.read_table.return_value = mock_df
+    mock_dataset_class.read_table.return_value = mock_table
 
     result = service.preview_data("ri.foundry.main.dataset.test-dataset")
 
     assert result == []
     mock_dataset_class.read_table.assert_called_once_with(
-        "ri.foundry.main.dataset.test-dataset", format="pandas"
+        "ri.foundry.main.dataset.test-dataset", format="ARROW"
     )
 
 

@@ -79,9 +79,9 @@ def test_tracing_emits_redacted_input_and_exit_metadata(
     assert result == "result"
     assert client.start_kwargs == {
         "as_type": "span",
-        "name": "foundry.command",
+        "name": "pfoundry.command",
         "input": {
-            "command_path": "foundry resource list",
+            "command_path": "pfoundry resource list",
             "args": [
                 "resource",
                 "list",

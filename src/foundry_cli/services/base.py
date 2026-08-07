@@ -61,6 +61,35 @@ class BaseService(ABC):
         """
         pass
 
+    @staticmethod
+    def _describe_error(error: BaseException) -> str:
+        """Return a readable message for any exception, including SDK errors.
+
+        foundry-platform-sdk error classes frequently have an empty ``str()``
+        (their fields live in ``name``/``parameters``/``error_instance_id``).
+        Never emit an empty or repr-of-object message from a ``raise
+        RuntimeError(f"... {self._describe_error(e)}")`` site.
+        """
+        if error is None:
+            return ""
+        message = str(error).strip()
+        if message:
+            return message
+        name = (
+            getattr(error, "name", None)
+            or getattr(error, "error_name", None)
+            or type(error).__name__
+        )
+        parameters = getattr(error, "parameters", None)
+        if isinstance(parameters, dict) and parameters:
+            try:
+                import json as _json
+
+                return f"{name}: {_json.dumps(parameters)}"
+            except (TypeError, ValueError):
+                return name
+        return name
+
     @property
     def service(self) -> Any:
         """

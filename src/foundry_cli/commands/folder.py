@@ -390,19 +390,19 @@ def main():
 
     Examples:
         # Create a folder in root
-        foundry folder create "My Folder"
+        pfoundry folder create "My Folder"
 
         # Create a folder in a specific parent
-        foundry folder create "Sub Folder" --parent-folder ri.compass.main.folder.xyz123
+        pfoundry folder create "Sub Folder" --parent-folder ri.compass.main.folder.xyz123
 
         # List root folder contents
-        foundry folder list ri.compass.main.folder.0
+        pfoundry folder list ri.compass.main.folder.0
 
         # Get folder information
-        foundry folder get ri.compass.main.folder.xyz123
+        pfoundry folder get ri.compass.main.folder.xyz123
 
         # Move a folder to a new parent
-        foundry folder move ri.compass.main.folder.xyz123 \
+        pfoundry folder move ri.compass.main.folder.xyz123 \
             --parent-folder ri.compass.main.folder.parent
     """
     pass

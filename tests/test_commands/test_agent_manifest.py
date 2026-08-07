@@ -214,6 +214,7 @@ def test_manifest_exposes_new_ontology_commands() -> None:
         "BOOLEAN",
         "TIMESTAMP",
         "DATE",
+        "ARRAY_STRING",
     ]
 
     action_update = commands["ontology_action_type_update"]

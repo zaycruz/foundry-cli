@@ -333,6 +333,11 @@ def test_upload_file_with_transaction(mock_dataset_service):
         assert result["transaction_rid"] == "ri.foundry.main.transaction.test"
 
         mock_dataset_class.File.upload.assert_called_once()
+        assert mock_dataset_class.File.upload.call_args.kwargs["branch_name"] is None
+        assert (
+            mock_dataset_class.File.upload.call_args.kwargs["transaction_rid"]
+            == "ri.foundry.main.transaction.test"
+        )
 
     finally:
         # Clean up temp file
@@ -372,6 +377,8 @@ def test_upload_file_without_transaction(mock_dataset_service):
         assert "transaction_rid" in result
 
         mock_dataset_class.File.upload.assert_called_once()
+        assert mock_dataset_class.File.upload.call_args.kwargs["branch_name"] == "master"
+        assert mock_dataset_class.File.upload.call_args.kwargs["transaction_rid"] is None
 
     finally:
         # Clean up temp file

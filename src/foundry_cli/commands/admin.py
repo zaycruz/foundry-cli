@@ -1,5 +1,5 @@
 """
-Admin commands for the foundry CLI.
+Admin commands for the pfoundry CLI.
 Provides commands for user, group, role, and organization management.
 """
 
@@ -68,16 +68,16 @@ def list_users(
 
     Examples:
         # List first page of users (default)
-        foundry admin user list
+        pfoundry admin user list
 
         # List all users
-        foundry admin user list --all
+        pfoundry admin user list --all
 
         # List first 3 pages
-        foundry admin user list --max-pages 3
+        pfoundry admin user list --max-pages 3
 
         # Resume from a specific page
-        foundry admin user list --page-token abc123
+        pfoundry admin user list --page-token abc123
     """
     console = Console()
     formatter = OutputFormatter()
@@ -110,7 +110,7 @@ def list_users(
 
 @user_app.command("get")
 def get_user(
-    user_id: str = typer.Argument(..., help="User ID or RID"),
+    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),
@@ -224,7 +224,7 @@ def search_users(
 
 @user_app.command("markings")
 def get_user_markings(
-    user_id: str = typer.Argument(..., help="User ID or RID"),
+    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),
@@ -261,7 +261,7 @@ def get_user_markings(
 
 @user_app.command("revoke-tokens")
 def revoke_user_tokens(
-    user_id: str = typer.Argument(..., help="User ID or RID"),
+    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),
@@ -297,7 +297,7 @@ def revoke_user_tokens(
 
 @user_app.command("delete")
 def delete_user(
-    user_id: str = typer.Argument(..., help="User ID or RID"),
+    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),

@@ -14,7 +14,7 @@ export FOUNDRY_HOST="foundry.company.com"
 
 # 1. Extract data
 echo "Extracting daily sales data..."
-foundry sql execute "
+pfoundry sql execute "
   SELECT date, product_id, quantity, revenue
   FROM sales_data
   WHERE date = CURRENT_DATE - 1
@@ -22,13 +22,13 @@ foundry sql execute "
 
 # 2. Extract related data
 echo "Extracting product information..."
-foundry ontology object-list ri.ontology.main.ontology.products Product \
+pfoundry ontology object-list ri.ontology.main.ontology.products Product \
   --properties "id,name,category,price" \
   --format json --output products.json
 
 # 3. Generate summary report
 echo "Generating summary..."
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     category,
     SUM(quantity) as total_quantity,
@@ -54,7 +54,7 @@ DATASET="critical_dataset"
 
 # 1. Check for null values
 echo "Checking nulls..."
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     'null_check' as check_type,
     SUM(CASE WHEN important_field IS NULL THEN 1 ELSE 0 END) as null_count,
@@ -64,7 +64,7 @@ foundry sql execute "
 
 # 2. Check for duplicates
 echo "Checking duplicates..."
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     'duplicate_check' as check_type,
     COUNT(*) - COUNT(DISTINCT id) as duplicate_count
@@ -73,7 +73,7 @@ foundry sql execute "
 
 # 3. Check data freshness
 echo "Checking freshness..."
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     'freshness_check' as check_type,
     MAX(updated_date) as latest_update,
@@ -82,7 +82,7 @@ foundry sql execute "
 "
 
 # 4. Export data profile
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     COUNT(*) as total_rows,
     COUNT(DISTINCT id) as unique_ids,
@@ -124,20 +124,20 @@ echo "Validation passed!"
 
 ```bash
 # Search recent builds
-foundry orchestration builds search
+pfoundry orchestration builds search
 
 # Get build details
-foundry orchestration builds get ri.orchestration.main.build.abc123
+pfoundry orchestration builds get ri.orchestration.main.build.abc123
 
 # List jobs in build
-foundry orchestration builds jobs ri.orchestration.main.build.abc123
+pfoundry orchestration builds jobs ri.orchestration.main.build.abc123
 
 # Create new build
-foundry orchestration builds create '{"dataset_rid": "ri.foundry.main.dataset.abc"}' \
+pfoundry orchestration builds create '{"dataset_rid": "ri.foundry.main.dataset.abc"}' \
   --branch production --notifications
 
 # Cancel build if needed
-foundry orchestration builds cancel ri.orchestration.main.build.abc123
+pfoundry orchestration builds cancel ri.orchestration.main.build.abc123
 ```
 
 ## Schedule Management
@@ -145,7 +145,7 @@ foundry orchestration builds cancel ri.orchestration.main.build.abc123
 ### Create Daily Schedule
 
 ```bash
-foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.daily-data"}' \
+pfoundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.daily-data"}' \
   --name "Daily ETL Pipeline" \
   --description "Automated daily data processing" \
   --trigger '{"type": "CRON", "expression": "0 2 * * *"}'
@@ -155,24 +155,24 @@ foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.
 
 ```bash
 # Get schedule info
-foundry orchestration schedules get ri.orchestration.main.schedule.daily-etl
+pfoundry orchestration schedules get ri.orchestration.main.schedule.daily-etl
 
 # Run immediately
-foundry orchestration schedules run ri.orchestration.main.schedule.daily-etl
+pfoundry orchestration schedules run ri.orchestration.main.schedule.daily-etl
 
 # Pause for maintenance
-foundry orchestration schedules pause ri.orchestration.main.schedule.daily-etl
+pfoundry orchestration schedules pause ri.orchestration.main.schedule.daily-etl
 
 # Resume
-foundry orchestration schedules unpause ri.orchestration.main.schedule.daily-etl
+pfoundry orchestration schedules unpause ri.orchestration.main.schedule.daily-etl
 
 # Update schedule
-foundry orchestration schedules replace ri.orchestration.main.schedule.daily-etl \
+pfoundry orchestration schedules replace ri.orchestration.main.schedule.daily-etl \
   '{"type": "BUILD", "target": "ri.foundry.main.dataset.new-pipeline"}' \
   --name "Updated ETL"
 
 # Delete schedule
-foundry orchestration schedules delete ri.orchestration.main.schedule.old-schedule --yes
+pfoundry orchestration schedules delete ri.orchestration.main.schedule.old-schedule --yes
 ```
 
 ## Job Monitoring
@@ -184,15 +184,15 @@ foundry orchestration schedules delete ri.orchestration.main.schedule.old-schedu
 BUILD_RID="ri.orchestration.main.build.abc123"
 
 # Get build overview
-foundry orchestration builds get $BUILD_RID
+pfoundry orchestration builds get $BUILD_RID
 
 # List all jobs
-foundry orchestration builds jobs $BUILD_RID --format json --output jobs.json
+pfoundry orchestration builds jobs $BUILD_RID --format json --output jobs.json
 
 # Get running jobs
 JOB_RIDS=$(cat jobs.json | jq -r '.[] | select(.status == "RUNNING") | .rid' | tr '\n' ',' | sed 's/,$//')
 if [ ! -z "$JOB_RIDS" ]; then
-  foundry orchestration jobs get-batch "$JOB_RIDS"
+  pfoundry orchestration jobs get-batch "$JOB_RIDS"
 fi
 ```
 
@@ -206,7 +206,7 @@ fi
 DATE=$(date +%Y%m%d)
 
 # Export daily metrics
-foundry sql execute "
+pfoundry sql execute "
   SELECT date, total_sales, total_customers, avg_order_value
   FROM daily_metrics
   WHERE date = CURRENT_DATE - 1
@@ -219,15 +219,15 @@ echo "Report generated: daily_report_${DATE}.csv"
 
 ```bash
 # List connections
-foundry connectivity connection list
+pfoundry connectivity connection list
 
 # List existing file imports for a connection
-foundry connectivity import list-file \
+pfoundry connectivity import list-file \
   --connection ri.conn.main.connection.123 \
   --format json
 
 # Inspect an existing table import
-foundry connectivity import get-table ri.import.main.table.456 \
+pfoundry connectivity import get-table ri.import.main.table.456 \
   --connection ri.conn.main.connection.123 \
   --format json
 ```
@@ -242,4 +242,4 @@ The generic file/table creation commands are therefore not exposed.
 3. **Monitor builds**: Check job status for failures
 4. **Use dry-run**: Test copy operations before executing
 5. **Log outputs**: Save command outputs for debugging
-6. **Verify auth first**: Run `foundry verify` at script start
+6. **Verify auth first**: Run `pfoundry verify` at script start

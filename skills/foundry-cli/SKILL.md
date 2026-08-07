@@ -1,7 +1,7 @@
 ---
 name: foundry-cli
 description: >-
-  Use the foundry CLI to work with Palantir Foundry, including mandatory read-only
+  Use the pfoundry CLI to work with Palantir Foundry, including mandatory read-only
   dependency and change-impact assessment before modifying ontology resources,
   actions, queries, datasets, or applications. Also covers SQL, orchestration,
   folders, projects, permissions, and administration. Triggers include Foundry,
@@ -46,7 +46,7 @@ foundry-cli is a comprehensive CLI with 100+ commands for:
 
 ## Command ground truth
 
-Run `foundry agent-manifest` for authoritative command names, arguments, and flags.
+Run `pfoundry agent-manifest` for authoritative command names, arguments, and flags.
 The `reference/*.md` files explain usage and workflows; they are not authoritative.
 When a reference document conflicts with the manifest, follow the manifest.
 
@@ -66,7 +66,7 @@ Users must know RIDs in advance (from Foundry web UI or previous API calls).
 Before using any command, ensure authentication is configured:
 ```bash
 # Configure interactively
-foundry configure configure
+pfoundry configure configure
 
 # Or use environment variables (CI / automation).
 # Used only when no --profile is given and no profile is configured, so an
@@ -75,23 +75,23 @@ export FOUNDRY_TOKEN="your-token"
 export FOUNDRY_HOST="foundry.company.com"
 
 # Verify connection
-foundry verify
+pfoundry verify
 ```
 
 ### Output Formats
 All commands support multiple output formats:
 ```bash
-foundry <command> --format table    # Default: Rich table
-foundry <command> --format json     # JSON output
-foundry <command> --format csv      # CSV format
-foundry <command> --output file.csv # Save to file
+pfoundry <command> --format table    # Default: Rich table
+pfoundry <command> --format json     # JSON output
+pfoundry <command> --format csv      # CSV format
+pfoundry <command> --output file.csv # Save to file
 ```
 
 ### Profile Selection
 Use `--profile` to switch between Foundry instances:
 ```bash
-foundry <command> --profile production
-foundry <command> --profile development
+pfoundry <command> --profile production
+pfoundry <command> --profile development
 ```
 
 ## Choosing the right tool
@@ -100,10 +100,10 @@ Decide the entry point from the situation, not from the command group name:
 
 | Situation | Start with |
 |-----------|------------|
-| You have a name or path, not a RID | `foundry search`, `foundry namespace list`, `foundry folder list` |
-| You are unsure what the CLI can do | `foundry agent-manifest` (authoritative grammar), `foundry capabilities` |
+| You have a name or path, not a RID | `pfoundry search`, `pfoundry namespace list`, `pfoundry folder list` |
+| You are unsure what the CLI can do | `pfoundry agent-manifest` (authoritative grammar), `pfoundry capabilities` |
 | You are about to change any Foundry resource | `workflows/change-impact-assessment.md` — always, before planning |
-| You need docs on a Foundry feature | `foundry docs search` / `foundry docs page`, before guessing flags |
+| You need docs on a Foundry feature | `pfoundry docs search` / `pfoundry docs page`, before guessing flags |
 | You are scripting or feeding another agent | `--agent` envelope or `--format json --output file`; never parse table output |
 | A command reports `unsupported-capability` | Stop and document the gap; do not simulate the result another way |
 | A mutation has no `--apply`/`--yes` flag | Present the exact command and require explicit operator confirmation |
@@ -167,104 +167,104 @@ For common multi-step tasks:
 
 ```bash
 # Verify setup
-foundry verify
+pfoundry verify
 
 # Current user info
-foundry admin user current
+pfoundry admin user current
 
 # Execute SQL query
-foundry sql execute "SELECT * FROM my_table LIMIT 10"
+pfoundry sql execute "SELECT * FROM my_table LIMIT 10"
 
 # Get dataset info
-foundry dataset get ri.foundry.main.dataset.abc123
+pfoundry dataset get ri.foundry.main.dataset.abc123
 
 # Assess an intended change and retain its complete evidence graph
-foundry dependency resource ri.foundry.main.dataset.abc123 \
+pfoundry dependency resource ri.foundry.main.dataset.abc123 \
     --change "rename a column" \
     --change-type rename \
     --output-mode agent \
     --graph-output ./change-impact-before.json
 
 # List files in dataset
-foundry dataset files list ri.foundry.main.dataset.abc123
+pfoundry dataset files list ri.foundry.main.dataset.abc123
 
 # Download file from dataset
-foundry dataset files get ri.foundry.main.dataset.abc123 "/path/file.csv" "./local.csv"
+pfoundry dataset files get ri.foundry.main.dataset.abc123 "/path/file.csv" "./local.csv"
 
 # Copy dataset to another folder
-foundry cp ri.foundry.main.dataset.abc123 ri.compass.main.folder.target456
+pfoundry cp ri.foundry.main.dataset.abc123 ri.compass.main.folder.target456
 
 # List folder contents
-foundry folder list ri.compass.main.folder.0  # root folder
+pfoundry folder list ri.compass.main.folder.0  # root folder
 
 # Search one verified Compass path; text and type filters apply to each returned page
-foundry search "sales" --path-prefix "/Finance" --page-size 100 --format json
+pfoundry search "sales" --path-prefix "/Finance" --page-size 100 --format json
 
 # Enumerate notepads from an explicit Compass path
-foundry notepad list --path-prefix "/Finance" --page-size 100 --format json
+pfoundry notepad list --path-prefix "/Finance" --page-size 100 --format json
 
 # Search builds
-foundry orchestration builds search
+pfoundry orchestration builds search
 
 # Interactive shell mode
-foundry shell start
+pfoundry shell start
 
 # Search the Foundry docs corpus
-foundry docs search "incremental transforms" --limit 5
+pfoundry docs search "incremental transforms" --limit 5
 
 # List pull requests for a repository
-foundry repository pull-request list ri.stemma.main.repository.abc123
+pfoundry repository pull-request list ri.stemma.main.repository.abc123
 
 # Inspect an application's OSDK definition
-foundry dev-console osdk definition ri.foundry.third-party-application.main.application.abc123
+pfoundry dev-console osdk definition ri.foundry.third-party-application.main.application.abc123
 
 # Send message to Claude model
-foundry language-models anthropic messages ri.language-models.main.model.xxx \
+pfoundry language-models anthropic messages ri.language-models.main.model.xxx \
     --message "Explain this concept"
 
 # Generate embeddings
-foundry language-models openai embeddings ri.language-models.main.model.xxx \
+pfoundry language-models openai embeddings ri.language-models.main.model.xxx \
     --input "Sample text"
 
 # Create streaming dataset
-foundry streams dataset create my-stream \
+pfoundry streams dataset create my-stream \
     --folder ri.compass.main.folder.xxx \
     --schema '{"fieldSchemaList": [{"name": "value", "type": "STRING"}]}'
 
 # Publish record to stream
-foundry streams stream publish ri.foundry.main.dataset.xxx \
+pfoundry streams stream publish ri.foundry.main.dataset.xxx \
     --branch master \
     --record '{"value": "hello"}'
 
 # Execute a function query
-foundry functions query execute myQuery --parameters '{"limit": 10}'
+pfoundry functions query execute myQuery --parameters '{"limit": 10}'
 
 # Get AIP Agent info
-foundry aip-agents get ri.foundry.main.agent.abc123
+pfoundry aip-agents get ri.foundry.main.agent.abc123
 
 # List agent sessions
-foundry aip-agents sessions list ri.foundry.main.agent.abc123
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123
 
 # Get ML model info
-foundry models model get ri.foundry.main.model.abc123
+pfoundry models model get ri.foundry.main.model.abc123
 
 # List model versions
-foundry models version list ri.foundry.main.model.abc123
+pfoundry models version list ri.foundry.main.model.abc123
 ```
 
 ## Best Practices
 
-1. **Verify authentication first**: Run `foundry verify` before starting work.
+1. **Verify authentication first**: Run `pfoundry verify` before starting work.
 2. **Assess before changing Foundry**: Load `workflows/change-impact-assessment.md`, retain a baseline artifact, and resolve `must_verify_before_merge`.
 3. **Preserve uncertainty**: Partial, unsupported, inaccessible, unresolved, and budget-exhausted coverage are not proof of no impact.
 4. **Use appropriate output mode**: `agent` for compact reasoning, `ci` for pipeline gating, and `graph` for full programmatic detail.
-5. **Use async for large queries**: `foundry sql submit` + `foundry sql wait` for long-running queries.
-6. **Use shell mode for exploration**: `foundry shell start` provides tab completion and history.
+5. **Use async for large queries**: `pfoundry sql submit` + `pfoundry sql wait` for long-running queries.
+6. **Use shell mode for exploration**: `pfoundry shell start` provides tab completion and history.
 
 ## Getting Help
 
 ```bash
-foundry --help                    # All commands
-foundry <command> --help          # Command help
-foundry <command> <sub> --help    # Subcommand help
+pfoundry --help                    # All commands
+pfoundry <command> --help          # Command help
+pfoundry <command> <sub> --help    # Subcommand help
 ```

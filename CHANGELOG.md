@@ -7,20 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+### Fixed
+
+- `project create` / `folder` / `space` / `resource` JSON leaked Python object reprs for timestamps (`"created_time": "<built-in method time of datetime.datetime object at ...>"`). The `_format_timestamp` helpers in 5 services matched `datetime` via `hasattr(t, "time")` and returned the bound-method repr; they now serialize to ISO-8601. (Regression-tested.)
+- `project list` returned empty even when projects existed: projects are `COMPASS_FOLDER` resources with a `project_rid` attribute, and the filter only accepted `type == "PROJECT"` / `ri.compass.main.project.*` RIDs. Now matches folders whose `project_rid` equals their own rid. (Live-verified: 14 projects listed.)
+- Empty SDK error messages: foundry-platform-sdk error classes have empty `str()` (fields in `name`/`parameters`), so 185 `raise RuntimeError(f"... {e}")` sites produced truncated/empty errors (e.g. `Failed to create transaction ...: `). Added `BaseService._describe_error()` and applied it across 23 service files; SDK errors now surface their error name (e.g. `OpenTransactionAlreadyExists`, `MarkingNotFound`).
+- `streams dataset create` / `stream create` documented and passed `{"fieldSchemaList": [...]}` but the SDK `StreamSchema` requires `{"fields": [{"name", "schema": {"nullable", "dataType"}}]}` — every documented invocation failed validation. Added `_normalize_stream_schema` accepting both shapes with a type map. (Regression-tested.)
+- Stale command references in user-facing output: `sql submit`/`sql status` hints and dataset suggestions still said `foundry ...` after the rename; now `pfoundry ...`.
+
+- `dataset preview` crashed with a pydantic ValidationError: the SDK `read_table` accepts only `ARROW`/`CSV`, and the service passed `format="pandas"`. It now requests `ARROW` and converts via `to_pandas()`. (Regression-tested.)
+- Every call site that passed `preview=True` to a non-beta SDK endpoint emitted a `UserWarning` on each invocation (e.g. `project list`, `resource get`, `folder children`, `admin marking get`, `space list`, `organization create`). All non-accepting endpoints no longer receive `preview`; accepting endpoints (`Space.*` except `list`, `Project.replace`, `Folder.replace`, `Role.get_batch`, beta `widgets`) keep it. Verified with warnings-as-errors against a live stack.
+- `admin user get` / `user markings` / `revoke-all-tokens` leaked raw pydantic validation errors and rejected compass user RIDs. A `_normalize_user_id` validator now accepts a bare UUID or `ri.compass.main.user.<uuid>` RID and raises a clean, actionable error naming `pfoundry admin user list`.
+- `utils/completion.py` still watched the legacy `_FOUNDRY_COMPLETE` env var after the command rename, so completion-time setup never ran for `pfoundry`.
+- Security: sitemap XML parsing in `docs` service used `xml.etree` on untrusted network content (XXE risk). Now uses `defusedxml` (new direct dependency + stub), with a regression test proving entity-expansion payloads are rejected.
+
+### Changed
+
+- Console command renamed from `foundry` to `pfoundry` to avoid clashing with the official Palantir Foundry CLI (`foundry`, installed via the stack's install script). The package name `foundry-cli`, module `foundry_cli`, config dir `~/.config/foundry`, and keyring service name are unchanged. All docs, skills, completion scripts, error hints, and the Hermes plugin now reference `pfoundry`.
+
 ### Added
 
-- `ontology object-type-guarded-upsert` — the first composite mutation command: preflight state load → dependency impact gate (same engine as `pltr dependency object-type`, with `--change`/`--change-type` and a retained `--graph-output` artifact) → plan-first upsert → authoritative read-back, in one invocation. `--yes` is required when `must_verify_before_merge` items are unresolved; net-new types and `--skip-impact-gate` record explicit caveats; coverage gaps are carried as caveats, never treated as "no impact". Motivated by Langfuse trace evidence of agents hand-assembling get→dependency×3-5→upsert→read-back chains.
+- `ontology object-type-guarded-upsert` — the first composite mutation command: preflight state load → dependency impact gate (same engine as `foundry dependency object-type`, with `--change`/`--change-type` and a retained `--graph-output` artifact) → plan-first upsert → authoritative read-back, in one invocation. `--yes` is required when `must_verify_before_merge` items are unresolved; net-new types and `--skip-impact-gate` record explicit caveats; coverage gaps are carried as caveats, never treated as "no impact". Motivated by Langfuse trace evidence of agents hand-assembling get→dependency×3-5→upsert→read-back chains.
 - `ontology object-type-guarded-delete` — the delete counterpart: preflight load (typed not-found aborts before planning) → impact gate (`--change-type` defaults to `remove-delete`) → plan-first delete → verified-removed read-back. Always double-gated (`--apply --yes`).
-- Self-correcting agent error envelopes (`src/pltr/utils/error_hints.py`): recognized failure classes now carry an additive `error.hint` field in the agent/JSON envelope — dependency `--branch` name-vs-RID misuse, ontology get not-found name probing (points to `pltr ontology resolve`), and upsert argument errors (names required flags, points to the guarded upsert). Human/table output is unchanged; hint command/flag references are pinned against the live app in tests.
+- Self-correcting agent error envelopes (`src/foundry_cli/utils/error_hints.py`): recognized failure classes now carry an additive `error.hint` field in the agent/JSON envelope — dependency `--branch` name-vs-RID misuse, ontology get not-found name probing (points to `foundry ontology resolve`), and upsert argument errors (names required flags, points to the guarded upsert). Human/table output is unchanged; hint command/flag references are pinned against the live app in tests.
 - `proposal` group is no longer fail-closed: code-pr `create`/`list`/`get`/`comment`/`close` delegate to `RepositoryService` and global-proposal `create`/`get`/`close` delegate to `GlobalProposalService`. `create` and `comment` are dry-run plan by default with `--apply` to execute. Still fail-closed with exit 6 `unsupported-capability` (per-pair reasons): code-pr `approve`/`request-changes`/`merge`, global-proposal `list`/`comment`/`approve`/`request-changes`/`merge`/`accept`.
-- Skill bundle: nine new workflow skills under `skills/pltr-cli/workflows/` — `ontology-authoring`, `proposal-review`, `data-ingestion`, `build-triage`, `osdk-app-development`, `compute-module-ops`, `media-management`, `admin-audit`, and `ai-workloads` — so every command group now has a step-through operating procedure. All commands verified against the live CLI grammar; SDK capability gaps are documented explicitly instead of worked around.
+- Skill bundle: nine new workflow skills under `skills/foundry-cli/workflows/` — `ontology-authoring`, `proposal-review`, `data-ingestion`, `build-triage`, `osdk-app-development`, `compute-module-ops`, `media-management`, `admin-audit`, and `ai-workloads` — so every command group now has a step-through operating procedure. All commands verified against the live CLI grammar; SDK capability gaps are documented explicitly instead of worked around.
 - Skill bundle: "Choosing the right tool" section in `SKILL.md` mapping agent situations (name→RID resolution, pre-mutation gating, unsupported capabilities, scripting) to the correct entry-point command or workflow.
 - `dataset schema update` — intentional additive schema migration: `--add-field name:TYPE[:nullable[:default]]` / `--fields-json`, `--branch`, client-side optimistic concurrency via `--expected-schema-version`, dry-run default with `--apply`, authoritative schema read-back. Additive-only: type changes on existing fields are rejected.
 - `dataset schema set` is now manifest-visible (`--format`/`--output`) and accepts `--expected-schema-version`.
 - `ontology object-type-add-property` — add a property to an existing object type with backing-column mapping via modifyOntology; dry-run default, `--branch-rid` targets a non-default ontology branch, read-back returns the created property RID.
 - `ontology action-type-update` — evolve an existing action type (function rules, parameter add/remove/reorder, protected `currentUser` binding, submission criteria, write authorization, status EXPERIMENTAL→ACTIVE); dry-run default, full-metadata read-back on apply.
 - `ontology resolve` (risk `read`) — typed identifier resolver: API name ↔ RID ↔ internal IDs for object types, properties, action types, and functions.
-- `pltr.services.errors.FoundryApiError` — typed API errors preserving Foundry's `errorName`/`errorCode`/`errorInstanceId`/safe parameters/validation details through to the agent envelope (`buffer_agent_exception`).
+- `foundry.services.errors.FoundryApiError` — typed API errors preserving Foundry's `errorName`/`errorCode`/`errorInstanceId`/safe parameters/validation details through to the agent envelope (`buffer_agent_exception`).
 - Value-level credential redaction in the agent envelope: URL userinfo (git remotes, registry URLs), Bearer/Basic headers, `_authToken` registry lines, argv-style `--token` flags, and `KEY=value` env dumps are scrubbed before output reaches the model or logs.
 
 ### Fixed
@@ -87,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- MCP parity cycle ("the parity milestone"): the CLI now covers 68 of the 73 tools in Palantir's official Foundry MCP catalog (was 19), with the remaining 5 marked `blocked` with live evidence in `pltr capabilities`.
+- MCP parity cycle ("the parity milestone"): the CLI now covers 68 of the 73 tools in Palantir's official Foundry MCP catalog (was 19), with the remaining 5 marked `blocked` with live evidence in `foundry capabilities`.
 - Ontology authoring via the contract-verified internal `modifyOntology` contract: `ontology object-type-upsert`, `object-type-delete`, `link-type-upsert`, `link-type-delete`, `action-type-upsert`, `action-type-delete`. All default to a dry-run validation plan; real mutations require `--apply` (deletes also `--yes`) and are read-back verified. Upserts document the required publication order and emit pointed hints when validation errors signal an out-of-order change.
 - New command groups: `repository` (pull-request list/get/create/comment, context, clone, create-python-transforms), `global-branch` and `global-proposal` (create/get/close), `dev-console` (connect, osdk definition, sdk generate, sdk install, convert-osdk-react), `docs` (11 documentation subcommands backed by Palantir's public docs site), `osdk` (context, examples), `platform-sdk` (api list, api reference).
 - New reads: `ontology rid`, `ontology link-type-get`, `ontology action-type-get`, `functions search`, `namespace list` (real Compass namespaces, replacing the Space fallback), `project templates list`, `connectivity webhook get`, `connectivity egress ensure` (read-or-refuse; never creates policies).
@@ -102,14 +122,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added bounded, paginated cross-resource discovery to `pltr search` with verified path-prefix filtering, page tokens, and explicit page-local text/type filter coverage.
-- Added `pltr notepad list` to enumerate notepad resources from an explicit Compass path prefix.
-- Added the `pltr-agent-v1` envelope and registered command manifest for reliable agent-facing CLI use.
+- Added bounded, paginated cross-resource discovery to `foundry search` with verified path-prefix filtering, page tokens, and explicit page-local text/type filter coverage.
+- Added `foundry notepad list` to enumerate notepad resources from an explicit Compass path prefix.
+- Added the `foundry-agent-v1` envelope and registered command manifest for reliable agent-facing CLI use.
 
 ### Fixed
 
-- `pltr configure list` now honors global `--agent` output and redacts credentials.
-- `pltr configure delete` now rejects prompt-dependent execution under `--non-interactive` unless `--force` is supplied.
+- `foundry configure list` now honors global `--agent` output and redacts credentials.
+- `foundry configure delete` now rejects prompt-dependent execution under `--non-interactive` unless `--force` is supplied.
 - Repaired SDK call paths and added contract coverage for the current Foundry SDK surface.
 
 ### Documentation
@@ -127,7 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `pltr folder move` for relocating a folder to a new parent.
+- Added `foundry folder move` for relocating a folder to a new parent.
 
 ### Documentation
 
@@ -138,14 +158,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `pltr search <text>` for cross-resource search across Foundry, returning matching resources with their type and path.
+- Added `foundry search <text>` for cross-resource search across Foundry, returning matching resources with their type and path.
 
 
 ## [0.20.0] - 2026-07-23
 
 ### Added
 
-- Completed full-lifecycle change-impact analysis: `pltr dependency` now answers "what breaks downstream if I change this" across the whole Foundry lifecycle, both above and below the ontology.
+- Completed full-lifecycle change-impact analysis: `foundry dependency` now answers "what breaks downstream if I change this" across the whole Foundry lifecycle, both above and below the ontology.
 - Added transport selection with `--providers sdk,conjure,graphql` and a configuration-gated `--positive-controls` flag for firing endpoint canaries, alongside the existing `--no-internal` public-SDK-only fallback.
 - Added degraded-mode reporting. An unreachable, permission-denied, or drifted internal endpoint records a coverage gap and the command still exits successfully with the public-SDK graph intact. Only target resolution, artifact writes, and authentication remain fatal.
 
@@ -168,7 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added reverse dependency analysis over Foundry's internal APIs: object types to the Workshop modules and third-party applications that consume them, per-application SDK version ranges for consumers, code repository to transform to dataset lineage, and property to dataset column mapping.
-- Added `pltr notepad get` for reading a notepad's latest body and its embedded resource references.
+- Added `foundry notepad get` for reading a notepad's latest body and its embedded resource references.
 - Added a Palantir expert benchmark corpus and scorer for grading command-contract knowledge.
 
 ### Changed
@@ -177,7 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed `pltr notepad get` reporting an inconclusive read for every notepad, caused by requesting a composite metadata field without a subselection.
+- Fixed `foundry notepad get` reporting an inconclusive read for every notepad, caused by requesting a composite metadata field without a subselection.
 - Restored the ontology action and object read commands after platform SDK drift.
 
 ### Known limitations
@@ -195,7 +215,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Added a native agent output contract and capability manifest with pagination metadata, redaction, explicit errors, and safety gates.
-- Removed the MCP launcher integration; native `pltr` commands are the supported agent interface.
+- Removed the MCP launcher integration; native `foundry` commands are the supported agent interface.
 
 ### Known limitations
 

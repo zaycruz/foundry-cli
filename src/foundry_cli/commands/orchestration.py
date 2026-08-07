@@ -128,11 +128,11 @@ def create_build(
 
     \b
       # Build specific datasets manually
-      foundry orchestration builds create '{"type": "manual", "targetRids": ["ri.foundry.main.dataset.abc123"]}' --branch master
+      pfoundry orchestration builds create '{"type": "manual", "targetRids": ["ri.foundry.main.dataset.abc123"]}' --branch master
 
     \b
       # Build dataset and all upstream dependencies
-      foundry orchestration builds create '{"type": "upstream", "targetRids": ["ri.foundry.main.dataset.abc123"], "ignoredRids": []}' --branch master --force
+      pfoundry orchestration builds create '{"type": "upstream", "targetRids": ["ri.foundry.main.dataset.abc123"], "ignoredRids": []}' --branch master --force
     """
     try:
         service = OrchestrationService(profile=profile)
@@ -269,16 +269,16 @@ def search_builds(
 
     Examples:
         # Search first page of builds (default)
-        foundry orchestration builds search
+        pfoundry orchestration builds search
 
         # Search all builds
-        foundry orchestration builds search --all
+        pfoundry orchestration builds search --all
 
         # Search first 3 pages
-        foundry orchestration builds search --max-pages 3
+        pfoundry orchestration builds search --max-pages 3
 
         # Resume from a specific page
-        foundry orchestration builds search --page-token abc123
+        pfoundry orchestration builds search --page-token abc123
     """
     try:
         service = OrchestrationService(profile=profile)

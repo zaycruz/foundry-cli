@@ -19,7 +19,7 @@ The RID format depends on the command:
 Send a single message to an Anthropic Claude model for simple Q&A.
 
 ```bash
-foundry language-models anthropic messages MODEL_RID --message "MESSAGE" [OPTIONS]
+pfoundry language-models anthropic messages MODEL_RID --message "MESSAGE" [OPTIONS]
 
 # Options:
 #   --message, -m TEXT      User message text (required)
@@ -35,20 +35,20 @@ foundry language-models anthropic messages MODEL_RID --message "MESSAGE" [OPTION
 #   --profile, -p TEXT      Profile name
 
 # Examples
-foundry language-models anthropic messages ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \
     --message "Explain quantum computing"
 
-foundry language-models anthropic messages ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \
     --message "Write a haiku" \
     --system "You are a poetic assistant" \
     --temperature 0.8 \
     --max-tokens 100
 
-foundry language-models anthropic messages ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \
     --message "List three items" \
     --stop "." --stop "\n\n"
 
-foundry language-models anthropic messages ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \
     --message "Summarize AI trends" \
     --output response.json
 ```
@@ -58,7 +58,7 @@ foundry language-models anthropic messages ri.language-models.main.model.abc123 
 Send complex requests with multi-turn conversations, tool calling, or extended thinking.
 
 ```bash
-foundry language-models anthropic messages-advanced MODEL_RID --request REQUEST_JSON [OPTIONS]
+pfoundry language-models anthropic messages-advanced MODEL_RID --request REQUEST_JSON [OPTIONS]
 
 # Options:
 #   --request, -r TEXT      Request JSON (inline or @file.json) - required
@@ -95,21 +95,21 @@ foundry language-models anthropic messages-advanced MODEL_RID --request REQUEST_
 #   "maxTokens": 500
 # }
 
-foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
     --request @conversation.json
 ```
 
 #### Extended Thinking Example
 
 ```bash
-foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
     --request '{"messages": [{"role": "USER", "content": [{"type": "text", "text": "Solve this complex problem"}]}], "maxTokens": 2000, "thinking": {"type": "enabled", "budget": 10000}}'
 ```
 
 #### Inline with System Prompt
 
 ```bash
-foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \
     --request '{"messages": [{"role": "USER", "content": [{"type": "text", "text": "Hi"}]}], "maxTokens": 100, "system": [{"type": "text", "text": "Be concise"}]}'
 ```
 
@@ -120,7 +120,7 @@ foundry language-models anthropic messages-advanced ri.language-models.main.mode
 Generate embedding vectors for text using OpenAI models.
 
 ```bash
-foundry language-models openai embeddings MODEL_RID --input INPUT [OPTIONS]
+pfoundry language-models openai embeddings MODEL_RID --input INPUT [OPTIONS]
 
 # Options:
 #   --input, -i TEXT        Input text(s) - single string, JSON array, or @file.json (required)
@@ -134,25 +134,25 @@ foundry language-models openai embeddings MODEL_RID --input INPUT [OPTIONS]
 # Examples
 
 # Single text
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input "Machine learning is fascinating"
 
 # Multiple texts (inline JSON array)
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input '["Document 1", "Document 2", "Document 3"]'
 
 # Multiple texts from file (texts.json: ["Text 1", "Text 2", "Text 3"])
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input @texts.json
 
 # Custom dimensions and encoding
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input "Sample text" \
     --dimensions 1024 \
     --encoding base64
 
 # Save embeddings to file
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input '["Text 1", "Text 2"]' \
     --output embeddings.json
 ```
@@ -164,22 +164,22 @@ enrollment can use.
 
 ```bash
 # List language models available to the current enrollment
-foundry language-models list [--format FORMAT] [--profile PROFILE] [--output FILE]
+pfoundry language-models list [--format FORMAT] [--profile PROFILE] [--output FILE]
 
 # Enroll/enable a model
-foundry language-models enroll MODEL_RID [--format FORMAT] [--profile PROFILE] [--output FILE]
+pfoundry language-models enroll MODEL_RID [--format FORMAT] [--profile PROFILE] [--output FILE]
 
 # Check enrollment status for a model
-foundry language-models status MODEL_RID [--format FORMAT] [--profile PROFILE] [--output FILE]
+pfoundry language-models status MODEL_RID [--format FORMAT] [--profile PROFILE] [--output FILE]
 
 # MODEL_RID for enroll/status uses the enrollment format
 # ri.language-model-service..language-model.{id} (see Model RID Format above).
 # All three commands default to --format table.
 
 # Examples
-foundry language-models list
-foundry language-models enroll ri.language-model-service..language-model.abc123
-foundry language-models status ri.language-model-service..language-model.abc123
+pfoundry language-models list
+pfoundry language-models enroll ri.language-model-service..language-model.abc123
+pfoundry language-models status ri.language-model-service..language-model.abc123
 ```
 
 ## Response Format
@@ -245,7 +245,7 @@ Both inline JSON and file references are supported:
 
 ```bash
 # Save each response and build conversation history
-foundry language-models anthropic messages ri.language-models.main.model.abc123 \
+pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \
     --message "Hello!" \
     --output turn1.json
 
@@ -256,12 +256,12 @@ foundry language-models anthropic messages ri.language-models.main.model.abc123 
 
 ```bash
 # Generate embeddings for document corpus
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input @documents.json \
     --output corpus-embeddings.json
 
 # Later: generate embedding for query and compare
-foundry language-models openai embeddings ri.language-models.main.model.xyz789 \
+pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \
     --input "search query" \
     --output query-embedding.json
 ```

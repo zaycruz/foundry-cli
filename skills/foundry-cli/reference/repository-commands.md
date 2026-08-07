@@ -11,20 +11,20 @@ real creation behind `--apply`).
 ### Repository Context (read-only)
 
 ```bash
-foundry repository context REPOSITORY_RID [--path PREFIX] [--ref REF] [--no-tree] [--format FORMAT]
+pfoundry repository context REPOSITORY_RID [--path PREFIX] [--ref REF] [--no-tree] [--format FORMAT]
 
 # Aggregates the contract-verified internal stemma reads: repository metadata
 # (stemma + Compass name/path), the default branch (HEAD), branch and tag
 # refs, and the recursive file tree at a ref.
 
 # Example
-foundry repository context ri.stemma.main.repository.abc123
+pfoundry repository context ri.stemma.main.repository.abc123
 ```
 
 ### Clone Repository
 
 ```bash
-foundry repository clone REPOSITORY_RID TARGET_DIR [--branch BRANCH] [--force] [--dry-run]
+pfoundry repository clone REPOSITORY_RID TARGET_DIR [--branch BRANCH] [--force] [--dry-run]
 
 # Resolves the git URL from the contract-verified stemma smart-HTTP endpoint
 # (https://<host>/stemma/git/<repositoryRid>) and runs `git clone` with the
@@ -34,7 +34,35 @@ foundry repository clone REPOSITORY_RID TARGET_DIR [--branch BRANCH] [--force] [
 # Refuses to overwrite a non-empty target without --force.
 
 # Example
-foundry repository clone ri.stemma.main.repository.abc123 ./my-repo
+pfoundry repository clone ri.stemma.main.repository.abc123 ./my-repo
+```
+
+### Push One Branch (dry-run default; --apply required)
+
+```bash
+pfoundry repository push REPOSITORY_RID refs/heads/LOCAL_BRANCH refs/heads/DESTINATION_BRANCH [--apply]
+```
+
+The command reads and verifies repository context first, then requires the
+local `origin` URL to equal either the profile-host smart-HTTP URL
+`https://<host>/stemma/git/<repositoryRid>` or that URL plus the exact
+repository-name suffix returned by live context. Both refs must be fully qualified
+`refs/heads/*` refs. The default branch, tags, deletes, force syntax/options,
+arbitrary refspecs, missing or ambiguous local refs, mismatched profile hosts,
+repository RIDs, or remotes are rejected.
+
+The exact destination ref is read before the write. If it exists, it must be an
+ancestor of the local commit. With `--apply`, exactly one non-force refspec is
+sent, then the destination is read back and must equal the local commit. The
+bearer token is injected only through temporary `GIT_CONFIG_*` environment
+variables; it is never placed in argv, persisted in repository config, output,
+or errors. Without `--apply`, no push is issued.
+
+```bash
+pfoundry repository push ri.stemma.main.repository.abc123 \
+    refs/heads/feature refs/heads/review
+pfoundry repository push ri.stemma.main.repository.abc123 \
+    refs/heads/feature refs/heads/review --apply
 ```
 
 ## Repository Creation
@@ -42,7 +70,7 @@ foundry repository clone ri.stemma.main.repository.abc123 ./my-repo
 ### Create Python Transforms Repository (dry-run default; --apply creates)
 
 ```bash
-foundry repository create-python-transforms NAME --parent-rid FOLDER_RID [--apply]
+pfoundry repository create-python-transforms NAME --parent-rid FOLDER_RID [--apply]
 
 # Uses the two-call chain derived from the published client contract
 #  against a live deployment (the captured contract
@@ -61,8 +89,8 @@ foundry repository create-python-transforms NAME --parent-rid FOLDER_RID [--appl
 # permanently-delete RID --force.
 
 # Examples
-foundry repository create-python-transforms my-transforms --parent-rid ri.compass.main.folder.abc123
-foundry repository create-python-transforms my-transforms --parent-rid ri.compass.main.folder.abc123 --apply
+pfoundry repository create-python-transforms my-transforms --parent-rid ri.compass.main.folder.abc123
+pfoundry repository create-python-transforms my-transforms --parent-rid ri.compass.main.folder.abc123 --apply
 ```
 
 ## Pull Request Commands
@@ -70,29 +98,29 @@ foundry repository create-python-transforms my-transforms --parent-rid ri.compas
 ### List Pull Requests
 
 ```bash
-foundry repository pull-request list [REPOSITORY_RID] [--format FORMAT]
+pfoundry repository pull-request list [REPOSITORY_RID] [--format FORMAT]
 
 # REPOSITORY_RID filters client-side; the internal list endpoint enumerates
 # pull requests across repositories
 
 # Examples
-foundry repository pull-request list
-foundry repository pull-request list ri.stemma.main.repository.abc123
+pfoundry repository pull-request list
+pfoundry repository pull-request list ri.stemma.main.repository.abc123
 ```
 
 ### Get Pull Request
 
 ```bash
-foundry repository pull-request get PULL_REQUEST_RID [--format FORMAT]
+pfoundry repository pull-request get PULL_REQUEST_RID [--format FORMAT]
 
 # Example
-foundry repository pull-request get ri.pull-request.main.pull-request.abc123
+pfoundry repository pull-request get ri.pull-request.main.pull-request.abc123
 ```
 
 ### Create Pull Request
 
 ```bash
-foundry repository pull-request create TITLE \
+pfoundry repository pull-request create TITLE \
     --base-repository-rid REPOSITORY_RID \
     --head-commitish refs/heads/BRANCH \
     [--head-repository-rid REPOSITORY_RID] [--base-branch refs/heads/master] \
@@ -103,10 +131,10 @@ foundry repository pull-request create TITLE \
 # the captured contract)
 
 # Examples
-foundry repository pull-request create "feat: add x" \
+pfoundry repository pull-request create "feat: add x" \
     --base-repository-rid ri.stemma.main.repository.abc123 \
     --head-commitish refs/heads/feat/x
-foundry repository pull-request create "feat: add x" \
+pfoundry repository pull-request create "feat: add x" \
     --base-repository-rid ri.stemma.main.repository.abc123 \
     --head-commitish refs/heads/feat/x --apply
 ```
@@ -114,20 +142,20 @@ foundry repository pull-request create "feat: add x" \
 ### Comment on Pull Request
 
 ```bash
-foundry repository pull-request comment PULL_REQUEST_RID CONTENT [--apply] [--format FORMAT]
+pfoundry repository pull-request comment PULL_REQUEST_RID CONTENT [--apply] [--format FORMAT]
 
 # Posts a global comment; default is a dry-run plan, nothing is written
 # without --apply
 
 # Example
-foundry repository pull-request comment ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request comment ri.pull-request.main.pull-request.abc123 \
     "looks good" --apply
 ```
 
 ### Close Pull Request
 
 ```bash
-foundry repository pull-request close PULL_REQUEST_RID [--apply] [--yes] [--format FORMAT]
+pfoundry repository pull-request close PULL_REQUEST_RID [--apply] [--yes] [--format FORMAT]
 
 # Closes the pull request via PUT /pulls/{rid}/update with
 # {"title": <current title>, "status": "CLOSED"} (both fields required;
@@ -138,7 +166,7 @@ foundry repository pull-request close PULL_REQUEST_RID [--apply] [--yes] [--form
 # reported as already-closed instead of being re-closed.
 
 # Examples
-foundry repository pull-request close ri.pull-request.main.pull-request.abc123
-foundry repository pull-request close ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request close ri.pull-request.main.pull-request.abc123
+pfoundry repository pull-request close ri.pull-request.main.pull-request.abc123 \
     --apply --yes
 ```

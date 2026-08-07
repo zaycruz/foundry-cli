@@ -33,7 +33,6 @@ class FolderService(BaseService):
             folder = self.service.Folder.create(
                 display_name=display_name,
                 parent_folder_rid=parent_folder_rid,
-                preview=True,
             )
             return self._format_folder_info(folder)
         except Exception as e:
@@ -51,7 +50,7 @@ class FolderService(BaseService):
             Folder information dictionary
         """
         try:
-            folder = self.service.Folder.get(folder_rid, preview=True)
+            folder = self.service.Folder.get(folder_rid)
             return self._format_folder_info(folder)
         except Exception as e:
             detail = self._format_error_detail(e)
@@ -75,7 +74,7 @@ class FolderService(BaseService):
             Updated folder information
         """
         try:
-            current_folder = self.service.Folder.get(folder_rid, preview=True)
+            current_folder = self.service.Folder.get(folder_rid)
             resolved_display_name = (
                 display_name
                 if display_name is not None
@@ -114,7 +113,7 @@ class FolderService(BaseService):
             children = []
             # The children method returns an iterator
             for child in self.service.Folder.children(
-                folder_rid, page_size=page_size, page_token=page_token, preview=True
+                folder_rid, page_size=page_size, page_token=page_token
             ):
                 children.append(self._format_resource_info(child))
             return children
@@ -141,7 +140,7 @@ class FolderService(BaseService):
             elements = [
                 GetFoldersBatchRequestElement(folder_rid=rid) for rid in folder_rids
             ]
-            response = self.service.Folder.get_batch(body=elements, preview=True)
+            response = self.service.Folder.get_batch(body=elements)
             folders = []
             for folder in response.folders:
                 folders.append(self._format_folder_info(folder))
@@ -208,9 +207,13 @@ class FolderService(BaseService):
         if timestamp is None:
             return None
 
-        # Handle different timestamp formats from the SDK
-        if hasattr(timestamp, "time"):
-            return str(timestamp.time)
+        # The SDK deserializes timestamps as datetime.datetime; serialize to
+        # ISO-8601. A str passes through unchanged (some SDK models return a
+        # pre-formatted string). Never fall back to a repr of a bound method.
+        if isinstance(timestamp, str):
+            return timestamp
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
         return str(timestamp)
 
     @staticmethod

@@ -308,6 +308,13 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
     ),
     (
         "code-repository",
+        "push_code_repository_branch",
+        "repository push",
+        "RepositoryService",
+        "official-catalog",
+    ),
+    (
+        "code-repository",
         "create_code_repository_pull_request",
         "repository pull-request create",
         "RepositoryService",
@@ -613,11 +620,11 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "--yes gate; verified by post-delete dry-run NotFound read-back"
     ),
     "create_or_update_foundry_action_type": (
-        "internal ontology-metadata (contract-verified dry-run, "
-        "the captured contract): POST "
-        "/ontology-metadata/api/ontology/v2/modify actionTypesToCreate "
-        "with UUID map keys; dry-run-first with --apply gate and SDK "
-        "full-metadata read-back; create-only"
+        "EXPERIMENTAL dry-run research only: pending API-name/{id,definition} "
+        "wire hypothesis for POST "
+        "/ontology-metadata/api/ontology/v2/modify; not contract-verified "
+        "and no --apply until authoritative HTTP 200 plus structured "
+        "validation evidence"
     ),
     "delete_foundry_action_type": (
         "internal ontology-metadata (contract-verified dry-run, "
@@ -836,6 +843,13 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "token as http.extraHeader injected via GIT_CONFIG_* env; token "
         "never printed, never persisted in the clone"
     ),
+    "push_code_repository_branch": (
+        "git smart-HTTP (guarded local write): verified repository context and "
+        "profile-host URL, exact local/remote refs, fast-forward check, then "
+        "one non-force refs/heads/* refspec; bearer auth is injected only via "
+        "temporary GIT_CONFIG_* environment and the remote tip is read back "
+        "to equal the local commit; dry-run by default, --apply required"
+    ),
     "create_python_transforms_code_repository": (
         "internal stemma + repository-bootstrapper (contract derived from "
         "the @palantir/mcp 0.408.0 client contract, "
@@ -882,6 +896,7 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "create_code_repository_pull_request_comment": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
     "get_repository_context": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
     "clone_code_repository_locally": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
+    "push_code_repository_branch": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
     "create_python_transforms_code_repository": "tests/test_services/test_repository.py;tests/test_commands/test_repository.py",
     "view_global_branch": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_branch.py",
     "create_global_branch": "tests/test_services/test_global_branching.py;tests/test_commands/test_global_branch.py",
@@ -915,6 +930,12 @@ _U3_TEST_REFERENCES: dict[str, str] = {
 }
 
 _U3_BLOCKED: dict[str, str] = {
+    "create_or_update_foundry_action_type": (
+        "the action-type create API-name/{id,definition} wire hypothesis is "
+        "experimental and available for dry-run research only; --apply is "
+        "blocked until authoritative HTTP 200 and structured validation "
+        "evidence verifies the contract"
+    ),
     "preview_transform": (
         "foundry-platform-sdk==1.95.0 exposes no transform preview or dry-run "
         "operation in its orchestration module (its 'preview' flag only gates "
@@ -985,7 +1006,7 @@ def _build_specs(
     ):
         mutation_risk = "read"
         if capability_id.startswith(
-            ("create_", "update_", "manage_", "execute_", "generate_")
+            ("create_", "update_", "manage_", "execute_", "generate_", "push_")
         ):
             mutation_risk = "write"
         if capability_id.startswith(("delete_", "close_")):

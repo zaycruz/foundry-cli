@@ -76,7 +76,7 @@ class TestAdminService:
     def test_get_user(self, service, mock_client):
         """Test getting a specific user."""
         # Setup
-        user_id = "user123"
+        user_id = "12345678-1234-1234-1234-123456789abc"
         mock_response = Mock()
         mock_response.dict.return_value = {
             "id": user_id,
@@ -135,7 +135,7 @@ class TestAdminService:
     def test_get_user_markings(self, service, mock_client):
         """Test getting user markings."""
         # Setup
-        user_id = "user123"
+        user_id = "12345678-1234-1234-1234-123456789abc"
         mock_response = Mock()
         mock_response.dict.return_value = {
             "markings": ["public", "internal"],
@@ -153,7 +153,7 @@ class TestAdminService:
     def test_revoke_user_tokens(self, service, mock_client):
         """Test revoking user tokens."""
         # Setup
-        user_id = "user123"
+        user_id = "12345678-1234-1234-1234-123456789abc"
         mock_client.admin.User.revoke_all_tokens.return_value = None
 
         # Execute
@@ -347,7 +347,7 @@ class TestAdminService:
     def test_get_user_error(self, service, mock_client):
         """Test error handling in get_user."""
         # Setup
-        user_id = "user123"
+        user_id = "12345678-1234-1234-1234-123456789abc"
         mock_client.admin.User.get.side_effect = Exception("User not found")
 
         # Execute & Assert
@@ -423,7 +423,7 @@ class TestAdminService:
     def test_delete_user(self, service, mock_client):
         """Test deleting a user."""
         # Setup
-        user_id = "user123"
+        user_id = "12345678-1234-1234-1234-123456789abc"
         mock_client.admin.User.delete.return_value = None
 
         # Execute
@@ -437,7 +437,7 @@ class TestAdminService:
     def test_delete_user_error(self, service, mock_client):
         """Test error handling in delete_user."""
         # Setup
-        user_id = "user123"
+        user_id = "12345678-1234-1234-1234-123456789abc"
         mock_client.admin.User.delete.side_effect = Exception("User not found")
 
         # Execute & Assert
@@ -522,7 +522,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.list.assert_called_once_with(
-            page_size=None, page_token=None, preview=True
+            page_size=None, page_token=None, 
         )
         assert "data" in result
 
@@ -542,7 +542,7 @@ class TestAdminService:
         result = service.get_marking(marking_id)
 
         # Assert
-        mock_client.admin.Marking.get.assert_called_once_with(marking_id, preview=True)
+        mock_client.admin.Marking.get.assert_called_once_with(marking_id, )
         assert result["id"] == marking_id
 
     def test_get_batch_markings(self, service, mock_client):
@@ -563,7 +563,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.get_batch.assert_called_once_with(
-            body=marking_ids, preview=True
+            body=marking_ids, 
         )
         assert "data" in result
 
@@ -594,7 +594,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.create.assert_called_once_with(
-            name=marking_name, description=description, preview=True
+            name=marking_name, description=description, 
         )
         assert result["name"] == marking_name
 
@@ -614,7 +614,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.create.assert_called_once_with(
-            name=marking_name, preview=True
+            name=marking_name, 
         )
         assert result["name"] == marking_name
 
@@ -635,7 +635,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.replace.assert_called_once_with(
-            marking_id, name=new_name, preview=True
+            marking_id, name=new_name, 
         )
         assert result["name"] == new_name
 
@@ -668,7 +668,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Organization.create.assert_called_once_with(
-            name=org_name, enrollment_rid=enrollment_rid, preview=True
+            name=org_name, enrollment_rid=enrollment_rid
         )
         assert result["name"] == org_name
 
@@ -695,7 +695,6 @@ class TestAdminService:
             name=org_name,
             enrollment_rid=enrollment_rid,
             admin_ids=admin_ids,
-            preview=True,
         )
         assert result["name"] == org_name
 
@@ -716,7 +715,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Organization.replace.assert_called_once_with(
-            org_rid, name=new_name, preview=True
+            org_rid, name=new_name, 
         )
         assert result["name"] == new_name
 
@@ -739,7 +738,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Organization.list_available_roles.assert_called_once_with(
-            org_rid, page_size=None, page_token=None, preview=True
+            org_rid, page_size=None, page_token=None, 
         )
         assert "data" in result
 
@@ -774,3 +773,37 @@ class TestAdminService:
         # Execute & Assert
         with pytest.raises(ValueError, match="Maximum batch size is 500"):
             service.get_batch_roles(role_ids)
+
+
+class TestUserIdNormalization:
+    """Admin user ids must be bare UUIDs; RID prefixes are stripped."""
+
+    def test_bare_uuid_passes(self):
+        from foundry_cli.services.admin import AdminService
+
+        assert (
+            AdminService._normalize_user_id("12345678-1234-1234-1234-123456789abc")
+            == "12345678-1234-1234-1234-123456789abc"
+        )
+
+    def test_rid_prefix_is_stripped(self):
+        from foundry_cli.services.admin import AdminService
+
+        assert (
+            AdminService._normalize_user_id(
+                "ri.compass.main.user.12345678-1234-1234-1234-123456789abc"
+            )
+            == "12345678-1234-1234-1234-123456789abc"
+        )
+
+    def test_invalid_id_raises_actionable_error(self):
+        from foundry_cli.services.admin import AdminService
+
+        with pytest.raises(ValueError, match="ri.compass.main.user.<uuid>"):
+            AdminService._normalize_user_id("not-a-uuid")
+
+    def test_invalid_id_message_mentions_list_command(self):
+        from foundry_cli.services.admin import AdminService
+
+        with pytest.raises(ValueError, match="pfoundry admin user list"):
+            AdminService._normalize_user_id("nope")

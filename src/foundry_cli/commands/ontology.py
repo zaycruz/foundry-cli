@@ -6,7 +6,7 @@ import click
 import json
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import typer
 from rich.console import Console
@@ -312,6 +312,11 @@ def upsert_object_type(
     primary_key: str = typer.Option(
         ..., "--primary-key", help="Primary key property API name"
     ),
+    primary_key_backing_column: Optional[str] = typer.Option(
+        None,
+        "--primary-key-backing-column",
+        help="Backing dataset column for the primary key (default: --primary-key)",
+    ),
     backing_dataset: str = typer.Option(
         ..., "--backing-dataset", help="Backing dataset RID"
     ),
@@ -353,6 +358,7 @@ def upsert_object_type(
             display_name=display_name,
             primary_key=primary_key,
             backing_dataset=backing_dataset,
+            primary_key_backing_column=primary_key_backing_column,
             description=description,
             apply=apply,
         )
@@ -422,6 +428,11 @@ def guarded_upsert_object_type(
     primary_key: str = typer.Option(
         ..., "--primary-key", help="Primary key property API name"
     ),
+    primary_key_backing_column: Optional[str] = typer.Option(
+        None,
+        "--primary-key-backing-column",
+        help="Backing dataset column for the primary key (default: --primary-key)",
+    ),
     backing_dataset: str = typer.Option(
         ..., "--backing-dataset", help="Backing dataset RID"
     ),
@@ -482,18 +493,21 @@ def guarded_upsert_object_type(
     """
     try:
         service = GuardedUpsertService(profile=profile)
-        result = service.prepare_object_type_upsert(
-            ontology_rid=ontology_rid,
-            api_name=api_name,
-            display_name=display_name,
-            primary_key=primary_key,
-            backing_dataset=backing_dataset,
-            description=description,
-            change=change,
-            change_type=change_type,
-            skip_impact_gate=skip_impact_gate,
-            graph_output=graph_output,
-        )
+        prepare_kwargs: Dict[str, Any] = {
+            "ontology_rid": ontology_rid,
+            "api_name": api_name,
+            "display_name": display_name,
+            "primary_key": primary_key,
+            "backing_dataset": backing_dataset,
+            "description": description,
+            "change": change,
+            "change_type": change_type,
+            "skip_impact_gate": skip_impact_gate,
+            "graph_output": graph_output,
+        }
+        if primary_key_backing_column is not None:
+            prepare_kwargs["primary_key_backing_column"] = primary_key_backing_column
+        result = service.prepare_object_type_upsert(**prepare_kwargs)
         plan = result.get("plan") or {}
         if not apply:
             formatter.format_dict(result, format=format, output=output)
@@ -558,6 +572,7 @@ def add_property_to_object_type(
                 "BOOLEAN",
                 "TIMESTAMP",
                 "DATE",
+                "ARRAY_STRING",
             ]
         ),
     ),
@@ -1018,7 +1033,7 @@ def upsert_action_type(
     apply: bool = typer.Option(
         False,
         "--apply",
-        help="Issue the real modification (default: dry-run only)",
+        help="Blocked: action create contract is unverified (dry-run only)",
     ),
     profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
     format: str = typer.Option(
@@ -1028,17 +1043,20 @@ def upsert_action_type(
         None, "--output", "-o", help="Output file path"
     ),
 ):
-    """Create an action type via modifyOntology (dry-run unless --apply).
+    """Experimentally serialize an action type create for dry-run research.
 
     This command is step 5 of the required ontology contract publication
     order (see object-type-upsert --help for the full sequence). Referenced
-    object types (step 3) and link types (step 4) must already exist. After
-    applying, continue with step 6 (validate actions and re-read test
-    objects), step 7 (regenerate OSDK), and step 8 (enable the
-    corresponding application controls).
+    object types (step 3) and link types (step 4) must already exist. Once
+    the contract is verified and a create is applied, continue with step 6
+    (validate actions and re-read test objects), step 7 (regenerate OSDK),
+    and step 8 (enable the corresponding application controls).
 
-    The definition is an ActionTypeCreate JSON document. Existing action types
-    are not updated yet; the create validation reports that case explicitly.
+    The definition is an ActionTypeCreate JSON document. The API-name/{id,
+    definition} wire hypothesis is experimental and dry-run-only: ``--apply``
+    is blocked until authoritative HTTP 200 and structured validation evidence
+    verifies the contract. Existing action types are not updated yet; the
+    create validation reports that case explicitly.
     """
     try:
         if definition == "-":
@@ -1313,16 +1331,16 @@ def list_objects(
 
     Examples:
         # List first page of objects (default)
-        foundry ontology object-list ONTOLOGY_RID ObjectType
+        pfoundry ontology object-list ONTOLOGY_RID ObjectType
 
         # List all objects
-        foundry ontology object-list ONTOLOGY_RID ObjectType --all
+        pfoundry ontology object-list ONTOLOGY_RID ObjectType --all
 
         # List first 3 pages
-        foundry ontology object-list ONTOLOGY_RID ObjectType --max-pages 3
+        pfoundry ontology object-list ONTOLOGY_RID ObjectType --max-pages 3
 
         # Resume from a specific page
-        foundry ontology object-list ONTOLOGY_RID ObjectType --page-token abc123
+        pfoundry ontology object-list ONTOLOGY_RID ObjectType --page-token abc123
     """
     try:
         service = OntologyObjectService(profile=profile)

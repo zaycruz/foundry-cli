@@ -76,10 +76,10 @@ def search_functions(
     Examples:
 
         # Search functions by name
-        foundry functions search revenue
+        pfoundry functions search revenue
 
         # Scan more title matches, output as JSON
-        foundry functions search revenue --limit 50 --format json
+        pfoundry functions search revenue --limit 50 --format json
     """
     try:
         service = FunctionsService(profile=profile)
@@ -197,16 +197,16 @@ def get_query(
     Examples:
 
         # Get latest version of query
-        foundry functions query get myQuery
+        pfoundry functions query get myQuery
 
         # Get specific version
-        foundry functions query get myQuery --version 1.0.0
+        pfoundry functions query get myQuery --version 1.0.0
 
         # Output as JSON
-        foundry functions query get myQuery --format json
+        pfoundry functions query get myQuery --format json
 
         # Enable preview mode
-        foundry functions query get myQuery --preview
+        pfoundry functions query get myQuery --preview
     """
     try:
         service = FunctionsService(profile=profile)
@@ -278,13 +278,13 @@ def get_query_by_rid(
     Examples:
 
         # Get query by RID
-        foundry functions query get-by-rid ri.functions.main.query.abc123
+        pfoundry functions query get-by-rid ri.functions.main.query.abc123
 
         # Get specific version
-        foundry functions query get-by-rid ri.functions.main.query.abc123 --version 1.0.0
+        pfoundry functions query get-by-rid ri.functions.main.query.abc123 --version 1.0.0
 
         # Output as JSON
-        foundry functions query get-by-rid ri.functions.main.query.abc123 --format json
+        pfoundry functions query get-by-rid ri.functions.main.query.abc123 --format json
     """
     try:
         cache_rid(query_rid)
@@ -364,23 +364,23 @@ def execute_query(
     Examples:
 
         # Execute with inline parameters
-        foundry functions query execute myQuery --parameters '{"limit": 10}'
+        pfoundry functions query execute myQuery --parameters '{"limit": 10}'
 
         # Execute with parameters from file
-        foundry functions query execute myQuery --parameters @params.json
+        pfoundry functions query execute myQuery --parameters @params.json
 
         # Execute with complex parameters
-        foundry functions query execute myQuery --parameters '{
+        pfoundry functions query execute myQuery --parameters '{
             "limit": 100,
             "filter": "active",
             "config": {"enabled": true}
         }'
 
         # Execute specific version
-        foundry functions query execute myQuery --version 1.0.0 --parameters '{}'
+        pfoundry functions query execute myQuery --version 1.0.0 --parameters '{}'
 
         # Execute with preview mode
-        foundry functions query execute myQuery --preview --parameters '{}'
+        pfoundry functions query execute myQuery --preview --parameters '{}'
     """
     try:
         # Parse parameters
@@ -471,13 +471,13 @@ def execute_query_by_rid(
     Examples:
 
         # Execute with inline parameters
-        foundry functions query execute-by-rid ri.functions.main.query.abc123 --parameters '{"limit": 10}'
+        pfoundry functions query execute-by-rid ri.functions.main.query.abc123 --parameters '{"limit": 10}'
 
         # Execute with parameters from file
-        foundry functions query execute-by-rid ri.functions.main.query.abc123 --parameters @params.json
+        pfoundry functions query execute-by-rid ri.functions.main.query.abc123 --parameters @params.json
 
         # Execute specific version
-        foundry functions query execute-by-rid ri.functions.main.query.abc123 --version 1.0.0 --parameters '{}'
+        pfoundry functions query execute-by-rid ri.functions.main.query.abc123 --version 1.0.0 --parameters '{}'
     """
     try:
         cache_rid(query_rid)
@@ -554,13 +554,13 @@ def get_value_type(
     Examples:
 
         # Get value type details
-        foundry functions value-type get ri.functions.main.value-type.xyz
+        pfoundry functions value-type get ri.functions.main.value-type.xyz
 
         # Output as JSON
-        foundry functions value-type get ri.functions.main.value-type.xyz --format json
+        pfoundry functions value-type get ri.functions.main.value-type.xyz --format json
 
         # Enable preview mode
-        foundry functions value-type get ri.functions.main.value-type.xyz --preview
+        pfoundry functions value-type get ri.functions.main.value-type.xyz --preview
     """
     try:
         cache_rid(value_type_rid)

@@ -9,7 +9,7 @@ generic match -- so unrelated errors carry no hint at all.
 
 Every command and flag named in a hint is verified against the registered
 app in tests/test_error_hints.py; do not name a command or flag here that
-``foundry ... --help`` does not show.
+``pfoundry ... --help`` does not show.
 """
 
 from __future__ import annotations

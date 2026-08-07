@@ -38,7 +38,7 @@ type, OAuth grants, redirect URLs, data scope). Read-only; no session is
 established.
 
 ```bash
-foundry dev-console connect "$APP_RID" --profile "$PROFILE"
+pfoundry dev-console connect "$APP_RID" --profile "$PROFILE"
 ```
 
 Documented divergence: the vendor MCP's `connect_to_dev_console_app` is an
@@ -53,18 +53,18 @@ object/action/query surface available to the app. Read-only.
 
 ```bash
 # Latest version
-foundry dev-console osdk definition "$APP_RID" --profile "$PROFILE"
+pfoundry dev-console osdk definition "$APP_RID" --profile "$PROFILE"
 
 # Pin a specific version and save it for reference
-foundry dev-console osdk definition "$APP_RID" --version 1.2.0 \
+pfoundry dev-console osdk definition "$APP_RID" --version 1.2.0 \
   --format json --output osdk-definition.json
 ```
 
 Optional ontology-side context when writing queries against the live ontology:
 
 ```bash
-foundry osdk context --profile "$PROFILE"
-foundry osdk examples --language typescript --profile "$PROFILE"
+pfoundry osdk context --profile "$PROFILE"
+pfoundry osdk examples --language typescript --profile "$PROFILE"
 ```
 
 ## Phase 3: Generate and install the SDK package
@@ -75,10 +75,10 @@ exact request body and sends nothing mutating.
 
 ```bash
 # 1. Print the dry-run plan (resolved version + exact POST body)
-foundry dev-console sdk generate "$APP_RID" --profile "$PROFILE"
+pfoundry dev-console sdk generate "$APP_RID" --profile "$PROFILE"
 
 # 2. Mint the version for real (polls to a terminal status; ~24s observed)
-foundry dev-console sdk generate "$APP_RID" --apply --profile "$PROFILE"
+pfoundry dev-console sdk generate "$APP_RID" --apply --profile "$PROFILE"
 ```
 
 Generation changes a Foundry resource: run
@@ -93,13 +93,13 @@ nothing.
 
 ```bash
 # 1. Print the install plan
-foundry dev-console sdk install "$APP_RID" --dry-run --profile "$PROFILE"
+pfoundry dev-console sdk install "$APP_RID" --dry-run --profile "$PROFILE"
 
 # 2a. Install into a project directory (npm --prefix / pip --target)
-foundry dev-console sdk install "$APP_RID" --target ./my-app --profile "$PROFILE"
+pfoundry dev-console sdk install "$APP_RID" --target ./my-app --profile "$PROFILE"
 
 # 2b. Or install into the active Python virtualenv
-foundry dev-console sdk install "$APP_RID" --yes --profile "$PROFILE"
+pfoundry dev-console sdk install "$APP_RID" --yes --profile "$PROFILE"
 ```
 
 ## Phase 4: Scaffold typed React components
@@ -111,7 +111,7 @@ ontology's object types, then writes one typed presentational
 `--force`.
 
 ```bash
-foundry dev-console convert-osdk-react "$APP_RID" \
+pfoundry dev-console convert-osdk-react "$APP_RID" \
   --output-dir ./my-app/src/components \
   --profile "$PROFILE"
 ```
@@ -126,13 +126,13 @@ development.
 
 ```bash
 # 1. Read repository context (metadata, default branch, refs, file tree)
-foundry repository context "$REPO_RID" --profile "$PROFILE"
+pfoundry repository context "$REPO_RID" --profile "$PROFILE"
 
 # 2. Print the clone plan without cloning
-foundry repository clone "$REPO_RID" ./my-app --dry-run --profile "$PROFILE"
+pfoundry repository clone "$REPO_RID" ./my-app --dry-run --profile "$PROFILE"
 
 # 3. Clone for real
-foundry repository clone "$REPO_RID" ./my-app --profile "$PROFILE"
+pfoundry repository clone "$REPO_RID" ./my-app --profile "$PROFILE"
 ```
 
 The profile bearer token is passed via an environment-injected
@@ -147,12 +147,12 @@ do not cover. All docs commands are read-only; search is bounded and honestly
 partial.
 
 ```bash
-foundry docs osdk-react-components
-foundry docs custom-widgets          # when the app uses custom widgets
-foundry docs search "osdk react useOsdkClient" --limit 10
+pfoundry docs osdk-react-components
+pfoundry docs custom-widgets          # when the app uses custom widgets
+pfoundry docs search "osdk react useOsdkClient" --limit 10
 
 # Load a specific page found via search as verbatim markdown
-foundry docs page /foundry/custom-widgets/use-osdk/
+pfoundry docs page /foundry/custom-widgets/use-osdk/
 ```
 
 ## Phase 7: Widget dev mode and releases (custom widgets only)
@@ -163,7 +163,7 @@ Enable widget dev mode for the current user so local widget code is served
 into the app during development:
 
 ```bash
-foundry widgets dev-mode enable --profile "$PROFILE"
+pfoundry widgets dev-mode enable --profile "$PROFILE"
 ```
 
 Capability gap: only `enable` exists. There is no headless dev-mode disable
@@ -174,14 +174,14 @@ always list and get before deleting:
 
 ```bash
 # Widget set details
-foundry widgets get "$WIDGET_SET_RID" --profile "$PROFILE"
+pfoundry widgets get "$WIDGET_SET_RID" --profile "$PROFILE"
 
 # Widget repository backing a code repository
-foundry widgets repository get "$REPO_RID" --profile "$PROFILE"
+pfoundry widgets repository get "$REPO_RID" --profile "$PROFILE"
 
 # List releases, then inspect the one you intend to touch
-foundry widgets release list "$WIDGET_SET_RID" --profile "$PROFILE"
-foundry widgets release get "$WIDGET_SET_RID" 1.0.0 --profile "$PROFILE"
+pfoundry widgets release list "$WIDGET_SET_RID" --profile "$PROFILE"
+pfoundry widgets release get "$WIDGET_SET_RID" 1.0.0 --profile "$PROFILE"
 ```
 
 Delete a release only after inspecting it and running
@@ -189,7 +189,7 @@ Delete a release only after inspecting it and running
 `--yes` is required to skip the confirmation prompt:
 
 ```bash
-foundry widgets release delete "$WIDGET_SET_RID" 1.0.0 --yes --profile "$PROFILE"
+pfoundry widgets release delete "$WIDGET_SET_RID" 1.0.0 --yes --profile "$PROFILE"
 ```
 
 Capability gap: release creation is not exposed headlessly (only `list`,

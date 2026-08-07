@@ -125,7 +125,7 @@ class ComputeService(BaseService):
         try:
             status, payload, raw = client.conjure(verb, path, json_body=json_body)
         except Exception as e:
-            raise ComputeModulesError(f"Failed to {operation}: {e}") from e
+            raise ComputeModulesError(f"Failed to {operation}: {self._describe_error(e)}") from e
 
         error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
         if error_name == "Route:RouteNotMounted":

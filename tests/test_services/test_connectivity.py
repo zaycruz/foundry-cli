@@ -113,7 +113,7 @@ class TestConnectivityService:
         assert result[0]["rid"] == "ri.magritte.main.connection.123"
         assert result[0]["display_name"] == "Warehouse Connection"
         assert result[0]["connection_type"] == "connection"
-        folder_client.children.assert_any_call("ri.compass.main.folder.0", preview=True)
+        folder_client.children.assert_any_call("ri.compass.main.folder.0", )
 
     def test_list_connections_filesystem_fallback_respects_env_start_folder(
         self, monkeypatch
@@ -140,7 +140,7 @@ class TestConnectivityService:
 
         assert result == []
         folder_client.children.assert_called_once_with(
-            "ri.compass.main.folder.custom-start", preview=True
+            "ri.compass.main.folder.custom-start", 
         )
 
     def test_list_connections_filesystem_fallback_requires_filesystem(self):

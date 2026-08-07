@@ -18,6 +18,32 @@ class AdminService(BaseService):
         """Get the Foundry admin service."""
         return self.client.admin
 
+    @staticmethod
+    def _normalize_user_id(user_id: str) -> str:
+        """Normalize a user id for the Admin API, which requires a bare UUID.
+
+        Accepts a bare UUID (``12345678-1234-...``) or a compass RID
+        (``ri.compass.main.user.12345678-...``); strips the RID prefix.
+        Raises ValueError with a clean, actionable message otherwise.
+        """
+        import re
+
+        value = user_id.strip()
+        if value.startswith("ri.compass.main.user."):
+            value = value[len("ri.compass.main.user."):]
+        uuid_pattern = (
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        )
+        if not re.match(uuid_pattern, value):
+            raise ValueError(
+                f"Invalid user id {user_id!r}: the Admin API expects a bare user UUID "
+                "(e.g. 12345678-1234-1234-1234-123456789abc) or a "
+                "ri.compass.main.user.<uuid> RID. Run 'pfoundry admin user list' "
+                "to see valid ids."
+            )
+        return value
+
     # User Management Methods
     def list_users(
         self, page_size: Optional[int] = None, page_token: Optional[str] = None
@@ -40,7 +66,7 @@ class AdminService(BaseService):
             )
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to list users: {str(e)}")
+            raise RuntimeError(f"Failed to list users: {self._describe_error(e)}")
 
     def list_users_paginated(
         self,
@@ -81,7 +107,7 @@ class AdminService(BaseService):
             # Use response pagination handler
             return self._paginate_response(fetch_page, config, progress_callback)
         except Exception as e:
-            raise RuntimeError(f"Failed to list users: {str(e)}")
+            raise RuntimeError(f"Failed to list users: {self._describe_error(e)}")
 
     def get_user(self, user_id: str) -> Dict[str, Any]:
         """
@@ -94,10 +120,14 @@ class AdminService(BaseService):
             Dictionary containing user information
         """
         try:
-            response = self.service.User.get(user_id)
+            normalized = self._normalize_user_id(user_id)
+        except ValueError as e:
+            raise RuntimeError(str(e)) from None
+        try:
+            response = self.service.User.get(normalized)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get user {user_id}: {str(e)}")
+            raise RuntimeError(f"Failed to get user {user_id}: {self._describe_error(e)}")
 
     def get_current_user(self) -> Dict[str, Any]:
         """
@@ -110,7 +140,7 @@ class AdminService(BaseService):
             response = self.service.User.get_current()
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get current user: {str(e)}")
+            raise RuntimeError(f"Failed to get current user: {self._describe_error(e)}")
 
     def search_users(
         self,
@@ -135,7 +165,7 @@ class AdminService(BaseService):
             )
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to search users: {str(e)}")
+            raise RuntimeError(f"Failed to search users: {self._describe_error(e)}")
 
     def get_user_markings(self, user_id: str) -> Dict[str, Any]:
         """
@@ -148,10 +178,14 @@ class AdminService(BaseService):
             Dictionary containing user markings information
         """
         try:
-            response = self.service.User.get_markings(user_id)
+            normalized = self._normalize_user_id(user_id)
+        except ValueError as e:
+            raise RuntimeError(str(e)) from None
+        try:
+            response = self.service.User.get_markings(normalized)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get user markings for {user_id}: {str(e)}")
+            raise RuntimeError(f"Failed to get user markings for {user_id}: {self._describe_error(e)}")
 
     def revoke_user_tokens(self, user_id: str) -> Dict[str, Any]:
         """
@@ -164,13 +198,17 @@ class AdminService(BaseService):
             Dictionary containing operation result
         """
         try:
-            self.service.User.revoke_all_tokens(user_id)
+            normalized = self._normalize_user_id(user_id)
+        except ValueError as e:
+            raise RuntimeError(str(e)) from None
+        try:
+            self.service.User.revoke_all_tokens(normalized)
             return {
                 "success": True,
                 "message": f"All tokens revoked for user {user_id}",
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to revoke tokens for user {user_id}: {str(e)}")
+            raise RuntimeError(f"Failed to revoke tokens for user {user_id}: {self._describe_error(e)}")
 
     def delete_user(self, user_id: str) -> Dict[str, Any]:
         """
@@ -189,7 +227,7 @@ class AdminService(BaseService):
                 "message": f"User {user_id} deleted successfully",
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to delete user {user_id}: {str(e)}")
+            raise RuntimeError(f"Failed to delete user {user_id}: {self._describe_error(e)}")
 
     def get_batch_users(self, user_ids: List[str]) -> Dict[str, Any]:
         """
@@ -207,7 +245,7 @@ class AdminService(BaseService):
             response = self.service.User.get_batch(body=user_ids)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get users batch: {str(e)}")
+            raise RuntimeError(f"Failed to get users batch: {self._describe_error(e)}")
 
     # Group Management Methods
     def list_groups(
@@ -235,7 +273,7 @@ class AdminService(BaseService):
                 "next_page_token": iterator.next_page_token,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to list groups: {str(e)}")
+            raise RuntimeError(f"Failed to list groups: {self._describe_error(e)}")
 
     def get_group(self, group_id: str) -> Dict[str, Any]:
         """
@@ -251,7 +289,7 @@ class AdminService(BaseService):
             response = self.service.Group.get(group_id)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get group {group_id}: {str(e)}")
+            raise RuntimeError(f"Failed to get group {group_id}: {self._describe_error(e)}")
 
     def search_groups(
         self,
@@ -276,7 +314,7 @@ class AdminService(BaseService):
             )
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to search groups: {str(e)}")
+            raise RuntimeError(f"Failed to search groups: {self._describe_error(e)}")
 
     def create_group(
         self,
@@ -306,7 +344,7 @@ class AdminService(BaseService):
             response = self.service.Group.create(**create_params)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to create group '{name}': {str(e)}")
+            raise RuntimeError(f"Failed to create group '{name}': {self._describe_error(e)}")
 
     def delete_group(self, group_id: str) -> Dict[str, Any]:
         """
@@ -325,7 +363,7 @@ class AdminService(BaseService):
                 "message": f"Group {group_id} deleted successfully",
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to delete group {group_id}: {str(e)}")
+            raise RuntimeError(f"Failed to delete group {group_id}: {self._describe_error(e)}")
 
     def get_batch_groups(self, group_ids: List[str]) -> Dict[str, Any]:
         """
@@ -343,7 +381,7 @@ class AdminService(BaseService):
             response = self.service.Group.get_batch(body=group_ids)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get groups batch: {str(e)}")
+            raise RuntimeError(f"Failed to get groups batch: {self._describe_error(e)}")
 
     # Marking Management Methods
     def list_markings(
@@ -361,11 +399,11 @@ class AdminService(BaseService):
         """
         try:
             response = self.service.Marking.list(
-                page_size=page_size, page_token=page_token, preview=True
+                page_size=page_size, page_token=page_token
             )
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to list markings: {str(e)}")
+            raise RuntimeError(f"Failed to list markings: {self._describe_error(e)}")
 
     def get_marking(self, marking_id: str) -> Dict[str, Any]:
         """
@@ -378,10 +416,10 @@ class AdminService(BaseService):
             Dictionary containing marking information
         """
         try:
-            response = self.service.Marking.get(marking_id, preview=True)
+            response = self.service.Marking.get(marking_id)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get marking {marking_id}: {str(e)}")
+            raise RuntimeError(f"Failed to get marking {marking_id}: {self._describe_error(e)}")
 
     def get_batch_markings(self, marking_ids: List[str]) -> Dict[str, Any]:
         """
@@ -396,10 +434,10 @@ class AdminService(BaseService):
         if len(marking_ids) > 500:
             raise ValueError("Maximum batch size is 500 markings")
         try:
-            response = self.service.Marking.get_batch(body=marking_ids, preview=True)
+            response = self.service.Marking.get_batch(body=marking_ids)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get markings batch: {str(e)}")
+            raise RuntimeError(f"Failed to get markings batch: {self._describe_error(e)}")
 
     def create_marking(
         self,
@@ -419,7 +457,7 @@ class AdminService(BaseService):
             Dictionary containing created marking information
         """
         try:
-            create_params: Dict[str, Any] = {"name": name, "preview": True}
+            create_params: Dict[str, Any] = {"name": name}
             if description:
                 create_params["description"] = description
             if category_id:
@@ -428,7 +466,7 @@ class AdminService(BaseService):
             response = self.service.Marking.create(**create_params)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to create marking '{name}': {str(e)}")
+            raise RuntimeError(f"Failed to create marking '{name}': {self._describe_error(e)}")
 
     def replace_marking(
         self,
@@ -448,14 +486,14 @@ class AdminService(BaseService):
             Dictionary containing updated marking information
         """
         try:
-            replace_params: Dict[str, Any] = {"name": name, "preview": True}
+            replace_params: Dict[str, Any] = {"name": name}
             if description:
                 replace_params["description"] = description
 
             response = self.service.Marking.replace(marking_id, **replace_params)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to replace marking {marking_id}: {str(e)}")
+            raise RuntimeError(f"Failed to replace marking {marking_id}: {self._describe_error(e)}")
 
     # Organization Management Methods
     def get_organization(self, organization_id: str) -> Dict[str, Any]:
@@ -473,7 +511,7 @@ class AdminService(BaseService):
             return self._serialize_response(response)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get organization {organization_id}: {str(e)}"
+                f"Failed to get organization {organization_id}: {self._describe_error(e)}"
             )
 
     def create_organization(
@@ -497,7 +535,6 @@ class AdminService(BaseService):
             create_params: Dict[str, Any] = {
                 "name": name,
                 "enrollment_rid": enrollment_rid,
-                "preview": True,
             }
             if admin_ids:
                 create_params["admin_ids"] = admin_ids
@@ -505,7 +542,7 @@ class AdminService(BaseService):
             response = self.service.Organization.create(**create_params)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to create organization '{name}': {str(e)}")
+            raise RuntimeError(f"Failed to create organization '{name}': {self._describe_error(e)}")
 
     def replace_organization(
         self,
@@ -525,7 +562,7 @@ class AdminService(BaseService):
             Dictionary containing updated organization information
         """
         try:
-            replace_params: Dict[str, Any] = {"name": name, "preview": True}
+            replace_params: Dict[str, Any] = {"name": name}
             if description:
                 replace_params["description"] = description
 
@@ -535,7 +572,7 @@ class AdminService(BaseService):
             return self._serialize_response(response)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to replace organization {organization_rid}: {str(e)}"
+                f"Failed to replace organization {organization_rid}: {self._describe_error(e)}"
             )
 
     def list_available_roles(
@@ -560,12 +597,11 @@ class AdminService(BaseService):
                 organization_rid,
                 page_size=page_size,
                 page_token=page_token,
-                preview=True,
             )
             return self._serialize_response(response)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list available roles for organization {organization_rid}: {str(e)}"
+                f"Failed to list available roles for organization {organization_rid}: {self._describe_error(e)}"
             )
 
     # Role Management Methods
@@ -583,7 +619,7 @@ class AdminService(BaseService):
             response = self.service.Role.get(role_id)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get role {role_id}: {str(e)}")
+            raise RuntimeError(f"Failed to get role {role_id}: {self._describe_error(e)}")
 
     def get_batch_roles(self, role_ids: List[str]) -> Dict[str, Any]:
         """
@@ -601,7 +637,7 @@ class AdminService(BaseService):
             response = self.service.Role.get_batch(body=role_ids, preview=True)
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get roles batch: {str(e)}")
+            raise RuntimeError(f"Failed to get roles batch: {self._describe_error(e)}")
 
     def _serialize_response(self, response: Any) -> Dict[str, Any]:
         """

@@ -119,7 +119,7 @@ class LanguageModelsService(BaseService):
 
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to send message to model {model_id}: {e}")
+            raise RuntimeError(f"Failed to send message to model {model_id}: {self._describe_error(e)}")
 
     def send_messages_advanced(
         self,
@@ -230,7 +230,7 @@ class LanguageModelsService(BaseService):
 
             return self._serialize_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to send messages to model {model_id}: {e}")
+            raise RuntimeError(f"Failed to send messages to model {model_id}: {self._describe_error(e)}")
 
     # ===== OpenAI Model Operations =====
 
@@ -302,7 +302,7 @@ class LanguageModelsService(BaseService):
             return self._serialize_response(response)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to generate embeddings with model {model_id}: {e}"
+                f"Failed to generate embeddings with model {model_id}: {self._describe_error(e)}"
             )
 
     def list_available_models(self) -> List[Dict[str, Any]]:

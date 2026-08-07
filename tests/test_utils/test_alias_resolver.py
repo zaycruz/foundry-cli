@@ -129,7 +129,7 @@ class TestAliasResolver:
 
             original_argv = sys.argv
             try:
-                sys.argv = ["foundry", "ds", "rid"]
+                sys.argv = ["pfoundry", "ds", "rid"]
                 result = resolve_command_aliases()
                 assert result == ["dataset", "get", "rid"]
             finally:
@@ -144,9 +144,9 @@ class TestAliasResolver:
 
             original_argv = sys.argv
             try:
-                sys.argv = ["foundry", "ds", "rid"]
+                sys.argv = ["pfoundry", "ds", "rid"]
                 inject_alias_resolution()
-                assert sys.argv == ["foundry", "dataset", "get", "rid"]
+                assert sys.argv == ["pfoundry", "dataset", "get", "rid"]
             finally:
                 sys.argv = original_argv
 

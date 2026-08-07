@@ -77,7 +77,7 @@ class TestProjectService:
                     }
                 ]
             },
-            preview=True,
+            
         )
 
         assert result["rid"] == "ri.compass.main.project.123"
@@ -121,7 +121,7 @@ class TestProjectService:
                     }
                 ]
             },
-            preview=True,
+            
         )
 
     def test_create_project_failure(
@@ -151,7 +151,7 @@ class TestProjectService:
         result = project_service.get_project("ri.compass.main.project.123")
 
         mock_client.filesystem.Project.get.assert_called_once_with(
-            "ri.compass.main.project.123", preview=True
+            "ri.compass.main.project.123", 
         )
         assert result["rid"] == "ri.compass.main.project.123"
         assert result["display_name"] == "Test Project"
@@ -192,9 +192,9 @@ class TestProjectService:
 
         result = project_service.list_projects()
 
-        mock_client.filesystem.Space.list.assert_called_once_with(preview=True)
+        mock_client.filesystem.Space.list.assert_called_once_with()
         mock_client.filesystem.Folder.children.assert_called_once_with(
-            "ri.compass.main.space.789", preview=True
+            "ri.compass.main.space.789", 
         )
         assert len(result) == 2
         assert result[0]["rid"] == "ri.compass.main.project.123"
@@ -245,9 +245,9 @@ class TestProjectService:
 
         project_service.list_projects(page_size=5, page_token="token")
 
-        mock_client.filesystem.Space.list.assert_called_once_with(preview=True)
+        mock_client.filesystem.Space.list.assert_called_once_with()
         mock_client.filesystem.Folder.children.assert_called_once_with(
-            "ri.compass.main.space.789", preview=True
+            "ri.compass.main.space.789", 
         )
 
     def test_list_projects_with_filters(self, project_service, mock_client):
@@ -265,7 +265,7 @@ class TestProjectService:
 
         mock_client.filesystem.Folder.children.assert_called_once_with(
             "ri.compass.main.space.789",
-            preview=True,
+            
             page_size=10,
             page_token="token123",
         )
@@ -321,7 +321,7 @@ class TestProjectService:
         )
 
         mock_client.filesystem.Project.get.assert_called_once_with(
-            "ri.compass.main.project.123", preview=True
+            "ri.compass.main.project.123", 
         )
         mock_client.filesystem.Project.replace.assert_called_once_with(
             project_rid="ri.compass.main.project.123",
@@ -346,8 +346,7 @@ class TestProjectService:
         mock_project.description = "Test description"
         mock_project.space_rid = "ri.compass.main.space.456"
         mock_project.created_by = "user123"
-        mock_project.created_time = Mock()
-        mock_project.created_time.time = "2023-01-01T00:00:00Z"
+        mock_project.created_time = "2023-01-01T00:00:00Z"
 
         result = project_service._format_project_info(mock_project)
 
@@ -370,7 +369,7 @@ class TestProjectService:
         project_service.add_organizations("ri.compass.main.project.789", org_rids)
 
         mock_client.filesystem.Project.add_organizations.assert_called_once_with(
-            "ri.compass.main.project.789", organization_rids=org_rids, preview=True
+            "ri.compass.main.project.789", organization_rids=org_rids, 
         )
 
     def test_add_organizations_failure(self, project_service, mock_client):
@@ -397,7 +396,7 @@ class TestProjectService:
         project_service.remove_organizations("ri.compass.main.project.789", org_rids)
 
         mock_client.filesystem.Project.remove_organizations.assert_called_once_with(
-            "ri.compass.main.project.789", organization_rids=org_rids, preview=True
+            "ri.compass.main.project.789", organization_rids=org_rids, 
         )
 
     def test_remove_organizations_failure(self, project_service, mock_client):
@@ -429,7 +428,7 @@ class TestProjectService:
         result = project_service.list_organizations("ri.compass.main.project.789")
 
         mock_client.filesystem.Project.organizations.assert_called_once_with(
-            "ri.compass.main.project.789", preview=True
+            "ri.compass.main.project.789", 
         )
         assert len(result) == 2
         assert result[0]["organization_rid"] == "ri.compass.main.org.123"
@@ -451,7 +450,7 @@ class TestProjectService:
 
         mock_client.filesystem.Project.organizations.assert_called_once_with(
             "ri.compass.main.project.789",
-            preview=True,
+            
             page_size=10,
             page_token="token123",
         )
@@ -488,7 +487,7 @@ class TestProjectService:
         mock_client.filesystem.Project.create_from_template.assert_called_once_with(
             template_rid="ri.compass.main.template.456",
             variable_values={"name": "MyProject", "env": "prod"},
-            preview=True,
+            
         )
         assert result["rid"] == "ri.compass.main.project.123"
         assert result["display_name"] == "Project from Template"
@@ -514,7 +513,7 @@ class TestProjectService:
         mock_client.filesystem.Project.create_from_template.assert_called_once_with(
             template_rid="ri.compass.main.template.456",
             variable_values={"name": "MyProject"},
-            preview=True,
+            
             default_roles=["viewer"],
             organization_rids=["ri.compass.main.org.789"],
             project_description="Test project",
@@ -619,3 +618,46 @@ class TestProjectService:
     def test_search_projects_rejects_malformed_token(self, project_service):
         with pytest.raises(ValueError, match="invalid project search page_token"):
             project_service.search_projects("x", page_token="not-a-token")
+
+
+def test_format_timestamp_serializes_datetime():
+    """datetime must serialize to ISO-8601, never a bound-method repr.
+
+    Regression: hasattr(datetime, "time") matched .time() and produced
+    "<built-in method time of datetime.datetime object at ...>" in JSON.
+    """
+    from datetime import datetime, timezone
+    from foundry_cli.services.project import ProjectService
+
+    svc = ProjectService.__new__(ProjectService)
+    ts = datetime(2026, 8, 7, 16, 21, 34, 172249, tzinfo=timezone.utc)
+    assert svc._format_timestamp(ts) == "2026-08-07T16:21:34.172249+00:00"
+    assert svc._format_timestamp("2026-08-07T16:21:34Z") == "2026-08-07T16:21:34Z"
+    assert svc._format_timestamp(None) is None
+
+
+def test_is_project_resource_matches_compass_folder_with_project_rid():
+    """Projects are COMPASS_FOLDER resources carrying a project_rid.
+
+    Regression: the filter only matched type == 'PROJECT' / ri.compass.main.project.*
+    RIDs, so `project list` always returned empty even when projects existed.
+    """
+    from foundry_cli.services.project import ProjectService
+
+    resource = Mock()
+    resource.type = "COMPASS_FOLDER"
+    resource.rid = "ri.compass.main.folder.12345678-1234-1234-1234-123456789abc"
+    resource.project_rid = "ri.compass.main.folder.12345678-1234-1234-1234-123456789abc"
+    assert ProjectService._is_project_resource(resource) is True
+
+    folder = Mock()
+    folder.type = "COMPASS_FOLDER"
+    folder.rid = "ri.compass.main.folder.plain-folder-123"
+    folder.project_rid = None
+    assert ProjectService._is_project_resource(folder) is False
+
+    legacy = Mock()
+    legacy.type = "PROJECT"
+    legacy.rid = "ri.compass.main.project.abc"
+    legacy.project_rid = None
+    assert ProjectService._is_project_resource(legacy) is True

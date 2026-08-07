@@ -7,86 +7,86 @@ Manage connections and data imports from external systems.
 ### List Connections
 
 ```bash
-foundry connectivity connection list [--format FORMAT] [--output FILE]
+pfoundry connectivity connection list [--format FORMAT] [--output FILE]
 
 # Example
-foundry connectivity connection list --format json --output connections.json
+pfoundry connectivity connection list --format json --output connections.json
 ```
 
 ### Get Connection Details
 
 ```bash
-foundry connectivity connection get CONNECTION_RID [--format FORMAT]
+pfoundry connectivity connection get CONNECTION_RID [--format FORMAT]
 
 # Example
-foundry connectivity connection get ri.conn.main.connection.12345
+pfoundry connectivity connection get ri.conn.main.connection.12345
 ```
 
 ### Create Connection
 
 ```bash
-foundry connectivity connection create DISPLAY_NAME PARENT_FOLDER_RID [CONFIGURATION] [WORKER] [OPTIONS]
+pfoundry connectivity connection create DISPLAY_NAME PARENT_FOLDER_RID [CONFIGURATION] [WORKER] [OPTIONS]
 
 # Options:
 #   --config-file TEXT    Path to JSON file with connection configuration
 #   --worker-file TEXT    Path to JSON file with worker configuration
 
 # Examples
-foundry connectivity connection create "My Database" ri.compass.main.folder.xyz123 \
+pfoundry connectivity connection create "My Database" ri.compass.main.folder.xyz123 \
   '{"type": "jdbc"}' '{"workerType": "default"}'
 
 # Using config files
-foundry connectivity connection create "My Database" ri.compass.main.folder.xyz123 \
+pfoundry connectivity connection create "My Database" ri.compass.main.folder.xyz123 \
   --config-file connection-config.json --worker-file worker-config.json
 ```
 
 ### Get Connection Configuration
 
 ```bash
-foundry connectivity connection get-config CONNECTION_RID [--format FORMAT]
+pfoundry connectivity connection get-config CONNECTION_RID [--format FORMAT]
 
 # Example
-foundry connectivity connection get-config ri.conn.main.connection.12345 --format json
+pfoundry connectivity connection get-config ri.conn.main.connection.12345 --format json
 ```
 
 ### Update Connection Secrets
 
 ```bash
-foundry connectivity connection update-secrets CONNECTION_RID --secrets-file FILE
+pfoundry connectivity connection update-secrets CONNECTION_RID --secrets-file FILE
 
 # Secrets must be provided via file for security (avoids shell history exposure)
 
 # Example (secrets.json: {"password": "secret123", "api_key": "abc..."})
-foundry connectivity connection update-secrets ri.conn.main.connection.12345 \
+pfoundry connectivity connection update-secrets ri.conn.main.connection.12345 \
   --secrets-file secrets.json
 ```
 
 ### Update Export Settings
 
 ```bash
-foundry connectivity connection update-export-settings CONNECTION_RID [SETTINGS] [OPTIONS]
+pfoundry connectivity connection update-export-settings CONNECTION_RID [SETTINGS] [OPTIONS]
 
 # Options:
 #   --settings-file TEXT    Path to JSON file with export settings
 
 # Examples
-foundry connectivity connection update-export-settings ri.conn.main.connection.12345 \
+pfoundry connectivity connection update-export-settings ri.conn.main.connection.12345 \
   '{"enabled": true, "format": "parquet"}'
 
 # Using settings file
-foundry connectivity connection update-export-settings ri.conn.main.connection.12345 \
+pfoundry connectivity connection update-export-settings ri.conn.main.connection.12345 \
   --settings-file export-settings.json
 ```
 
 ### Upload JDBC Drivers
 
 ```bash
-foundry connectivity connection upload-jdbc-drivers CONNECTION_RID DRIVER_FILES...
+pfoundry connectivity connection upload-jdbc-drivers CONNECTION_RID DRIVER_FILES...
 
 # Upload custom JAR files for JDBC connections
 
 # Example
-foundry connectivity connection upload-jdbc-drivers ri.conn.main.connection.12345 \
+pfoundry connectivity connection upload-jdbc-drivers ri.conn.main.connection.12345 \
   driver.jar custom-driver-v2.jar
 ```
 
@@ -95,19 +95,19 @@ foundry connectivity connection upload-jdbc-drivers ri.conn.main.connection.1234
 ### List File Imports
 
 ```bash
-foundry connectivity import list-file --connection CONNECTION_RID [--format FORMAT]
+pfoundry connectivity import list-file --connection CONNECTION_RID [--format FORMAT]
 
 # Example
-foundry connectivity import list-file --connection ri.conn.main.connection.123
+pfoundry connectivity import list-file --connection ri.conn.main.connection.123
 ```
 
 ### Get File Import Details
 
 ```bash
-foundry connectivity import get-file IMPORT_RID --connection CONNECTION_RID [--format FORMAT]
+pfoundry connectivity import get-file IMPORT_RID --connection CONNECTION_RID [--format FORMAT]
 
 # Example
-foundry connectivity import get-file ri.import.main.file.12345 \
+pfoundry connectivity import get-file ri.import.main.file.12345 \
   --connection ri.conn.main.connection.123
 ```
 
@@ -116,19 +116,19 @@ foundry connectivity import get-file ri.import.main.file.12345 \
 ### List Table Imports
 
 ```bash
-foundry connectivity import list-table --connection CONNECTION_RID [--format FORMAT]
+pfoundry connectivity import list-table --connection CONNECTION_RID [--format FORMAT]
 
 # Example
-foundry connectivity import list-table --connection ri.conn.main.connection.123
+pfoundry connectivity import list-table --connection ri.conn.main.connection.123
 ```
 
 ### Get Table Import Details
 
 ```bash
-foundry connectivity import get-table IMPORT_RID --connection CONNECTION_RID [--format FORMAT]
+pfoundry connectivity import get-table IMPORT_RID --connection CONNECTION_RID [--format FORMAT]
 
 # Example
-foundry connectivity import get-table ri.import.main.table.12345 \
+pfoundry connectivity import get-table ri.import.main.table.12345 \
   --connection ri.conn.main.connection.123
 ```
 
@@ -138,10 +138,10 @@ foundry connectivity import get-table ri.import.main.table.12345 \
 CONNECTION="ri.conn.main.connection.123"
 
 echo "File imports:"
-foundry connectivity import list-file --connection $CONNECTION
+pfoundry connectivity import list-file --connection $CONNECTION
 
 echo "Table imports:"
-foundry connectivity import list-table --connection $CONNECTION
+pfoundry connectivity import list-table --connection $CONNECTION
 ```
 
 
@@ -154,10 +154,10 @@ policy matches, the command exits loudly with a "would create, mutations not
 enabled" message instead of creating one.
 
 ```bash
-foundry connectivity egress ensure HOSTNAME [--format FORMAT]
+pfoundry connectivity egress ensure HOSTNAME [--format FORMAT]
 
 # Example
-foundry connectivity egress ensure api.example.com
+pfoundry connectivity egress ensure api.example.com
 ```
 
 ## REST Data-Source Webhook Commands
@@ -173,10 +173,10 @@ editable by this token, not that the endpoint is blocked.
 ### Get Webhook (read-only)
 
 ```bash
-foundry connectivity webhook get WEBHOOK_RID [--version N] [--format FORMAT]
+pfoundry connectivity webhook get WEBHOOK_RID [--version N] [--format FORMAT]
 
 # Example
-foundry connectivity webhook get ri.webhooks.main.webhook.abc123
+pfoundry connectivity webhook get ri.webhooks.main.webhook.abc123
 ```
 
 ### Create Webhook (plan-first)
@@ -188,16 +188,16 @@ server-enforced pattern (a letters-only PascalCase name is accepted;
 trailing digits were rejected in validation).
 
 ```bash
-foundry connectivity webhook create NAME --source-rid SOURCE_RID \
+pfoundry connectivity webhook create NAME --source-rid SOURCE_RID \
   [--api-name NAME] [--description TEXT] [--spec JSON | --spec-file PATH] \
   [--apply] [--format FORMAT]
 
 # Dry-run plan (default, no network request)
-foundry connectivity webhook create my-webhook \
+pfoundry connectivity webhook create my-webhook \
   --source-rid ri.magritte..source.abc123
 
 # Real create (fails loudly on a resource-scoped 403)
-foundry connectivity webhook create my-webhook \
+pfoundry connectivity webhook create my-webhook \
   --source-rid ri.magritte..source.abc123 --api-name MyWebhook --apply
 ```
 
@@ -219,15 +219,15 @@ assembled from MCP tool-arg shaped pieces (`--source-rid` + `--domain` +
   (the full RID must be in the path; the bare-UUID variant 400s).
 
 ```bash
-foundry connectivity webhook update WEBHOOK_RID [SPEC_JSON] [--spec-file PATH] \
+pfoundry connectivity webhook update WEBHOOK_RID [SPEC_JSON] [--spec-file PATH] \
   [--source-rid RID --domain HOST [--calls JSON | --calls-file PATH] \
    [--inputs JSON | --inputs-file PATH]] [--apply] [--format FORMAT]
 
 # Dry-run plan (default, no mutation)
-foundry connectivity webhook update ri.webhooks.main.webhook.abc123 '{"inputs": []}'
+pfoundry connectivity webhook update ri.webhooks.main.webhook.abc123 '{"inputs": []}'
 
 # Real publish with an assembled spec
-foundry connectivity webhook update ri.webhooks.main.webhook.abc123 \
+pfoundry connectivity webhook update ri.webhooks.main.webhook.abc123 \
   --source-rid ri.magritte..source.abc123 --domain api.example.com \
   --calls '[{"httpMethod": "GET", "httpPath": ["users", {"input": "userId"}]}]' \
   --inputs '[{"name": "userId", "dataType": {"type": "string"}}]' --apply
@@ -253,17 +253,17 @@ them post-create in the Data Connection UI. This CLI never calls the
 plaintext-secret config endpoint and never accepts real credentials.
 
 ```bash
-foundry connectivity rest-source create NAME --host HOST \
+pfoundry connectivity rest-source create NAME --host HOST \
   --parent-rid FOLDER_RID --egress-policy-rid POLICY_RID \
   [--description TEXT] [--scheme HTTPS] [--port 443] [--apply] [--format FORMAT]
 
 # Dry-run plan (default, no network request)
-foundry connectivity rest-source create my-source --host example.invalid \
+pfoundry connectivity rest-source create my-source --host example.invalid \
   --parent-rid ri.compass.main.folder.abc123 \
   --egress-policy-rid ri.resource-policy-manager.global.network-egress-policy.abc123
 
 # Real create (returns the new source RID)
-foundry connectivity rest-source create my-source --host example.invalid \
+pfoundry connectivity rest-source create my-source --host example.invalid \
   --parent-rid ri.compass.main.folder.abc123 \
   --egress-policy-rid ri.resource-policy-manager.global.network-egress-policy.abc123 \
   --apply

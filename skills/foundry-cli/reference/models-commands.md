@@ -15,7 +15,7 @@ Commands for managing ML models and model versions in the Foundry model registry
 Create a new ML model in the registry.
 
 ```bash
-foundry models model create NAME --folder FOLDER_RID [OPTIONS]
+pfoundry models model create NAME --folder FOLDER_RID [OPTIONS]
 
 # Options:
 #   --folder, -f TEXT       Parent folder RID (required)
@@ -27,16 +27,16 @@ foundry models model create NAME --folder FOLDER_RID [OPTIONS]
 # Examples
 
 # Create a new model
-foundry models model create "fraud-detector" \
+pfoundry models model create "fraud-detector" \
     --folder ri.compass.main.folder.xxx
 
 # Create with JSON output
-foundry models model create "recommendation-engine" \
+pfoundry models model create "recommendation-engine" \
     --folder ri.compass.main.folder.xxx \
     --format json
 
 # Save model info to file
-foundry models model create "anomaly-detector" \
+pfoundry models model create "anomaly-detector" \
     --folder ri.compass.main.folder.xxx \
     --output model-info.json
 ```
@@ -46,7 +46,7 @@ foundry models model create "anomaly-detector" \
 Get information about a model.
 
 ```bash
-foundry models model get MODEL_RID [OPTIONS]
+pfoundry models model get MODEL_RID [OPTIONS]
 
 # Options:
 #   --preview               Enable preview mode
@@ -57,13 +57,13 @@ foundry models model get MODEL_RID [OPTIONS]
 # Examples
 
 # Get model details
-foundry models model get ri.foundry.main.model.abc123
+pfoundry models model get ri.foundry.main.model.abc123
 
 # Get as JSON
-foundry models model get ri.foundry.main.model.abc123 --format json
+pfoundry models model get ri.foundry.main.model.abc123 --format json
 
 # Save to file
-foundry models model get ri.foundry.main.model.abc123 \
+pfoundry models model get ri.foundry.main.model.abc123 \
     --format json \
     --output model-details.json
 ```
@@ -75,7 +75,7 @@ foundry models model get ri.foundry.main.model.abc123 \
 Get information about a specific model version.
 
 ```bash
-foundry models version get MODEL_RID VERSION_ID [OPTIONS]
+pfoundry models version get MODEL_RID VERSION_ID [OPTIONS]
 
 # Options:
 #   --preview               Enable preview mode
@@ -86,14 +86,14 @@ foundry models version get MODEL_RID VERSION_ID [OPTIONS]
 # Examples
 
 # Get specific version
-foundry models version get ri.foundry.main.model.abc123 v1.0.0
+pfoundry models version get ri.foundry.main.model.abc123 v1.0.0
 
 # Get as JSON
-foundry models version get ri.foundry.main.model.abc123 v1.0.0 \
+pfoundry models version get ri.foundry.main.model.abc123 v1.0.0 \
     --format json
 
 # Save to file
-foundry models version get ri.foundry.main.model.abc123 v1.0.0 \
+pfoundry models version get ri.foundry.main.model.abc123 v1.0.0 \
     --format json \
     --output version-details.json
 ```
@@ -103,7 +103,7 @@ foundry models version get ri.foundry.main.model.abc123 v1.0.0 \
 List all versions of a model with pagination support.
 
 ```bash
-foundry models version list MODEL_RID [OPTIONS]
+pfoundry models version list MODEL_RID [OPTIONS]
 
 # Options:
 #   --page-size INTEGER     Maximum versions per page
@@ -116,19 +116,19 @@ foundry models version list MODEL_RID [OPTIONS]
 # Examples
 
 # List all versions
-foundry models version list ri.foundry.main.model.abc123
+pfoundry models version list ri.foundry.main.model.abc123
 
 # List with pagination
-foundry models version list ri.foundry.main.model.abc123 \
+pfoundry models version list ri.foundry.main.model.abc123 \
     --page-size 50
 
 # Get next page
-foundry models version list ri.foundry.main.model.abc123 \
+pfoundry models version list ri.foundry.main.model.abc123 \
     --page-size 50 \
     --page-token <token-from-previous-response>
 
 # Save to file
-foundry models version list ri.foundry.main.model.abc123 \
+pfoundry models version list ri.foundry.main.model.abc123 \
     --format json \
     --output versions.json
 ```
@@ -148,13 +148,13 @@ The `version list` command supports pagination via tokens:
 
 ```bash
 # First page
-foundry models version list ri.foundry.main.model.abc123 --page-size 50
+pfoundry models version list ri.foundry.main.model.abc123 --page-size 50
 
 # Output includes nextPageToken if more results exist:
 # Next page available. Use --page-token <token>
 
 # Fetch next page
-foundry models version list ri.foundry.main.model.abc123 \
+pfoundry models version list ri.foundry.main.model.abc123 \
     --page-size 50 \
     --page-token eyJwYWdlIjogMn0=
 ```
@@ -165,7 +165,7 @@ foundry models version list ri.foundry.main.model.abc123 \
 
 ```bash
 # 1. Create the model container
-foundry models model create "my-ml-model" \
+pfoundry models model create "my-ml-model" \
     --folder ri.compass.main.folder.xxx \
     --format json \
     --output model-info.json
@@ -174,19 +174,19 @@ foundry models model create "my-ml-model" \
 cat model-info.json | jq -r '.rid'
 
 # 3. Later: list versions
-foundry models version list ri.foundry.main.model.abc123
+pfoundry models version list ri.foundry.main.model.abc123
 ```
 
 ### Export Model Metadata
 
 ```bash
 # Get model info
-foundry models model get ri.foundry.main.model.abc123 \
+pfoundry models model get ri.foundry.main.model.abc123 \
     --format json \
     --output model.json
 
 # Get all versions
-foundry models version list ri.foundry.main.model.abc123 \
+pfoundry models version list ri.foundry.main.model.abc123 \
     --format json \
     --output versions.json
 ```
@@ -195,20 +195,20 @@ foundry models version list ri.foundry.main.model.abc123 \
 
 ```bash
 # List versions to see what's available
-foundry models version list ri.foundry.main.model.abc123 --format json
+pfoundry models version list ri.foundry.main.model.abc123 --format json
 
 # Get details for specific version
-foundry models version get ri.foundry.main.model.abc123 v2.1.0 --format json
+pfoundry models version get ri.foundry.main.model.abc123 v2.1.0 --format json
 ```
 
 ### Compare Model Versions
 
 ```bash
 # Export two versions for comparison
-foundry models version get ri.foundry.main.model.abc123 v1.0.0 \
+pfoundry models version get ri.foundry.main.model.abc123 v1.0.0 \
     --format json --output v1.json
 
-foundry models version get ri.foundry.main.model.abc123 v2.0.0 \
+pfoundry models version get ri.foundry.main.model.abc123 v2.0.0 \
     --format json --output v2.json
 
 # Compare
@@ -224,9 +224,9 @@ diff v1.json v2.json
 
 ```bash
 # ML Model Registry
-foundry models model get ri.foundry.main.model.xxx
+pfoundry models model get ri.foundry.main.model.xxx
 
 # LLM Chat
-foundry language-models anthropic messages ri.language-models.main.model.yyy \
+pfoundry language-models anthropic messages ri.language-models.main.model.yyy \
     --message "Hello"
 ```

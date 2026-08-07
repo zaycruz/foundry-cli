@@ -37,15 +37,15 @@ return the unsupported-capability error for the selected type.
 
 ```bash
 # Get one proposal (both types; loads by RID, --parent-rid is not needed)
-foundry proposal get PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--format FORMAT]
+pfoundry proposal get PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--format FORMAT]
 
 # List proposals (code-pr only; filtered to PARENT_RID client-side)
-foundry proposal list code-pr PARENT_RID [--format FORMAT]
+pfoundry proposal list code-pr PARENT_RID [--format FORMAT]
 
 # Examples
-foundry proposal get code-pr ri.stemma.main.pull-request.abc123
-foundry proposal list code-pr ri.stemma.main.repository.abc123
-foundry proposal get global-proposal ri.branch..proposal.abc123
+pfoundry proposal get code-pr ri.stemma.main.pull-request.abc123
+pfoundry proposal list code-pr ri.stemma.main.repository.abc123
+pfoundry proposal get global-proposal ri.branch..proposal.abc123
 ```
 
 ## Write Commands
@@ -53,31 +53,31 @@ foundry proposal get global-proposal ri.branch..proposal.abc123
 ```bash
 # Create a proposal (dry-run plan by default; --apply issues the real write)
 # --parent-rid, --title and --source-ref are required
-foundry proposal create PROPOSAL_TYPE --parent-rid RID --title TITLE \
+pfoundry proposal create PROPOSAL_TYPE --parent-rid RID --title TITLE \
     --source-ref REF [--target-ref REF] [--description TEXT] [--apply]
 
 # Comment on a proposal (code-pr only; dry-run plan by default)
-foundry proposal comment code-pr PROPOSAL_ID MESSAGE [--apply]
+pfoundry proposal comment code-pr PROPOSAL_ID MESSAGE [--apply]
 
 # Review actions (unsupported-capability, exit 6, for both types)
-foundry proposal approve PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--message TEXT]
-foundry proposal request-changes PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--message TEXT]
+pfoundry proposal approve PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--message TEXT]
+pfoundry proposal request-changes PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--message TEXT]
 
 # Merge / accept (unsupported-capability, exit 6, for both types)
-foundry proposal merge PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
-foundry proposal accept PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
+pfoundry proposal merge PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
+pfoundry proposal accept PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
 
 # Refresh and close after explicit confirmation (both types)
-foundry proposal close PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
+pfoundry proposal close PROPOSAL_TYPE PROPOSAL_ID [--parent-rid RID] [--yes]
 
 # Examples
-foundry proposal create code-pr --parent-rid ri.stemma.main.repository.abc123 \
+pfoundry proposal create code-pr --parent-rid ri.stemma.main.repository.abc123 \
     --title "Fix typo" --source-ref my-branch --apply
-foundry proposal create global-proposal --parent-rid ri.ontology.main.ontology.abc123 \
+pfoundry proposal create global-proposal --parent-rid ri.ontology.main.ontology.abc123 \
     --title "Schema update" --source-ref ri.branch..branch.def456 --apply
-foundry proposal comment code-pr ri.stemma.main.pull-request.abc123 "looks good" --apply
-foundry proposal close code-pr ri.stemma.main.pull-request.abc123 --yes
-foundry proposal close global-proposal ri.branch..proposal.abc123 --yes
+pfoundry proposal comment code-pr ri.stemma.main.pull-request.abc123 "looks good" --apply
+pfoundry proposal close code-pr ri.stemma.main.pull-request.abc123 --yes
+pfoundry proposal close global-proposal ri.branch..proposal.abc123 --yes
 ```
 
 `create` argument mapping differs per type:

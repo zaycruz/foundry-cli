@@ -70,7 +70,7 @@ class _BranchServiceBase(BaseService):
         try:
             status, payload, raw = client.conjure("PUT", path, json_body={})
         except Exception as e:
-            raise RuntimeError(f"Failed to load {entity} {rid}: {e}") from e
+            raise RuntimeError(f"Failed to load {entity} {rid}: {self._describe_error(e)}") from e
 
         error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
         if error_name in {
@@ -130,7 +130,7 @@ class _BranchServiceBase(BaseService):
         try:
             status, payload, raw = client.conjure(verb, path, json_body={})
         except Exception as e:
-            raise RuntimeError(f"Failed to {verb} {entity} {rid}: {e}") from e
+            raise RuntimeError(f"Failed to {verb} {entity} {rid}: {self._describe_error(e)}") from e
 
         error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
         if error_name in {
@@ -169,7 +169,7 @@ class _BranchServiceBase(BaseService):
         try:
             status, payload, raw = client.conjure("POST", path, json_body=body)
         except Exception as e:
-            raise RuntimeError(f"Failed to POST {entity}: {e}") from e
+            raise RuntimeError(f"Failed to POST {entity}: {self._describe_error(e)}") from e
 
         error_name = payload.get("errorName") if isinstance(payload, Mapping) else None
         if error_name in {

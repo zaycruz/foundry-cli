@@ -72,13 +72,13 @@ def get_agent(
     Examples:
 
         # Get latest published version of agent
-        foundry aip-agents get ri.foundry.main.agent.abc123
+        pfoundry aip-agents get ri.foundry.main.agent.abc123
 
         # Get specific version
-        foundry aip-agents get ri.foundry.main.agent.abc123 --version 1.5
+        pfoundry aip-agents get ri.foundry.main.agent.abc123 --version 1.5
 
         # Output as JSON
-        foundry aip-agents get ri.foundry.main.agent.abc123 --format json
+        pfoundry aip-agents get ri.foundry.main.agent.abc123 --format json
     """
     try:
         cache_rid(agent_rid)
@@ -144,13 +144,13 @@ def list_sessions(
     Examples:
 
         # List first page of sessions
-        foundry aip-agents sessions list ri.foundry.main.agent.abc123
+        pfoundry aip-agents sessions list ri.foundry.main.agent.abc123
 
         # List all sessions
-        foundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
+        pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
 
         # List first 3 pages with 50 sessions each
-        foundry aip-agents sessions list ri.foundry.main.agent.abc123 \\
+        pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 \\
             --page-size 50 --max-pages 3
     """
     try:
@@ -218,12 +218,12 @@ def get_session(
     Examples:
 
         # Get session details
-        foundry aip-agents sessions get \\
+        pfoundry aip-agents sessions get \\
             ri.foundry.main.agent.abc123 \\
             ri.foundry.main.session.xyz789
 
         # Export session details to JSON
-        foundry aip-agents sessions get \\
+        pfoundry aip-agents sessions get \\
             ri.foundry.main.agent.abc123 \\
             ri.foundry.main.session.xyz789 \\
             --format json --output session.json
@@ -291,13 +291,13 @@ def list_versions(
     Examples:
 
         # List first page of versions
-        foundry aip-agents versions list ri.foundry.main.agent.abc123
+        pfoundry aip-agents versions list ri.foundry.main.agent.abc123
 
         # List all versions
-        foundry aip-agents versions list ri.foundry.main.agent.abc123 --all
+        pfoundry aip-agents versions list ri.foundry.main.agent.abc123 --all
 
         # Export all versions to CSV
-        foundry aip-agents versions list ri.foundry.main.agent.abc123 \\
+        pfoundry aip-agents versions list ri.foundry.main.agent.abc123 \\
             --all --format csv --output versions.csv
     """
     try:

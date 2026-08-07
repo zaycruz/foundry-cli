@@ -13,7 +13,7 @@ Commands for managing AIP Agents, their conversation sessions, and version histo
 Get detailed information about an AIP Agent.
 
 ```bash
-foundry aip-agents get AGENT_RID [OPTIONS]
+pfoundry aip-agents get AGENT_RID [OPTIONS]
 
 # Options:
 #   --version, -v TEXT      Agent version (e.g., '1.0') [default: latest published]
@@ -24,16 +24,16 @@ foundry aip-agents get AGENT_RID [OPTIONS]
 # Examples
 
 # Get latest published version of agent
-foundry aip-agents get ri.foundry.main.agent.abc123
+pfoundry aip-agents get ri.foundry.main.agent.abc123
 
 # Get specific version
-foundry aip-agents get ri.foundry.main.agent.abc123 --version 1.5
+pfoundry aip-agents get ri.foundry.main.agent.abc123 --version 1.5
 
 # Output as JSON
-foundry aip-agents get ri.foundry.main.agent.abc123 --format json
+pfoundry aip-agents get ri.foundry.main.agent.abc123 --format json
 
 # Save to file
-foundry aip-agents get ri.foundry.main.agent.abc123 \
+pfoundry aip-agents get ri.foundry.main.agent.abc123 \
     --format json \
     --output agent-info.json
 ```
@@ -47,7 +47,7 @@ List conversation sessions for an agent.
 **Important:** This only lists sessions created via the API. Sessions created in AIP Agent Studio will not appear.
 
 ```bash
-foundry aip-agents sessions list AGENT_RID [OPTIONS]
+pfoundry aip-agents sessions list AGENT_RID [OPTIONS]
 
 # Options:
 #   --page-size INTEGER     Number of sessions per page
@@ -60,17 +60,17 @@ foundry aip-agents sessions list AGENT_RID [OPTIONS]
 # Examples
 
 # List first page of sessions
-foundry aip-agents sessions list ri.foundry.main.agent.abc123
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123
 
 # List all sessions
-foundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
 
 # List first 3 pages with 50 sessions each
-foundry aip-agents sessions list ri.foundry.main.agent.abc123 \
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 \
     --page-size 50 --max-pages 3
 
 # Export to CSV
-foundry aip-agents sessions list ri.foundry.main.agent.abc123 \
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 \
     --all --format csv --output sessions.csv
 ```
 
@@ -79,7 +79,7 @@ foundry aip-agents sessions list ri.foundry.main.agent.abc123 \
 Get detailed information about a specific conversation session.
 
 ```bash
-foundry aip-agents sessions get AGENT_RID SESSION_RID [OPTIONS]
+pfoundry aip-agents sessions get AGENT_RID SESSION_RID [OPTIONS]
 
 # Options:
 #   --format, -f TEXT       Output format (table, json, csv)
@@ -89,12 +89,12 @@ foundry aip-agents sessions get AGENT_RID SESSION_RID [OPTIONS]
 # Examples
 
 # Get session details
-foundry aip-agents sessions get \
+pfoundry aip-agents sessions get \
     ri.foundry.main.agent.abc123 \
     ri.foundry.main.session.xyz789
 
 # Export session details to JSON
-foundry aip-agents sessions get \
+pfoundry aip-agents sessions get \
     ri.foundry.main.agent.abc123 \
     ri.foundry.main.session.xyz789 \
     --format json --output session.json
@@ -107,7 +107,7 @@ foundry aip-agents sessions get \
 List all versions for an AIP Agent. Versions are returned in descending order (most recent first).
 
 ```bash
-foundry aip-agents versions list AGENT_RID [OPTIONS]
+pfoundry aip-agents versions list AGENT_RID [OPTIONS]
 
 # Options:
 #   --page-size INTEGER     Number of versions per page
@@ -120,13 +120,13 @@ foundry aip-agents versions list AGENT_RID [OPTIONS]
 # Examples
 
 # List first page of versions
-foundry aip-agents versions list ri.foundry.main.agent.abc123
+pfoundry aip-agents versions list ri.foundry.main.agent.abc123
 
 # List all versions
-foundry aip-agents versions list ri.foundry.main.agent.abc123 --all
+pfoundry aip-agents versions list ri.foundry.main.agent.abc123 --all
 
 # Export all versions to CSV
-foundry aip-agents versions list ri.foundry.main.agent.abc123 \
+pfoundry aip-agents versions list ri.foundry.main.agent.abc123 \
     --all --format csv --output versions.csv
 ```
 
@@ -148,11 +148,11 @@ Both `sessions list` and `versions list` support pagination:
 
 ```bash
 # Fetch first 100 sessions across 2 pages of 50 each
-foundry aip-agents sessions list ri.foundry.main.agent.abc123 \
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 \
     --page-size 50 --max-pages 2
 
 # Fetch everything
-foundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
 ```
 
 ## Common Patterns
@@ -161,23 +161,23 @@ foundry aip-agents sessions list ri.foundry.main.agent.abc123 --all
 
 ```bash
 # Get agent details to understand its capabilities
-foundry aip-agents get ri.foundry.main.agent.abc123 --format json
+pfoundry aip-agents get ri.foundry.main.agent.abc123 --format json
 
 # Check available versions
-foundry aip-agents versions list ri.foundry.main.agent.abc123
+pfoundry aip-agents versions list ri.foundry.main.agent.abc123
 ```
 
 ### Export Session History
 
 ```bash
 # List all sessions and export
-foundry aip-agents sessions list ri.foundry.main.agent.abc123 \
+pfoundry aip-agents sessions list ri.foundry.main.agent.abc123 \
     --all \
     --format json \
     --output all-sessions.json
 
 # Get details for specific session
-foundry aip-agents sessions get \
+pfoundry aip-agents sessions get \
     ri.foundry.main.agent.abc123 \
     ri.foundry.main.session.xyz789 \
     --format json \
@@ -188,7 +188,7 @@ foundry aip-agents sessions get \
 
 ```bash
 # Export complete version history
-foundry aip-agents versions list ri.foundry.main.agent.abc123 \
+pfoundry aip-agents versions list ri.foundry.main.agent.abc123 \
     --all \
     --format csv \
     --output agent-versions.csv
@@ -198,10 +198,10 @@ foundry aip-agents versions list ri.foundry.main.agent.abc123 \
 
 ```bash
 # Get specific version details
-foundry aip-agents get ri.foundry.main.agent.abc123 --version 1.0 \
+pfoundry aip-agents get ri.foundry.main.agent.abc123 --version 1.0 \
     --format json --output v1.json
 
-foundry aip-agents get ri.foundry.main.agent.abc123 --version 2.0 \
+pfoundry aip-agents get ri.foundry.main.agent.abc123 --version 2.0 \
     --format json --output v2.json
 
 # Compare with diff

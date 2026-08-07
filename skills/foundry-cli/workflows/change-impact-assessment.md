@@ -19,12 +19,12 @@ It does not approve, apply, or remediate a Foundry change.
 Use the command matching the resource being changed:
 
 ```bash
-foundry dependency object-type ONTOLOGY_RID OBJECT_TYPE
-foundry dependency property ONTOLOGY_RID OBJECT_TYPE PROPERTY
-foundry dependency link-type ONTOLOGY_RID OBJECT_TYPE LINK_TYPE
-foundry dependency action-type ONTOLOGY_RID ACTION_TYPE
-foundry dependency query-type ONTOLOGY_RID QUERY_TYPE
-foundry dependency resource RESOURCE_RID
+pfoundry dependency object-type ONTOLOGY_RID OBJECT_TYPE
+pfoundry dependency property ONTOLOGY_RID OBJECT_TYPE PROPERTY
+pfoundry dependency link-type ONTOLOGY_RID OBJECT_TYPE LINK_TYPE
+pfoundry dependency action-type ONTOLOGY_RID ACTION_TYPE
+pfoundry dependency query-type ONTOLOGY_RID QUERY_TYPE
+pfoundry dependency resource RESOURCE_RID
 ```
 
 Prefer `property`, `link-type`, `action-type`, or `query-type` over a broader object/resource target when the exact target is addressable. Use `resource` for Compass-resolvable datasets and applications. Do not invent direct Function, schedule, or Workshop-variable targets; use a resolvable surrounding resource and preserve the reported gaps.
@@ -34,7 +34,7 @@ Prefer `property`, `link-type`, `action-type`, or `query-type` over a broader ob
 Describe the intended change concretely and classify it explicitly when possible:
 
 ```bash
-foundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
+pfoundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --profile "$PROFILE" \
   --branch "$BRANCH" \
   --change "rename proposalName" \
@@ -95,7 +95,7 @@ Carry the baseline artifact path and analysis ID in the implementation or review
 Rerun the same target, profile, branch, direction, depth, and budgets. Compare against the retained baseline:
 
 ```bash
-foundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
+pfoundry dependency object-type "$ONTOLOGY_RID" "$OBJECT_TYPE" \
   --profile "$PROFILE" \
   --branch "$BRANCH" \
   --change "rename proposalName" \

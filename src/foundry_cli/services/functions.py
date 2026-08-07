@@ -51,7 +51,7 @@ class FunctionsService(BaseService):
                 query, limit=limit
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to search functions: {e}")
+            raise RuntimeError(f"Failed to search functions: {self._describe_error(e)}")
 
         result = {
             **search_result,
@@ -211,7 +211,7 @@ class FunctionsService(BaseService):
             )
             return self._serialize_response(query)
         except Exception as e:
-            raise RuntimeError(f"Failed to get query '{query_api_name}': {e}")
+            raise RuntimeError(f"Failed to get query '{query_api_name}': {self._describe_error(e)}")
 
     def get_query_by_rid(
         self, query_rid: str, preview: bool = False, version: Optional[str] = None
@@ -248,7 +248,7 @@ class FunctionsService(BaseService):
             )
             return self._serialize_response(query)
         except Exception as e:
-            raise RuntimeError(f"Failed to get query {query_rid}: {e}")
+            raise RuntimeError(f"Failed to get query {query_rid}: {self._describe_error(e)}")
 
     def execute_query(
         self,
@@ -296,7 +296,7 @@ class FunctionsService(BaseService):
             )
             return self._serialize_response(result)
         except Exception as e:
-            raise RuntimeError(f"Failed to execute query '{query_api_name}': {e}")
+            raise RuntimeError(f"Failed to execute query '{query_api_name}': {self._describe_error(e)}")
 
     def execute_query_by_rid(
         self,
@@ -350,7 +350,7 @@ class FunctionsService(BaseService):
             )
             return self._serialize_response(result)
         except Exception as e:
-            raise RuntimeError(f"Failed to execute query {query_rid}: {e}")
+            raise RuntimeError(f"Failed to execute query {query_rid}: {self._describe_error(e)}")
 
     # ===== Value Type Operations =====
 
@@ -383,4 +383,4 @@ class FunctionsService(BaseService):
             value_type = self.service.ValueType.get(value_type_rid, preview=preview)
             return self._serialize_response(value_type)
         except Exception as e:
-            raise RuntimeError(f"Failed to get value type {value_type_rid}: {e}")
+            raise RuntimeError(f"Failed to get value type {value_type_rid}: {self._describe_error(e)}")

@@ -847,40 +847,40 @@ def main():
 
     Examples:
         # Get resource information by RID
-        foundry resource get ri.compass.main.dataset.xyz123
+        pfoundry resource get ri.compass.main.dataset.xyz123
 
         # Get resource information by path
-        foundry resource get-by-path "/My Organization/Project/Dataset Name"
+        pfoundry resource get-by-path "/My Organization/Project/Dataset Name"
 
         # List all resources
-        foundry resource list
+        pfoundry resource list
 
         # List resources in a specific folder
-        foundry resource list --folder-rid ri.compass.main.folder.abc456
+        pfoundry resource list --folder-rid ri.compass.main.folder.abc456
 
         # List only datasets
-        foundry resource list --type dataset
+        pfoundry resource list --type dataset
 
         # Search for resources
-        foundry resource search "sales data"
+        pfoundry resource search "sales data"
 
         # Search for datasets containing "user"
-        foundry resource search "user" --type dataset
+        pfoundry resource search "user" --type dataset
 
         # Trash operations
-        foundry resource delete ri.compass.main.dataset.xyz123
-        foundry resource restore ri.compass.main.dataset.xyz123
-        foundry resource permanently-delete ri.compass.main.dataset.xyz123
+        pfoundry resource delete ri.compass.main.dataset.xyz123
+        pfoundry resource restore ri.compass.main.dataset.xyz123
+        pfoundry resource permanently-delete ri.compass.main.dataset.xyz123
 
         # Markings operations
-        foundry resource add-markings ri.compass.main.dataset.xyz123 -m marking-id-1 -m marking-id-2
-        foundry resource remove-markings ri.compass.main.dataset.xyz123 -m marking-id-1
-        foundry resource list-markings ri.compass.main.dataset.xyz123
+        pfoundry resource add-markings ri.compass.main.dataset.xyz123 -m marking-id-1 -m marking-id-2
+        pfoundry resource remove-markings ri.compass.main.dataset.xyz123 -m marking-id-1
+        pfoundry resource list-markings ri.compass.main.dataset.xyz123
 
         # Access requirements
-        foundry resource access-requirements ri.compass.main.dataset.xyz123
+        pfoundry resource access-requirements ri.compass.main.dataset.xyz123
 
         # Batch get by path
-        foundry resource batch-get-by-path "/Org/Project/Dataset1" "/Org/Project/Dataset2"
+        pfoundry resource batch-get-by-path "/Org/Project/Dataset1" "/Org/Project/Dataset2"
     """
     pass

@@ -247,3 +247,17 @@ def test_extract_code_blocks():
         {"language": "python", "code": "x = 1"},
         {"language": "", "code": "y"},
     ]
+
+
+def test_parse_sitemap_resists_xxe():
+    """XXE payloads must not read local files or expand entities."""
+    from foundry_cli.services.documentation import DocumentationService
+
+    payload = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<!DOCTYPE urlset [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+        "<urlset><url><loc>&xxe;</loc></url></urlset>"
+    )
+    result = list(DocumentationService._parse_sitemap(payload))
+    # defusedxml raises on the entity; the parser must yield nothing, not file contents
+    assert result == []

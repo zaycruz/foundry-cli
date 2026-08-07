@@ -744,29 +744,29 @@ def main():
 
     Examples:
         # Create a project in a space
-        foundry project create "My Project" --space-rid ri.compass.main.space.xyz123
+        pfoundry project create "My Project" --space-rid ri.compass.main.space.xyz123
 
         # List all projects
-        foundry project list
+        pfoundry project list
 
         # List projects in a specific space
-        foundry project list --space-rid ri.compass.main.space.xyz123
+        pfoundry project list --space-rid ri.compass.main.space.xyz123
 
         # Get project information
-        foundry project get ri.compass.main.project.abc456
+        pfoundry project get ri.compass.main.project.abc456
 
         # Update project
-        foundry project update ri.compass.main.project.abc456 --name "Updated Name"
+        pfoundry project update ri.compass.main.project.abc456 --name "Updated Name"
 
         # Organization operations
-        foundry project add-orgs ri.compass.main.project.abc456 -o org-rid-1 -o org-rid-2
-        foundry project remove-orgs ri.compass.main.project.abc456 -o org-rid-1
-        foundry project list-orgs ri.compass.main.project.abc456
+        pfoundry project add-orgs ri.compass.main.project.abc456 -o org-rid-1 -o org-rid-2
+        pfoundry project remove-orgs ri.compass.main.project.abc456 -o org-rid-1
+        pfoundry project list-orgs ri.compass.main.project.abc456
 
         # List project templates
-        foundry project templates list
+        pfoundry project templates list
 
         # Create from template
-        foundry project create-from-template -t template-rid -v "name=MyProject" -v "desc=Description"
+        pfoundry project create-from-template -t template-rid -v "name=MyProject" -v "desc=Description"
     """
     pass

@@ -363,24 +363,24 @@ def main():
 
     Examples:
         # Create a space with required parameters
-        foundry space create "My Space" \\
+        pfoundry space create "My Space" \\
             --enrollment-rid ri.enrollment.main.enrollment.xyz123 \\
             --organization ri.compass.main.organization.abc456 \\
             --deletion-policy-org ri.compass.main.organization.abc456
 
         # List all spaces
-        foundry space list
+        pfoundry space list
 
         # List spaces in a specific organization
-        foundry space list --organization-rid ri.compass.main.organization.xyz123
+        pfoundry space list --organization-rid ri.compass.main.organization.xyz123
 
         # Get space information
-        foundry space get ri.compass.main.space.abc456
+        pfoundry space get ri.compass.main.space.abc456
 
         # Update space
-        foundry space update ri.compass.main.space.abc456 --name "Updated Name"
+        pfoundry space update ri.compass.main.space.abc456 --name "Updated Name"
 
         # Delete space
-        foundry space delete ri.compass.main.space.abc456
+        pfoundry space delete ri.compass.main.space.abc456
     """
     pass

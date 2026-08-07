@@ -51,7 +51,14 @@ def _is_object_type_not_found(error: BaseException) -> bool:
     current: Optional[BaseException] = error
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if type(current).__name__ == "ObjectTypeNotFound":
+        error_name = getattr(current, "name", None) or getattr(
+            current, "error_name", None
+        )
+        if (
+            isinstance(current, ObjectTypeNotFoundError)
+            or type(current).__name__ == "ObjectTypeNotFound"
+            or error_name == "ObjectTypeNotFound"
+        ):
             return True
         current = current.__cause__ or current.__context__
     return False
@@ -175,6 +182,7 @@ class GuardedMutationService(BaseService):
         display_name: str,
         primary_key: str,
         backing_dataset: str,
+        primary_key_backing_column: Optional[str] = None,
         description: Optional[str] = None,
         change: Optional[str] = None,
         change_type: Optional[str] = None,
@@ -223,30 +231,36 @@ class GuardedMutationService(BaseService):
             )
             gate_mode = "run"
 
-        plan = object_types.upsert_object_type(
-            ontology_rid=ontology_rid,
-            api_name=api_name,
-            display_name=display_name,
-            primary_key=primary_key,
-            backing_dataset=backing_dataset,
-            description=description,
-            apply=False,
-        )
+        upsert_kwargs: Dict[str, Any] = {
+            "ontology_rid": ontology_rid,
+            "api_name": api_name,
+            "display_name": display_name,
+            "primary_key": primary_key,
+            "backing_dataset": backing_dataset,
+            "description": description,
+            "apply": False,
+        }
+        if primary_key_backing_column is not None:
+            upsert_kwargs["primary_key_backing_column"] = primary_key_backing_column
+        plan = object_types.upsert_object_type(**upsert_kwargs)
 
         verification = impact.get("verification") or {}
         must_verify = verification.get("must_verify_before_merge") or []
+        request = {
+            "ontologyRid": ontology_rid,
+            "apiName": api_name,
+            "displayName": display_name,
+            "primaryKey": primary_key,
+            "backingDataset": backing_dataset,
+            "description": description,
+            "change": change,
+            "changeType": change_type,
+        }
+        if primary_key_backing_column is not None:
+            request["primaryKeyBackingColumn"] = primary_key_backing_column
         return {
             "operation": "object-type-guarded-upsert",
-            "request": {
-                "ontologyRid": ontology_rid,
-                "apiName": api_name,
-                "displayName": display_name,
-                "primaryKey": primary_key,
-                "backingDataset": backing_dataset,
-                "description": description,
-                "change": change,
-                "changeType": change_type,
-            },
+            "request": request,
             "preflight": preflight,
             "impact": impact,
             "plan": plan,
@@ -277,15 +291,20 @@ class GuardedMutationService(BaseService):
         """
         request = prepared.get("request") or {}
         object_types = ObjectTypeService(profile=self.profile)
-        upsert_result = object_types.upsert_object_type(
-            ontology_rid=request["ontologyRid"],
-            api_name=request["apiName"],
-            display_name=request["displayName"],
-            primary_key=request["primaryKey"],
-            backing_dataset=request["backingDataset"],
-            description=request.get("description"),
-            apply=True,
-        )
+        apply_kwargs = {
+            "ontology_rid": request["ontologyRid"],
+            "api_name": request["apiName"],
+            "display_name": request["displayName"],
+            "primary_key": request["primaryKey"],
+            "backing_dataset": request["backingDataset"],
+            "description": request.get("description"),
+            "apply": True,
+        }
+        if request.get("primaryKeyBackingColumn") is not None:
+            apply_kwargs["primary_key_backing_column"] = request[
+                "primaryKeyBackingColumn"
+            ]
+        upsert_result = object_types.upsert_object_type(**apply_kwargs)
 
         try:
             current = object_types.get_object_type(

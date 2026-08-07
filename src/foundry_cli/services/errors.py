@@ -1,6 +1,6 @@
 """Typed Foundry API errors that survive to the agent envelope.
 
-Services historically wrapped failures as ``RuntimeError(f"Failed to ...: {e}")``,
+Services historically wrapped failures as ``RuntimeError(f"Failed to ...: {self._describe_error(e)}")``,
 which flattened Foundry's structured error (errorName, errorCode,
 errorInstanceId, safe parameters) into one string. ``FoundryApiError`` keeps
 those fields so commands can hand agents an actionable error entry instead of

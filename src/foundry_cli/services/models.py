@@ -56,7 +56,7 @@ class ModelsService(BaseService):
             )
             return self._serialize_response(model)
         except Exception as e:
-            raise RuntimeError(f"Failed to create model '{name}': {e}")
+            raise RuntimeError(f"Failed to create model '{name}': {self._describe_error(e)}")
 
     def get_model(
         self,
@@ -89,7 +89,7 @@ class ModelsService(BaseService):
             )
             return self._serialize_response(model)
         except Exception as e:
-            raise RuntimeError(f"Failed to get model '{model_rid}': {e}")
+            raise RuntimeError(f"Failed to get model '{model_rid}': {self._describe_error(e)}")
 
     # ===== ModelVersion Operations =====
 
@@ -129,7 +129,7 @@ class ModelsService(BaseService):
             return self._serialize_response(version)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get model version '{model_version_rid}' for model '{model_rid}': {e}"
+                f"Failed to get model version '{model_version_rid}' for model '{model_rid}': {self._describe_error(e)}"
             )
 
     def list_model_versions(
@@ -180,5 +180,5 @@ class ModelsService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list model versions for model '{model_rid}': {e}"
+                f"Failed to list model versions for model '{model_rid}': {self._describe_error(e)}"
             )

@@ -53,7 +53,7 @@ class ResourceRoleService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to grant role '{role_name}' to {principal_type} '{principal_id}' on resource {resource_rid}: {e}"
+                f"Failed to grant role '{role_name}' to {principal_type} '{principal_id}' on resource {resource_rid}: {self._describe_error(e)}"
             )
 
     def revoke_role(
@@ -87,7 +87,7 @@ class ResourceRoleService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to revoke role '{role_name}' from {principal_type} '{principal_id}' on resource {resource_rid}: {e}"
+                f"Failed to revoke role '{role_name}' from {principal_type} '{principal_id}' on resource {resource_rid}: {self._describe_error(e)}"
             )
 
     def list_resource_roles(
@@ -130,7 +130,7 @@ class ResourceRoleService(BaseService):
                     role_grants.append(formatted)
             return role_grants
         except Exception as e:
-            raise RuntimeError(f"Failed to list roles for resource {resource_rid}: {e}")
+            raise RuntimeError(f"Failed to list roles for resource {resource_rid}: {self._describe_error(e)}")
 
     def _format_role_grant(self, role_grant: Any, resource_rid: str) -> Dict[str, Any]:
         """
@@ -163,7 +163,11 @@ class ResourceRoleService(BaseService):
         if timestamp is None:
             return None
 
-        # Handle different timestamp formats from the SDK
-        if hasattr(timestamp, "time"):
-            return str(timestamp.time)
+        # The SDK deserializes timestamps as datetime.datetime; serialize to
+        # ISO-8601. A str passes through unchanged (some SDK models return a
+        # pre-formatted string). Never fall back to a repr of a bound method.
+        if isinstance(timestamp, str):
+            return timestamp
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
         return str(timestamp)

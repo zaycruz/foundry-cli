@@ -147,7 +147,7 @@ def setup_completion_environment():
     # This is called when the CLI starts to register completion handlers
 
     # Check if we're in completion mode
-    if os.environ.get("_FOUNDRY_COMPLETE"):
+    if os.environ.get("_PFOUNDRY_COMPLETE"):
         # We're generating completions
         # Set up any necessary context
         pass
@@ -156,9 +156,9 @@ def setup_completion_environment():
 def handle_completion():
     """Handle shell completion requests."""
     # This is the main entry point for completion handling
-    # It's called when _FOUNDRY_COMPLETE environment variable is set
+    # It's called when _PFOUNDRY_COMPLETE environment variable is set
 
-    complete_var = os.environ.get("_FOUNDRY_COMPLETE")
+    complete_var = os.environ.get("_PFOUNDRY_COMPLETE")
     if not complete_var:
         return False
 

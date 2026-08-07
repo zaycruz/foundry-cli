@@ -81,16 +81,16 @@ def create_model(
     Examples:
 
         # Create a new model
-        foundry models model create "fraud-detector" \\
+        pfoundry models model create "fraud-detector" \\
             --folder ri.compass.main.folder.xxx
 
         # Create with JSON output
-        foundry models model create "recommendation-engine" \\
+        pfoundry models model create "recommendation-engine" \\
             --folder ri.compass.main.folder.xxx \\
             --format json
 
         # Save to file
-        foundry models model create "anomaly-detector" \\
+        pfoundry models model create "anomaly-detector" \\
             --folder ri.compass.main.folder.xxx \\
             --output model-info.json
     """
@@ -159,13 +159,13 @@ def get_model(
     Examples:
 
         # Get model details
-        foundry models model get ri.foundry.main.model.abc123
+        pfoundry models model get ri.foundry.main.model.abc123
 
         # Get as JSON
-        foundry models model get ri.foundry.main.model.abc123 --format json
+        pfoundry models model get ri.foundry.main.model.abc123 --format json
 
         # Save to file
-        foundry models model get ri.foundry.main.model.abc123 \\
+        pfoundry models model get ri.foundry.main.model.abc123 \\
             --format json \\
             --output model-details.json
     """
@@ -234,14 +234,14 @@ def get_version(
     Examples:
 
         # Get specific version
-        foundry models version get ri.foundry.main.model.abc123 v1.0.0
+        pfoundry models version get ri.foundry.main.model.abc123 v1.0.0
 
         # Get as JSON
-        foundry models version get ri.foundry.main.model.abc123 v1.0.0 \\
+        pfoundry models version get ri.foundry.main.model.abc123 v1.0.0 \\
             --format json
 
         # Save to file
-        foundry models version get ri.foundry.main.model.abc123 v1.0.0 \\
+        pfoundry models version get ri.foundry.main.model.abc123 v1.0.0 \\
             --format json \\
             --output version-details.json
     """
@@ -317,19 +317,19 @@ def list_versions(
     Examples:
 
         # List all versions
-        foundry models version list ri.foundry.main.model.abc123
+        pfoundry models version list ri.foundry.main.model.abc123
 
         # List with pagination
-        foundry models version list ri.foundry.main.model.abc123 \\
+        pfoundry models version list ri.foundry.main.model.abc123 \\
             --page-size 50
 
         # Get next page
-        foundry models version list ri.foundry.main.model.abc123 \\
+        pfoundry models version list ri.foundry.main.model.abc123 \\
             --page-size 50 \\
             --page-token <token-from-previous-response>
 
         # Save to file
-        foundry models version list ri.foundry.main.model.abc123 \\
+        pfoundry models version list ri.foundry.main.model.abc123 \\
             --format json \\
             --output versions.json
     """

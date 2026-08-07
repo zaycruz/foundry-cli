@@ -11,10 +11,10 @@ this CLI refuses to guess request bodies.
 ### Get Application
 
 ```bash
-foundry third-party-apps get APPLICATION_RID [--format FORMAT]
+pfoundry third-party-apps get APPLICATION_RID [--format FORMAT]
 
 # Example
-foundry third-party-apps get ri.foundry.third-party-application.main.application.abc123
+pfoundry third-party-apps get ri.foundry.third-party-application.main.application.abc123
 ```
 
 ## Dev Console Commands
@@ -22,7 +22,7 @@ foundry third-party-apps get ri.foundry.third-party-application.main.application
 ### Connect (read-only divergence)
 
 ```bash
-foundry dev-console connect APPLICATION_RID [--format FORMAT]
+pfoundry dev-console connect APPLICATION_RID [--format FORMAT]
 
 # Documented divergence from the vendor MCP: connect_to_dev_console_app is
 # an interactive IDE/workspace action with no headless equivalent, so this
@@ -32,24 +32,24 @@ foundry dev-console connect APPLICATION_RID [--format FORMAT]
 # session is established and nothing is mutated.
 
 # Example
-foundry dev-console connect ri.foundry.third-party-application.main.application.abc123
+pfoundry dev-console connect ri.foundry.third-party-application.main.application.abc123
 ```
 
 ### OSDK Definition (read-only)
 
 ```bash
-foundry dev-console osdk definition APPLICATION_RID [--version VERSION] [--format FORMAT]
+pfoundry dev-console osdk definition APPLICATION_RID [--version VERSION] [--format FORMAT]
 
 # Reads the application's generated OSDK definition.
 
 # Example
-foundry dev-console osdk definition ri.foundry.third-party-application.main.application.abc123
+pfoundry dev-console osdk definition ri.foundry.third-party-application.main.application.abc123
 ```
 
 ### SDK Generate (dry-run by default; --apply mutates)
 
 ```bash
-foundry dev-console sdk generate APPLICATION_RID [--apply] [--no-wait] [--timeout SECONDS] [--format FORMAT]
+pfoundry dev-console sdk generate APPLICATION_RID [--apply] [--no-wait] [--timeout SECONDS] [--format FORMAT]
 
 # Mints a new OSDK version from the app's current applicationVersion, backed
 # by the contract-derived, contract-verified createSdkV2 contract
@@ -74,14 +74,14 @@ foundry dev-console sdk generate APPLICATION_RID [--apply] [--no-wait] [--timeou
 # a pure regenerate from the current app version.
 
 # Examples
-foundry dev-console sdk generate ri.foundry.third-party-application.main.application.abc123
-foundry dev-console sdk generate ri.foundry.third-party-application.main.application.abc123 --apply
+pfoundry dev-console sdk generate ri.foundry.third-party-application.main.application.abc123
+pfoundry dev-console sdk generate ri.foundry.third-party-application.main.application.abc123 --apply
 ```
 
 ### SDK Install (dry-run by default)
 
 ```bash
-foundry dev-console sdk install APPLICATION_RID [--version VERSION] [--yes] [--target DIR] [--dry-run]
+pfoundry dev-console sdk install APPLICATION_RID [--version VERSION] [--yes] [--target DIR] [--dry-run]
 
 # Resolves the app's SDK repository via the verified getSdkRepositoryRid
 # endpoint and installs from the stack's Artifacts npm/pypi registry.
@@ -89,13 +89,13 @@ foundry dev-console sdk install APPLICATION_RID [--version VERSION] [--yes] [--t
 # the resolved plan (dry-run) and changes nothing.
 
 # Example
-foundry dev-console sdk install ri.foundry.third-party-application.main.application.abc123 --yes
+pfoundry dev-console sdk install ri.foundry.third-party-application.main.application.abc123 --yes
 ```
 
 ### Convert OSDK to React (local codegen)
 
 ```bash
-foundry dev-console convert-osdk-react APPLICATION_RID [--output-dir DIR] [--force]
+pfoundry dev-console convert-osdk-react APPLICATION_RID [--output-dir DIR] [--force]
 
 # Local codegen, never network-mutating: reads the app's data scope via the
 # VERIFIED TPAS getApplication endpoint and the ontology's object types via
@@ -104,7 +104,7 @@ foundry dev-console convert-osdk-react APPLICATION_RID [--output-dir DIR] [--for
 # overwritten without --force.
 
 # Example
-foundry dev-console convert-osdk-react ri.foundry.third-party-application.main.application.abc123 \
+pfoundry dev-console convert-osdk-react ri.foundry.third-party-application.main.application.abc123 \
     --output-dir ./src/components
 ```
 
@@ -112,14 +112,14 @@ foundry dev-console convert-osdk-react ri.foundry.third-party-application.main.a
 
 ```bash
 # Codegen context for the live ontology (object types, properties, links)
-foundry osdk context [--ontology ONTOLOGY_RID] [--format FORMAT]
+pfoundry osdk context [--ontology ONTOLOGY_RID] [--format FORMAT]
 
 # Real OSDK usage examples bound to the live ontology
-foundry osdk examples [--ontology ONTOLOGY_RID] [--language LANG] [--format FORMAT]
+pfoundry osdk examples [--ontology ONTOLOGY_RID] [--language LANG] [--format FORMAT]
 
 # Examples
-foundry osdk context
-foundry osdk examples --language typescript
+pfoundry osdk context
+pfoundry osdk examples --language typescript
 ```
 
 ## Platform SDK Introspection
@@ -128,12 +128,12 @@ Inspect the installed `foundry-platform-sdk` itself.
 
 ```bash
 # Every namespace, resource, and method of the installed SDK
-foundry platform-sdk api list [--format FORMAT]
+pfoundry platform-sdk api list [--format FORMAT]
 
 # Verbatim docstring/signature for one SDK API (dotted path)
-foundry platform-sdk api reference DOTTED_PATH [--format FORMAT]
+pfoundry platform-sdk api reference DOTTED_PATH [--format FORMAT]
 
 # Examples
-foundry platform-sdk api list
-foundry platform-sdk api reference ontologies.Ontology.ObjectType.list
+pfoundry platform-sdk api list
+pfoundry platform-sdk api reference ontologies.Ontology.ObjectType.list
 ```

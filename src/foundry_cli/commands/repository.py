@@ -1,6 +1,6 @@
 """
 Code repository commands (pull-request access, repository context, local
-clone, and Python-transforms repository creation).
+clone/push, and Python-transforms repository creation).
 """
 
 import os
@@ -14,6 +14,7 @@ from ..services.repository import (
     PullRequestShapeError,
     RepositoryCloneError,
     RepositoryNotFoundError,
+    RepositoryPushError,
     RepositoryService,
     RepositoryShapeError,
 )
@@ -584,6 +585,96 @@ def clone_repository(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[red]Error cloning repository: {e}[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("push")
+def push_repository(
+    repository_rid: str = typer.Argument(
+        ..., help="Repository Resource Identifier", autocompletion=complete_rid
+    ),
+    local_ref: str = typer.Argument(
+        ..., help="Fully qualified local ref (refs/heads/BRANCH)"
+    ),
+    destination_branch: str = typer.Argument(
+        ..., help="Fully qualified destination ref (refs/heads/BRANCH)"
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Push the single verified non-force refspec (default: dry-run plan only)",
+    ),
+    allow_default_branch: bool = typer.Option(
+        False,
+        "--allow-default-branch",
+        help=(
+            "Explicitly authorize a verified fast-forward push to the repository "
+            "default branch; force and non-fast-forward pushes remain prohibited"
+        ),
+    ),
+    profile: Optional[str] = typer.Option(
+        None, "--profile", "-p", help="Profile name", autocompletion=complete_profile
+    ),
+    format: str = typer.Option(
+        "table",
+        "--format",
+        "-f",
+        help="Output format (table, json, csv, agent)",
+        autocompletion=complete_output_format,
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Push one local branch to one repository branch, dry-run by default.
+
+    The command accepts only fully qualified heads refs and rejects all
+    force/delete/arbitrary-refspec forms. The default branch additionally
+    requires --allow-default-branch. A real write requires --apply. The local
+    origin, profile host, repository RID, fast-forward precondition, and
+    post-push remote tip are all verified.
+    """
+    try:
+        cache_rid(repository_rid)
+        with SpinnerProgressTracker().track_spinner(
+            f"Preparing push of {local_ref} to {destination_branch}..."
+        ):
+            service = RepositoryService(profile=profile)
+            result = service.push_repository(
+                repository_rid,
+                local_ref,
+                destination_branch,
+                apply=apply,
+                allow_default_branch=allow_default_branch,
+            )
+
+        warnings = [] if apply else [
+            "Dry-run only: no remote write was issued. Re-run with --apply to push."
+        ]
+        if agent_mode_enabled() or format == "agent":
+            buffer_agent_payload(
+                result,
+                meta={
+                    "operation": "push_code_repository_branch",
+                    "repository_rid": repository_rid,
+                    "status": result.get("status"),
+                },
+                warnings=warnings,
+            )
+        else:
+            formatter.format_output([result], format, output)
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        console.print(f"[red]Authentication error: {e}[/red]")
+        raise typer.Exit(1)
+    except (
+        RepositoryPushError,
+        RepositoryNotFoundError,
+        RepositoryShapeError,
+    ) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error pushing repository branch: {e}[/red]")
         raise typer.Exit(1)
 
 

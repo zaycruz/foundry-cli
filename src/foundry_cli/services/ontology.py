@@ -443,6 +443,15 @@ _PROPERTY_TYPE_WIRE_TYPES: Dict[str, Dict[str, Any]] = {
     "BOOLEAN": {"type": "boolean", "boolean": {}},
     "TIMESTAMP": {"type": "timestamp", "timestamp": {}},
     "DATE": {"type": "date", "date": {}},
+    "ARRAY_STRING": {
+        "type": "array",
+        "array": {
+            "subtype": {
+                "type": "string",
+                "string": {"isLongText": False, "supportsExactMatching": True},
+            }
+        },
+    },
 }
 
 # DEPRECATED is deliberately absent: DeprecatedPropertyTypeStatusModification
@@ -572,7 +581,7 @@ class OntologyService(BaseService):
                 ontologies.append(self._format_ontology_info(ontology))
             return ontologies
         except Exception as e:
-            raise RuntimeError(f"Failed to list ontologies: {e}")
+            raise RuntimeError(f"Failed to list ontologies: {self._describe_error(e)}")
 
     def get_ontology(self, ontology_rid: str) -> Dict[str, Any]:
         """
@@ -588,7 +597,7 @@ class OntologyService(BaseService):
             ontology = self.service.Ontology.get(ontology_rid)
             return self._format_ontology_info(ontology)
         except Exception as e:
-            raise RuntimeError(f"Failed to get ontology {ontology_rid}: {e}")
+            raise RuntimeError(f"Failed to get ontology {ontology_rid}: {self._describe_error(e)}")
 
     def get_ontology_rid(self) -> Dict[str, Any]:
         """
@@ -667,7 +676,7 @@ class ObjectTypeService(BaseService):
                 object_types.append(self._format_object_type_info(obj_type))
             return object_types
         except Exception as e:
-            raise RuntimeError(f"Failed to list object types: {e}")
+            raise RuntimeError(f"Failed to list object types: {self._describe_error(e)}")
 
     def get_object_type(self, ontology_rid: str, object_type: str) -> Dict[str, Any]:
         """
@@ -687,7 +696,7 @@ class ObjectTypeService(BaseService):
         except Exception as e:
             # Chain explicitly so callers (e.g. guarded upsert preflight) can
             # distinguish a typed not-found from other failures.
-            raise RuntimeError(f"Failed to get object type {object_type}: {e}") from e
+            raise RuntimeError(f"Failed to get object type {object_type}: {self._describe_error(e)}") from e
 
     def create_object_type(
         self,
@@ -736,6 +745,7 @@ class ObjectTypeService(BaseService):
         display_name: str,
         primary_key: str,
         backing_dataset: str,
+        primary_key_backing_column: Optional[str] = None,
         description: Optional[str] = None,
         apply: bool = False,
     ) -> Dict[str, Any]:
@@ -772,6 +782,7 @@ class ObjectTypeService(BaseService):
             display_name=display_name,
             primary_key=primary_key,
             backing_dataset=backing_dataset,
+            primary_key_backing_column=primary_key_backing_column,
             description=description,
         )
         plan: Dict[str, Any] = {
@@ -780,6 +791,8 @@ class ObjectTypeService(BaseService):
             "objectTypeId": object_type_id,
             "ontologyRid": ontology_rid,
         }
+        if primary_key_backing_column is not None:
+            plan["primaryKeyBackingColumn"] = primary_key_backing_column
 
         validation_errors, terminal_names = _run_dry_run_collect(
             client,
@@ -1357,7 +1370,7 @@ class ObjectTypeService(BaseService):
             return (
                 {
                     "status": "not-verified",
-                    "detail": (f"read-back via bulkLoadEntities failed: {e}"),
+                    "detail": (f"read-back via bulkLoadEntities failed: {self._describe_error(e)}"),
                 },
                 None,
             )
@@ -1889,7 +1902,7 @@ class ObjectTypeService(BaseService):
         except Exception as e:
             return {
                 "status": "not-verified",
-                "detail": (f"read-back via SDK ontologies ObjectType.get failed: {e}"),
+                "detail": (f"read-back via SDK ontologies ObjectType.get failed: {self._describe_error(e)}"),
             }
         return {
             "status": "verified",
@@ -2118,6 +2131,7 @@ class ObjectTypeService(BaseService):
         display_name: str,
         primary_key: str,
         backing_dataset: str,
+        primary_key_backing_column: Optional[str] = None,
         description: Optional[str],
     ) -> Dict[str, Any]:
         """Build the minimal contract-verified ObjectType create modification."""
@@ -2191,7 +2205,9 @@ class ObjectTypeService(BaseService):
                                 "dataset": {
                                     "datasetRid": backing_dataset,
                                     "propertyMapping": {
-                                        primary_key: primary_key,
+                                        primary_key: (
+                                            primary_key_backing_column or primary_key
+                                        ),
                                     },
                                 },
                             }
@@ -2333,7 +2349,7 @@ class ObjectTypeService(BaseService):
             )
             return self._format_link_type_side_info(link)
         except Exception as e:
-            raise RuntimeError(f"Failed to get link type {link_type}: {e}")
+            raise RuntimeError(f"Failed to get link type {link_type}: {self._describe_error(e)}")
 
     def list_outgoing_link_types(
         self, ontology_rid: str, object_type: str
@@ -2359,7 +2375,7 @@ class ObjectTypeService(BaseService):
                 link_types.append(self._format_link_type_info(link_type))
             return link_types
         except Exception as e:
-            raise RuntimeError(f"Failed to list link types: {e}")
+            raise RuntimeError(f"Failed to list link types: {self._describe_error(e)}")
 
     def _format_object_type_info(self, obj_type: Any) -> Dict[str, Any]:
         """Format object type information for consistent output."""
@@ -2429,23 +2445,23 @@ class ObjectTypeService(BaseService):
                 status_code = e.response.status_code if e.response is not None else None
                 if status_code not in (404, 405):
                     raise RuntimeError(
-                        f"Failed to create {entity_type} {entity_id}: {e}"
+                        f"Failed to create {entity_type} {entity_id}: {self._describe_error(e)}"
                     ) from e
                 last_error = e
             except RuntimeError as e:
                 if "404" in str(e) or "405" in str(e):
                     last_error = e
                     continue
-                raise RuntimeError(f"Failed to create {entity_type} {entity_id}: {e}")
+                raise RuntimeError(f"Failed to create {entity_type} {entity_id}: {self._describe_error(e)}")
             except requests.RequestException as e:
-                raise RuntimeError(f"Failed to create {entity_type} {entity_id}: {e}")
+                raise RuntimeError(f"Failed to create {entity_type} {entity_id}: {self._describe_error(e)}")
             except ValueError as e:
                 raise RuntimeError(
-                    f"Failed to parse create {entity_type} response for {entity_id}: {e}"
+                    f"Failed to parse create {entity_type} response for {entity_id}: {self._describe_error(e)}"
                 ) from e
             except Exception as e:
                 raise RuntimeError(
-                    f"Failed to create {entity_type} {entity_id}: {e}"
+                    f"Failed to create {entity_type} {entity_id}: {self._describe_error(e)}"
                 ) from e
 
         raise RuntimeError(f"Failed to create {entity_type} {entity_id}: {last_error}")
@@ -2491,7 +2507,7 @@ class OntologyObjectService(BaseService):
                 objects.append(self._format_object(obj))
             return objects
         except Exception as e:
-            raise RuntimeError(f"Failed to list objects: {e}")
+            raise RuntimeError(f"Failed to list objects: {self._describe_error(e)}")
 
     def list_objects_paginated(
         self,
@@ -2533,7 +2549,7 @@ class OntologyObjectService(BaseService):
 
             return result
         except Exception as e:
-            raise RuntimeError(f"Failed to list objects: {e}")
+            raise RuntimeError(f"Failed to list objects: {self._describe_error(e)}")
 
     def get_object(
         self,
@@ -2560,7 +2576,7 @@ class OntologyObjectService(BaseService):
             )
             return self._format_object(obj)
         except Exception as e:
-            raise RuntimeError(f"Failed to get object {primary_key}: {e}")
+            raise RuntimeError(f"Failed to get object {primary_key}: {self._describe_error(e)}")
 
     def aggregate_objects(
         self,
@@ -2593,7 +2609,7 @@ class OntologyObjectService(BaseService):
             )
             return result
         except Exception as e:
-            raise RuntimeError(f"Failed to aggregate objects: {e}")
+            raise RuntimeError(f"Failed to aggregate objects: {self._describe_error(e)}")
 
     def list_linked_objects(
         self,
@@ -2632,7 +2648,7 @@ class OntologyObjectService(BaseService):
                 objects.append(self._format_object(obj))
             return objects
         except Exception as e:
-            raise RuntimeError(f"Failed to list linked objects: {e}")
+            raise RuntimeError(f"Failed to list linked objects: {self._describe_error(e)}")
 
     def count_objects(
         self,
@@ -2665,7 +2681,7 @@ class OntologyObjectService(BaseService):
                 "branch": branch,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to count objects: {e}")
+            raise RuntimeError(f"Failed to count objects: {self._describe_error(e)}")
 
     def search_objects(
         self,
@@ -2704,7 +2720,7 @@ class OntologyObjectService(BaseService):
                 objects.append(self._format_object(obj))
             return objects
         except Exception as e:
-            raise RuntimeError(f"Failed to search objects: {e}")
+            raise RuntimeError(f"Failed to search objects: {self._describe_error(e)}")
 
     def _format_object(self, obj: Any) -> Dict[str, Any]:
         """Format object for consistent output."""
@@ -2722,6 +2738,13 @@ class OntologyObjectService(BaseService):
 
 class ActionService(BaseService):
     """Service wrapper for action operations."""
+
+    _ACTION_TYPE_CREATE_APPLY_BLOCKED = (
+        "Action type create --apply is blocked by an unverified contract: "
+        "the experimental API-name/{id,definition} wire hypothesis is "
+        "available for dry-run research only; no apply is allowed until "
+        "authoritative HTTP 200 and structured validation evidence exists."
+    )
 
     def _get_service(self) -> Any:
         """Get the Foundry ontologies service."""
@@ -2750,7 +2773,7 @@ class ActionService(BaseService):
             )
             return self._format_action_result(result)
         except Exception as e:
-            raise RuntimeError(f"Failed to apply action {action_type}: {e}")
+            raise RuntimeError(f"Failed to apply action {action_type}: {self._describe_error(e)}")
 
     def validate_action(
         self,
@@ -2778,7 +2801,7 @@ class ActionService(BaseService):
             )
             return self._format_validation_result(result)
         except Exception as e:
-            raise RuntimeError(f"Failed to validate action {action_type}: {e}")
+            raise RuntimeError(f"Failed to validate action {action_type}: {self._describe_error(e)}")
 
     def apply_batch_actions(
         self,
@@ -2808,7 +2831,7 @@ class ActionService(BaseService):
             )
             return self._format_batch_action_result(result)
         except Exception as e:
-            raise RuntimeError(f"Failed to apply batch actions: {e}")
+            raise RuntimeError(f"Failed to apply batch actions: {self._describe_error(e)}")
 
     def get_action_type(
         self,
@@ -2838,7 +2861,7 @@ class ActionService(BaseService):
             )
             return self._format_action_type_info(metadata)
         except Exception as e:
-            raise RuntimeError(f"Failed to get action type {action_type}: {e}")
+            raise RuntimeError(f"Failed to get action type {action_type}: {self._describe_error(e)}")
 
     def upsert_action_type(
         self,
@@ -2846,27 +2869,43 @@ class ActionService(BaseService):
         definition: Mapping[str, Any],
         apply: bool = False,
     ) -> Dict[str, Any]:
-        """Create an action type through the verified modifyOntology contract.
+        """Create an action type through an experimental dry-run wire hypothesis.
 
         ``definition`` is an ``ActionTypeCreate`` JSON document ( §4). It must contain
         ``apiName``, ``logic``, and at least one action-type-level entry in
-        ``validations`` — all required by Foundry. ``actionTypesToCreate``
-        and ``validations`` map keys must be UUID strings on the wire, so
-        the request key is always generated and any non-UUID ``validations``
-        keys are rewritten (``validationsOrdering`` is kept in sync).
+        ``validations`` — all required by Foundry. ``actionTypesToCreate`` is
+        keyed by the requested API name and each value carries the generated
+        UUID in ``id`` alongside a normalized definition without ``apiName``;
+        this API-name/{id,definition} wire hypothesis is not verified.
+        Any non-UUID ``validations`` keys are rewritten
+        (``validationsOrdering`` is kept in sync).
 
-        Defaults to a dry-run; ``apply=True`` issues the real modification
-        and verifies the create by reading the action type back through the
-        SDK full-metadata endpoint. Updates to existing action types go
-        through :meth:`update_action_type`.
+        Defaults to a dry-run. ``apply=True`` is rejected locally until the
+        wire contract has authoritative HTTP 200 and structured validation
+        evidence. Updates to existing action types go through
+        :meth:`update_action_type`.
         """
+        if apply:
+            raise FoundryApiError(
+                self._ACTION_TYPE_CREATE_APPLY_BLOCKED,
+                error_name="UnverifiedContract",
+            )
+
         create = self._normalize_action_type_create(definition)
         api_name = create["apiName"]
         client = _internal_client(self)
 
         id_in_request = str(uuid.uuid4())
+        definition_without_api_name = {
+            key: value for key, value in create.items() if key != "apiName"
+        }
         modification_request: Dict[str, Any] = {
-            "actionTypesToCreate": {id_in_request: create}
+            "actionTypesToCreate": {
+                api_name: {
+                    "id": id_in_request,
+                    "definition": definition_without_api_name,
+                }
+            }
         }
         plan: Dict[str, Any] = {
             "operation": "action-type-upsert",
@@ -2904,30 +2943,11 @@ class ActionService(BaseService):
                 "mode": "dry-run",
                 "validation": {"status": "error", "errors": validation_errors},
             }
-        if not apply:
-            return {
-                **plan,
-                "mode": "dry-run",
-                "validation": {"status": "success", "errors": []},
-            }
-
-        parsed = _run_modify(
-            client,
-            ontology_rid,
-            modification_request,
-            operation="action type modify",
-        )
-        created = parsed.get("createdActionTypeRids")
-        rid = created.get(id_in_request) if isinstance(created, Mapping) else None
-        result: Dict[str, Any] = {
+        return {
             **plan,
-            "mode": "applied",
+            "mode": "dry-run",
             "validation": {"status": "success", "errors": []},
-            "verification": self._verify_action_type_present(ontology_rid, api_name),
         }
-        if isinstance(rid, str):
-            result["rid"] = rid
-        return result
 
     # Patch keys supported by update_action_type. Anything else is rejected
     # client-side with the supported set, because unknown body keys are
@@ -3070,7 +3090,7 @@ class ActionService(BaseService):
                 "status": "not-verified",
                 "detail": (
                     "read-back via SDK ontologies "
-                    f"ActionTypeFullMetadata.get failed: {e}"
+                    f"ActionTypeFullMetadata.get failed: {self._describe_error(e)}"
                 ),
             }
         return result
@@ -3226,7 +3246,7 @@ class ActionService(BaseService):
                 )
             changed_fields.append("status")
 
-        write_authorization: *** = None
+        write_authorization: Optional[Dict[str, Any]] = None
         if "writeAuthorization" in patch:
             write_auth_patch = patch["writeAuthorization"]
             if not isinstance(write_auth_patch, Mapping):
@@ -3703,7 +3723,7 @@ class ActionService(BaseService):
                 "status": "not-verified",
                 "detail": (
                     "read-back via SDK ontologies "
-                    f"ActionTypeFullMetadata.get failed: {e}"
+                    f"ActionTypeFullMetadata.get failed: {self._describe_error(e)}"
                 ),
             }
         return {
@@ -3849,7 +3869,7 @@ class QueryService(BaseService):
             )
             return self._format_query_result(result)
         except Exception as e:
-            raise RuntimeError(f"Failed to execute query {query_api_name}: {e}")
+            raise RuntimeError(f"Failed to execute query {query_api_name}: {self._describe_error(e)}")
 
     def _format_query_result(self, result: Any) -> Dict[str, Any]:
         """Format query result for consistent output."""

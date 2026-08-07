@@ -37,24 +37,24 @@ class TestCompletionCommands:
         """Test showing bash completion script."""
         result = runner.invoke(completion.app, ["show", "--shell", "bash"])
         assert result.exit_code == 0
-        assert "_foundry_completion()" in result.output
+        assert "_pfoundry_completion()" in result.output
         assert "COMP_WORDS" in result.output
-        assert "complete -o nosort -F _foundry_completion foundry" in result.output
+        assert "complete -o nosort -F _pfoundry_completion pfoundry" in result.output
 
     def test_show_zsh_completion(self):
         """Test showing zsh completion script."""
         result = runner.invoke(completion.app, ["show", "--shell", "zsh"])
         assert result.exit_code == 0
-        assert "#compdef foundry" in result.output
-        assert "_foundry()" in result.output
-        assert "compdef _foundry foundry" in result.output
+        assert "#compdef pfoundry" in result.output
+        assert "_pfoundry()" in result.output
+        assert "compdef _pfoundry pfoundry" in result.output
 
     def test_show_fish_completion(self):
         """Test showing fish completion script."""
         result = runner.invoke(completion.app, ["show", "--shell", "fish"])
         assert result.exit_code == 0
-        assert "function _foundry_completion" in result.output
-        assert "complete -c foundry" in result.output
+        assert "function _pfoundry_completion" in result.output
+        assert "complete -c pfoundry" in result.output
 
     def test_show_unsupported_shell(self):
         """Test showing completion for unsupported shell."""
@@ -67,21 +67,21 @@ class TestCompletionCommands:
         """Test auto-detection of bash shell."""
         result = runner.invoke(completion.app, ["show"])
         assert result.exit_code == 0
-        assert "_foundry_completion()" in result.output  # Bash script
+        assert "_pfoundry_completion()" in result.output  # Bash script
 
     @patch.dict(os.environ, {"SHELL": "/usr/bin/zsh"})
     def test_auto_detect_zsh_shell(self):
         """Test auto-detection of zsh shell."""
         result = runner.invoke(completion.app, ["show"])
         assert result.exit_code == 0
-        assert "#compdef foundry" in result.output  # Zsh script
+        assert "#compdef pfoundry" in result.output  # Zsh script
 
     @patch.dict(os.environ, {"SHELL": "/usr/local/bin/fish"})
     def test_auto_detect_fish_shell(self):
         """Test auto-detection of fish shell."""
         result = runner.invoke(completion.app, ["show"])
         assert result.exit_code == 0
-        assert "function _foundry_completion" in result.output  # Fish script
+        assert "function _pfoundry_completion" in result.output  # Fish script
 
     @patch.dict(os.environ, {}, clear=True)
     def test_no_shell_detection(self):
@@ -93,20 +93,20 @@ class TestCompletionCommands:
     def test_install_with_custom_path(self):
         """Test installing completion with custom path."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            custom_path = Path(tmpdir) / "completions" / "foundry_cli.bash"
+            custom_path = Path(tmpdir) / "completions" / "pfoundry.bash"
             result = runner.invoke(
                 completion.app,
                 ["install", "--shell", "bash", "--path", str(custom_path)],
             )
             assert result.exit_code == 0
             assert custom_path.exists()
-            assert "_foundry_completion()" in custom_path.read_text()
+            assert "_pfoundry_completion()" in custom_path.read_text()
 
     def test_uninstall_nonexistent(self):
         """Test uninstalling when no completion file exists."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Mock get_default_completion_path to return a temp path
-            mock_path = Path(tmpdir) / "foundry_cli.bash"
+            mock_path = Path(tmpdir) / "pfoundry.bash"
             with patch.object(
                 completion, "get_default_completion_path", return_value=mock_path
             ):
@@ -118,7 +118,7 @@ class TestCompletionCommands:
         """Test uninstalling existing completion file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a mock completion file
-            mock_path = Path(tmpdir) / "foundry_cli.bash"
+            mock_path = Path(tmpdir) / "pfoundry.bash"
             mock_path.write_text("# completion script")
 
             with patch.object(
@@ -252,7 +252,7 @@ class TestCompletionFunctions:
 
         # Zsh path
         zsh_path = completion.get_default_completion_path("zsh")
-        assert ".zfunc" in str(zsh_path) or "_foundry" in str(zsh_path)
+        assert ".zfunc" in str(zsh_path) or "_pfoundry" in str(zsh_path)
 
         # Fish path
         fish_path = completion.get_default_completion_path("fish")

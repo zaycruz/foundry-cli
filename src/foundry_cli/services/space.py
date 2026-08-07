@@ -52,7 +52,7 @@ class SpaceService(BaseService):
             )
             return self._format_space_info(space)
         except Exception as e:
-            raise RuntimeError(f"Failed to create space '{display_name}': {e}")
+            raise RuntimeError(f"Failed to create space '{display_name}': {self._describe_error(e)}")
 
     def get_space(self, space_rid: str) -> Dict[str, Any]:
         """
@@ -68,7 +68,7 @@ class SpaceService(BaseService):
             space = self.service.Space.get(space_rid, preview=True)
             return self._format_space_info(space)
         except Exception as e:
-            raise RuntimeError(f"Failed to get space {space_rid}: {e}")
+            raise RuntimeError(f"Failed to get space {space_rid}: {self._describe_error(e)}")
 
     def list_spaces(
         self,
@@ -89,7 +89,7 @@ class SpaceService(BaseService):
         """
         try:
             spaces = []
-            list_params: Dict[str, Any] = {"preview": True}
+            list_params: Dict[str, Any] = {}
 
             if organization_rid:
                 list_params["organization_rid"] = organization_rid
@@ -103,7 +103,7 @@ class SpaceService(BaseService):
                 spaces.append(self._format_space_info(space))
             return spaces
         except Exception as e:
-            raise RuntimeError(f"Failed to list spaces: {e}")
+            raise RuntimeError(f"Failed to list spaces: {self._describe_error(e)}")
 
     def update_space(
         self,
@@ -144,7 +144,7 @@ class SpaceService(BaseService):
             )
             return self._format_space_info(space)
         except Exception as e:
-            raise RuntimeError(f"Failed to update space {space_rid}: {e}")
+            raise RuntimeError(f"Failed to update space {space_rid}: {self._describe_error(e)}")
 
     def delete_space(self, space_rid: str) -> None:
         """
@@ -159,7 +159,7 @@ class SpaceService(BaseService):
         try:
             self.service.Space.delete(space_rid, preview=True)
         except Exception as e:
-            raise RuntimeError(f"Failed to delete space {space_rid}: {e}")
+            raise RuntimeError(f"Failed to delete space {space_rid}: {self._describe_error(e)}")
 
     def _format_space_info(self, space: Any) -> Dict[str, Any]:
         """
@@ -202,7 +202,11 @@ class SpaceService(BaseService):
         if timestamp is None:
             return None
 
-        # Handle different timestamp formats from the SDK
-        if hasattr(timestamp, "time"):
-            return str(timestamp.time)
+        # The SDK deserializes timestamps as datetime.datetime; serialize to
+        # ISO-8601. A str passes through unchanged (some SDK models return a
+        # pre-formatted string). Never fall back to a repr of a bound method.
+        if isinstance(timestamp, str):
+            return timestamp
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
         return str(timestamp)

@@ -72,7 +72,7 @@ class StreamsService(BaseService):
             )
             return self._serialize_response(dataset)
         except Exception as e:
-            raise RuntimeError(f"Failed to create streaming dataset '{name}': {e}")
+            raise RuntimeError(f"Failed to create streaming dataset '{name}': {self._describe_error(e)}")
 
     # ===== Stream Operations =====
 
@@ -128,7 +128,7 @@ class StreamsService(BaseService):
             return self._serialize_response(stream)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to create stream on branch '{branch_name}': {e}"
+                f"Failed to create stream on branch '{branch_name}': {self._describe_error(e)}"
             )
 
     def get_stream(
@@ -164,7 +164,7 @@ class StreamsService(BaseService):
             return self._serialize_response(stream)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get stream on branch '{stream_branch_name}': {e}"
+                f"Failed to get stream on branch '{stream_branch_name}': {self._describe_error(e)}"
             )
 
     def publish_record(
@@ -205,7 +205,7 @@ class StreamsService(BaseService):
                 preview=preview,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to publish record to stream: {e}")
+            raise RuntimeError(f"Failed to publish record to stream: {self._describe_error(e)}")
 
     def publish_records(
         self,
@@ -250,7 +250,7 @@ class StreamsService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to publish {len(records)} records to stream: {e}"
+                f"Failed to publish {len(records)} records to stream: {self._describe_error(e)}"
             )
 
     def reset_stream(
@@ -286,5 +286,5 @@ class StreamsService(BaseService):
             return self._serialize_response(stream)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to reset stream on branch '{stream_branch_name}': {e}"
+                f"Failed to reset stream on branch '{stream_branch_name}': {self._describe_error(e)}"
             )

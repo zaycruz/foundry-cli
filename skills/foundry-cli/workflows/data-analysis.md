@@ -6,19 +6,19 @@ Common patterns for data exploration and analysis with foundry-cli.
 
 ```bash
 # 1. List ontologies to understand data structure
-foundry ontology list
+pfoundry ontology list
 
 # 2. Explore specific ontology
-foundry ontology get ri.ontology.main.ontology.abc123
+pfoundry ontology get ri.ontology.main.ontology.abc123
 
 # 3. See available object types
-foundry ontology object-type-list ri.ontology.main.ontology.abc123
+pfoundry ontology object-type-list ri.ontology.main.ontology.abc123
 
 # 4. Check current user permissions
-foundry admin user current
+pfoundry admin user current
 
 # 5. Search recent builds to understand activity
-foundry orchestration builds search
+pfoundry orchestration builds search
 ```
 
 ## SQL-Based Analysis
@@ -27,16 +27,16 @@ foundry orchestration builds search
 
 ```bash
 # 1. Test connectivity with simple query
-foundry sql execute "SELECT 1 as test"
+pfoundry sql execute "SELECT 1 as test"
 
 # 2. Explore data structure
-foundry sql execute "DESCRIBE my_dataset"
+pfoundry sql execute "DESCRIBE my_dataset"
 
 # 3. Sample data
-foundry sql execute "SELECT * FROM my_dataset LIMIT 10"
+pfoundry sql execute "SELECT * FROM my_dataset LIMIT 10"
 
 # 4. Run analysis and export
-foundry sql execute "
+pfoundry sql execute "
   SELECT category,
          COUNT(*) as total_count,
          AVG(value) as avg_value
@@ -55,10 +55,10 @@ QUERY_ID=$(foundry sql submit "SELECT * FROM huge_dataset WHERE complex_conditio
 echo "Query ID: $QUERY_ID"
 
 # Check status
-foundry sql status $QUERY_ID
+pfoundry sql status $QUERY_ID
 
 # Wait for results
-foundry sql wait $QUERY_ID --format csv --output results.csv
+pfoundry sql wait $QUERY_ID --format csv --output results.csv
 ```
 
 ### Parallel Query Execution
@@ -70,9 +70,9 @@ Q2=$(foundry sql submit "SELECT * FROM table2")
 Q3=$(foundry sql submit "SELECT * FROM table3")
 
 # Wait for all in parallel
-foundry sql wait $Q1 --output results1.csv &
-foundry sql wait $Q2 --output results2.csv &
-foundry sql wait $Q3 --output results3.csv &
+pfoundry sql wait $Q1 --output results1.csv &
+pfoundry sql wait $Q2 --output results2.csv &
+pfoundry sql wait $Q3 --output results3.csv &
 wait
 ```
 
@@ -82,24 +82,24 @@ wait
 ONTOLOGY="ri.ontology.main.ontology.abc123"
 
 # 1. Explore object types
-foundry ontology object-type-list $ONTOLOGY
+pfoundry ontology object-type-list $ONTOLOGY
 
 # 2. Get object type details
-foundry ontology object-type-get $ONTOLOGY Employee
+pfoundry ontology object-type-get $ONTOLOGY Employee
 
 # 3. List objects with specific properties
-foundry ontology object-list $ONTOLOGY Employee \
+pfoundry ontology object-list $ONTOLOGY Employee \
   --properties "name,department,startDate" \
   --format json --output employees.json
 
 # 4. Get specific object
-foundry ontology object-get $ONTOLOGY Employee "john.doe"
+pfoundry ontology object-get $ONTOLOGY Employee "john.doe"
 
 # 5. Find linked objects
-foundry ontology object-linked $ONTOLOGY Employee "john.doe" worksOn
+pfoundry ontology object-linked $ONTOLOGY Employee "john.doe" worksOn
 
 # 6. Aggregate data
-foundry ontology object-aggregate $ONTOLOGY Employee \
+pfoundry ontology object-aggregate $ONTOLOGY Employee \
   '{"count": "count", "avg_salary": "avg"}' \
   --group-by department \
   --format csv --output department_stats.csv
@@ -111,29 +111,29 @@ foundry ontology object-aggregate $ONTOLOGY Employee \
 DATASET="ri.foundry.main.dataset.abc123"
 
 # Get dataset info
-foundry dataset get $DATASET
+pfoundry dataset get $DATASET
 
 # List branches
-foundry dataset branches list $DATASET
+pfoundry dataset branches list $DATASET
 
 # List files
-foundry dataset files list $DATASET
+pfoundry dataset files list $DATASET
 
 # Get schema
-foundry dataset schema get $DATASET
+pfoundry dataset schema get $DATASET
 
 # Preview data
-foundry dataset preview $DATASET --limit 10
+pfoundry dataset preview $DATASET --limit 10
 
 # Download specific file
-foundry dataset files get $DATASET "/data/results.csv" "./local_results.csv"
+pfoundry dataset files get $DATASET "/data/results.csv" "./local_results.csv"
 ```
 
 ## Time Series Analysis
 
 ```bash
 # Daily trends (last 30 days)
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     DATE(timestamp) as date,
     COUNT(*) as daily_count,
@@ -145,7 +145,7 @@ foundry sql execute "
 " --format csv --output daily_trends.csv
 
 # Weekly aggregation
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     YEAR(timestamp) as year,
     WEEK(timestamp) as week,
@@ -161,7 +161,7 @@ foundry sql execute "
 
 ```bash
 # User registration cohorts
-foundry sql execute "
+pfoundry sql execute "
   SELECT
     DATE_FORMAT(registration_date, '%Y-%m') as cohort_month,
     COUNT(*) as cohort_size
@@ -171,7 +171,7 @@ foundry sql execute "
 "
 
 # Retention analysis
-foundry sql execute "
+pfoundry sql execute "
   WITH cohorts AS (
     SELECT
       user_id,
@@ -196,7 +196,7 @@ foundry sql execute "
 Use shell mode for exploratory work:
 
 ```bash
-foundry shell start --profile production
+pfoundry shell start --profile production
 
 # In shell:
 foundry> admin user current

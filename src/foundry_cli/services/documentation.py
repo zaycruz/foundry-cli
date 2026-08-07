@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from typing import Any, Callable, Iterable, Mapping, Optional
 from urllib.parse import urlparse
 
@@ -474,7 +474,9 @@ class DocumentationService:
     def _parse_sitemap(body: str) -> Iterable[str]:
         try:
             root = ET.fromstring(body)
-        except ET.ParseError:
+        except (ET.ParseError, ValueError):
+            # ValueError covers defusedxml's EntitiesForbidden/DefusedXmlException,
+            # which reject XXE and entity-expansion payloads before parsing.
             return []
         return [
             element.text

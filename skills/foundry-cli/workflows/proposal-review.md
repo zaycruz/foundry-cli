@@ -4,8 +4,8 @@ Reviewing and merging changes through Foundry proposals: code repository pull re
 
 Capability reality of this install:
 
-- The unified `foundry proposal` group works for code-pr `create`/`list`/`get`/`comment`/`close` (via `RepositoryService`) and global-proposal `create`/`get`/`close` (via `GlobalProposalService`). `create` and `comment` are dry-run plan by default; `--apply` executes.
-- The type-specific groups (`foundry repository pull-request`, `foundry global-proposal`, `foundry global-branch`) expose the same operations plus extras (repository context/clone, branch management) and remain the better path for deep inspection.
+- The unified `pfoundry proposal` group works for code-pr `create`/`list`/`get`/`comment`/`close` (via `RepositoryService`) and global-proposal `create`/`get`/`close` (via `GlobalProposalService`). `create` and `comment` are dry-run plan by default; `--apply` executes.
+- The type-specific groups (`pfoundry repository pull-request`, `pfoundry global-proposal`, `pfoundry global-branch`) expose the same operations plus extras (repository context/clone, branch management) and remain the better path for deep inspection.
 - Still fail-closed with exit 6 `unsupported-capability`: code-pr `approve`/`request-changes`/`merge`, and global-proposal `list`/`comment`/`approve`/`request-changes`/`merge`/`accept`. Document these as gaps; never claim such an action succeeded. Leads for unblocking them are tracked in `tickets/`.
 
 ## Contract
@@ -26,22 +26,22 @@ Code PRs are listed and addressed by pull-request RID; Global Proposals are load
 
 ```bash
 # Code PRs: list across repositories (a repository RID filters client-side)
-foundry repository pull-request list --profile "$PROFILE"
-foundry repository pull-request list ri.stemma.main.repository.abc123 \
+pfoundry repository pull-request list --profile "$PROFILE"
+pfoundry repository pull-request list ri.stemma.main.repository.abc123 \
   --profile "$PROFILE" --format json
 
 # Global Proposals: no list endpoint exists; the RID must come from the
 # operator, the Foundry UI, or a prior create. Format note: DOUBLE DOT.
-foundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
+pfoundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
   --profile "$PROFILE"
 ```
 
 The unified facade works for reads (the type-specific group is still preferred for inspection depth):
 
 ```bash
-foundry proposal list code-pr ri.stemma.main.repository.abc123 \
+pfoundry proposal list code-pr ri.stemma.main.repository.abc123 \
   --profile "$PROFILE" --format json
-foundry proposal get code-pr 123 --parent-rid ri.stemma.main.repository.abc123
+pfoundry proposal get code-pr 123 --parent-rid ri.stemma.main.repository.abc123
 ```
 
 ## Phase 2: Inspect the changes (read-only)
@@ -50,30 +50,30 @@ For a code PR, read the PR record, then the repository context, and clone for a 
 
 ```bash
 # PR metadata: title, status, author, head/base refs
-foundry repository pull-request get ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request get ri.pull-request.main.pull-request.abc123 \
   --profile "$PROFILE" --format json
 
 # Repository context: metadata, default branch, refs, file tree at a ref.
 # Note: stemma silently falls back to the default branch for unresolvable
 # refs -- confirm the returned ref matches what you asked for.
-foundry repository context ri.stemma.main.repository.abc123 \
+pfoundry repository context ri.stemma.main.repository.abc123 \
   --ref refs/heads/feat/x --profile "$PROFILE"
 
 # Local inspection: plan first, then clone the head branch and diff locally
-foundry repository clone ri.stemma.main.repository.abc123 ./review-abc123 --dry-run
-foundry repository clone ri.stemma.main.repository.abc123 ./review-abc123 \
+pfoundry repository clone ri.stemma.main.repository.abc123 ./review-abc123 --dry-run
+pfoundry repository clone ri.stemma.main.repository.abc123 ./review-abc123 \
   --branch feat/x
 git -C ./review-abc123 diff master...HEAD
 ```
 
-`foundry repository clone` injects the profile bearer token via an environment-injected `http.extraHeader`; the token is never printed, never on the command line, and never persisted in the clone's config, so later fetches need fresh credentials. The clone refuses a non-empty target without `--force`.
+`pfoundry repository clone` injects the profile bearer token via an environment-injected `http.extraHeader`; the token is never printed, never on the command line, and never persisted in the clone's config, so later fetches need fresh credentials. The clone refuses a non-empty target without `--force`.
 
 For a Global Proposal, load the proposal and its backing branch:
 
 ```bash
-foundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
+pfoundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
   --profile "$PROFILE" --format json
-foundry global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024 \
+pfoundry global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024 \
   --profile "$PROFILE" --format json
 ```
 
@@ -87,12 +87,12 @@ Commenting works on code PRs and is dry-run by default:
 
 ```bash
 # Dry-run plan: prints the exact intended POST body, writes nothing
-foundry repository pull-request comment ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request comment ri.pull-request.main.pull-request.abc123 \
   "Transform drops null handling for order_id; see impact artifact." \
   --profile "$PROFILE"
 
 # Real comment
-foundry repository pull-request comment ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request comment ri.pull-request.main.pull-request.abc123 \
   "Transform drops null handling for order_id; see impact artifact." \
   --apply --profile "$PROFILE"
 ```
@@ -100,7 +100,7 @@ foundry repository pull-request comment ri.pull-request.main.pull-request.abc123
 Approve and request-changes are unsupported-capability today. Record the review verdict as a comment instead, and state plainly in the output that no formal approval was recorded:
 
 ```bash
-foundry proposal approve code-pr 123 \
+pfoundry proposal approve code-pr 123 \
   --parent-rid ri.stemma.main.repository.abc123 --message "lgtm"
 # -> unsupported-capability (gap; no approval recorded)
 ```
@@ -109,18 +109,18 @@ Closing a code PR without merging is destructive and plan-first; the PR is read 
 
 ```bash
 # Dry-run plan of the exact PUT body
-foundry repository pull-request close ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request close ri.pull-request.main.pull-request.abc123 \
   --profile "$PROFILE"
 
 # Real close requires both flags
-foundry repository pull-request close ri.pull-request.main.pull-request.abc123 \
+pfoundry repository pull-request close ri.pull-request.main.pull-request.abc123 \
   --apply --yes --profile "$PROFILE"
 ```
 
 ## Phase 5: Merge or accept (gated; mostly unavailable)
 
-- Code PR merge: `foundry proposal merge code-pr ... --yes` returns `unsupported-capability` today. There is no working merge command in this install; the merge must happen outside the CLI (Foundry UI). Report this gap; do not treat a close as a merge.
-- Global Proposal accept: `foundry proposal accept global-proposal ... --yes` returns `unsupported-capability` today. Same rule.
+- Code PR merge: `pfoundry proposal merge code-pr ... --yes` returns `unsupported-capability` today. There is no working merge command in this install; the merge must happen outside the CLI (Foundry UI). Report this gap; do not treat a close as a merge.
+- Global Proposal accept: `pfoundry proposal accept global-proposal ... --yes` returns `unsupported-capability` today. Same rule.
 
 When a merge or accept happened outside the CLI, verify the result by re-reading the PR or proposal state before reporting completion.
 
@@ -130,15 +130,15 @@ Closing a Global Proposal discards it without merging. Plan-first; the real clos
 
 ```bash
 # Dry-run plan, no network request
-foundry global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
+pfoundry global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
   --profile "$PROFILE"
 
 # Real close
-foundry global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
+pfoundry global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 \
   --apply --yes --profile "$PROFILE"
 ```
 
-The unified `foundry proposal close` facade returns `unsupported-capability`; use the type-specific command above.
+The unified `pfoundry proposal close` facade returns `unsupported-capability`; use the type-specific command above.
 
 ## Output Format
 
@@ -155,7 +155,7 @@ Report:
 
 - Merging or closing before running the change-impact gate
 - Claiming an approval, merge, or accept succeeded when the command returned `unsupported-capability`
-- Using `foundry proposal close` or `foundry repository pull-request close` as a substitute for a merge
+- Using `pfoundry proposal close` or `pfoundry repository pull-request close` as a substitute for a merge
 - Skipping the dry-run plan and going straight to `--apply` / `--apply --yes`
 - Treating a closed PR or proposal as merged; close discards
 - Guessing a Global Proposal RID because no list endpoint exists; obtain the real RID first

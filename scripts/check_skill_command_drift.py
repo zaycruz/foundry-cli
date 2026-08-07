@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REFERENCE_DIR = PROJECT_ROOT / "skills" / "foundry-cli" / "reference"
 TOKEN_RE = re.compile(r""""[^"]*"|'[^']*'|`[^`]*`|[^\s]+""")
-FOUNDRY_RE = re.compile(r"(?<![\w-])foundry\b(?P<rest>[^\n`]*)")
+FOUNDRY_RE = re.compile(r"(?<![\w-])pfoundry\b(?P<rest>[^\n`]*)")
 COMMAND_TOKEN_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 
@@ -62,7 +62,7 @@ def load_manifest(path: Path) -> frozenset[str]:
     if not path.is_file():
         raise DriftCheckError(
             f"Manifest file not found: {path}. "
-            "Run `uv run foundry agent-manifest` or pass --manifest PATH."
+            "Run `uv run pfoundry agent-manifest` or pass --manifest PATH."
         )
 
     try:
@@ -79,7 +79,7 @@ def load_manifest(path: Path) -> frozenset[str]:
 def load_manifest_from_cli(project_root: Path = PROJECT_ROOT) -> frozenset[str]:
     """Load every visible executable command from the live CLI tree.
 
-    `foundry agent-manifest` contains only typed commands that are safe for
+    `pfoundry agent-manifest` contains only typed commands that are safe for
     dynamic agent-tool registration. The skill reference covers the complete
     CLI, so its drift gate must inspect the complete Click surface instead.
     """

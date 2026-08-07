@@ -132,7 +132,7 @@ def command_path_from_argv(
     args: Sequence[str],
     command_paths: Iterable[Sequence[str]],
 ) -> str:
-    """Resolve the user-facing ``foundry ...`` command path from argv."""
+    """Resolve the user-facing ``pfoundry ...`` command path from argv."""
     remaining = list(args)
     while remaining and remaining[0].startswith("-"):
         remaining.pop(0)
@@ -140,9 +140,9 @@ def command_path_from_argv(
     for path in sorted(command_paths, key=len, reverse=True):
         normalized_path = tuple(path)
         if tuple(remaining[: len(normalized_path)]) == normalized_path:
-            return "foundry " + " ".join(normalized_path)
+            return "pfoundry " + " ".join(normalized_path)
 
-    return "foundry"
+    return "pfoundry"
 
 
 def _create_langfuse_client(
@@ -212,7 +212,7 @@ class LangfuseTracer:
         try:
             observation_context = self.client.start_as_current_observation(
                 as_type="span",
-                name="foundry.command",
+                name="pfoundry.command",
                 input={
                     "command_path": command_path,
                     "args": redact_args(args, secret_values=self.secret_values),

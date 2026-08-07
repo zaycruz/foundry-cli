@@ -233,7 +233,7 @@ def get_schema(
         formatter.print_warning(
             "Note: This command requires API preview access. "
             "If you example an 'ApiFeaturePreviewUsageOnly' error, "
-            "use 'foundry dataset schema apply' instead to infer/apply schema."
+            "use 'pfoundry dataset schema apply' instead to infer/apply schema."
         )
 
         with SpinnerProgressTracker().track_spinner(
@@ -261,7 +261,7 @@ def get_schema(
         if "ApiFeaturePreviewUsageOnly" in str(e):
             formatter.print_error(
                 "This command requires API preview access. "
-                "Please use 'foundry dataset schema apply' instead."
+                "Please use 'pfoundry dataset schema apply' instead."
             )
         else:
             formatter.print_error(f"Failed to get schema: {e}")
@@ -889,13 +889,13 @@ def list_files(
 
     Examples:
         # List first page of files (default)
-        foundry dataset files list DATASET_RID
+        pfoundry dataset files list DATASET_RID
 
         # List all files
-        foundry dataset files list DATASET_RID --all
+        pfoundry dataset files list DATASET_RID --all
 
         # List first 3 pages
-        foundry dataset files list DATASET_RID --max-pages 3
+        pfoundry dataset files list DATASET_RID --max-pages 3
     """
     try:
         cache_rid(dataset_rid)
@@ -1196,13 +1196,13 @@ def start_transaction(
         if transaction_rid != "unknown":
             formatter.print_info("\nNext steps:")
             formatter.print_info(
-                f"  Upload files: foundry dataset files upload <file-path> {dataset_rid} --transaction-rid {transaction_rid}"
+                f"  Upload files: pfoundry dataset files upload <file-path> {dataset_rid} --transaction-rid {transaction_rid}"
             )
             formatter.print_info(
-                f"  Commit: foundry dataset transactions commit {dataset_rid} {transaction_rid}"
+                f"  Commit: pfoundry dataset transactions commit {dataset_rid} {transaction_rid}"
             )
             formatter.print_info(
-                f"  Abort: foundry dataset transactions abort {dataset_rid} {transaction_rid}"
+                f"  Abort: pfoundry dataset transactions abort {dataset_rid} {transaction_rid}"
             )
 
     except (ProfileNotFoundError, MissingCredentialsError) as e:

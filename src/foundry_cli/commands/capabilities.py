@@ -17,7 +17,7 @@ from ..utils.agent_output import (
 
 app = typer.Typer(
     help="Score this CLI against Palantir's MCP tool catalog "
-    "(parity, not the command list -- use `foundry agent-manifest` for that)"
+    "(parity, not the command list -- use `pfoundry agent-manifest` for that)"
 )
 console = Console()
 
@@ -104,7 +104,7 @@ def capabilities(
     marked implemented (a real CLI command exists), planned (a genuine gap),
     blocked (the SDK cannot do it), or unsupported (out of scope for a Foundry
     CLI -- documentation, SDK codegen, dev-console). To discover the commands
-    themselves, run `foundry agent-manifest`.
+    themselves, run `pfoundry agent-manifest`.
     """
     if ctx.invoked_subcommand is not None:
         return

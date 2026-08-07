@@ -352,6 +352,39 @@ def test_upsert_object_type_dry_run_is_the_default(mock_object_type_service):
         assert "/modify/dry-run" in call.args[1]
 
 
+def test_upsert_object_type_maps_primary_key_to_explicit_backing_column(
+    mock_object_type_service,
+):
+    """A normalized primary-key API name may map to a physical source column."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="facility_id",
+            backing_dataset="ri.foundry.main.dataset.example",
+            primary_key_backing_column="FACILITY_ID",
+        )
+
+    assert result["primaryKeyBackingColumn"] == "FACILITY_ID"
+    request = mock_client.conjure.call_args_list[1].kwargs["json_body"]
+    datasource = request["modificationRequest"]["objectTypeDatasources"]
+    mapping = datasource["ns0abcde.example-object"][0]["create"]
+    mapping = mapping["objectTypeDatasourceDefinition"]["dataset"]["propertyMapping"]
+    assert mapping == {"facility_id": "FACILITY_ID"}
+
+
 def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
     """Applied upserts modify and then read the object type back via SDK."""
     service, mock_object_type_class = mock_object_type_service
@@ -1148,7 +1181,7 @@ def test_action_type_create_normalization_requires_fields(missing_key):
 
 
 def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
-    """Action upsert validates with UUID keys and stops before modify."""
+    """Dry-run sends the council-approved create envelope and stops before modify."""
     service, _ = mock_action_service
     service.profile = "test-profile"
     mock_client = Mock()
@@ -1156,9 +1189,17 @@ def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
         (200, {"type": "success", "success": {}}, '{"type":"success"}'),
     ]
 
-    with patch(
-        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
-        return_value=mock_client,
+    validation_id = uuid.UUID("00000000-0000-0000-0000-0000000000d2")
+    request_id = uuid.UUID("00000000-0000-0000-0000-0000000000d3")
+    with (
+        patch(
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch(
+            "foundry_cli.services.ontology.uuid.uuid4",
+            side_effect=[validation_id, request_id],
+        ),
     ):
         result = service.upsert_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
@@ -1167,44 +1208,45 @@ def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
 
     assert result["mode"] == "dry-run"
     assert result["apiName"] == "foundry-test-action"
-    modification_request = mock_client.conjure.call_args.kwargs["json_body"][
-        "modificationRequest"
-    ]
-    (request_key,) = modification_request["actionTypesToCreate"].keys()
-    uuid.UUID(request_key)  # keys must be UUID strings on the wire
+    modification_request = mock_client.conjure.call_args.kwargs["json_body"]["modificationRequest"]
+    expected = _action_type_definition()
+    expected.pop("apiName")
+    expected["validations"] = {str(validation_id): expected["validations"].pop("always")}
+    expected["validationsOrdering"] = [str(validation_id)]
+    assert modification_request == {
+        "actionTypesToCreate": {
+            "foundry-test-action": {
+                "id": str(request_id),
+                "definition": expected,
+            }
+        }
+    }
+    assert "apiName" not in modification_request["actionTypesToCreate"][
+        "foundry-test-action"
+    ]["definition"]
     assert mock_client.conjure.call_count == 1
 
 
 def test_upsert_action_type_apply_verifies_read_back(mock_action_service):
-    """An applied action create reads the action type back via the SDK."""
+    """Apply is rejected before the real modify endpoint can be reached."""
     service, _ = mock_action_service
     service.profile = "test-profile"
     mock_client = Mock()
-    mock_client.conjure.side_effect = [
-        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
-        (200, {"createdActionTypeRids": {}}, "{}"),
-    ]
 
     with (
         patch(
             "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
-        patch.object(
-            ActionService, "get_action_type", return_value={"rid": "ri.x"}
-        ) as mock_get,
+        pytest.raises(FoundryApiError, match="unverified contract"),
     ):
-        result = service.upsert_action_type(
+        service.upsert_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
             definition=_action_type_definition(),
             apply=True,
         )
 
-    assert result["mode"] == "applied"
-    assert result["verification"]["status"] == "verified"
-    mock_get.assert_called_once_with(
-        "ri.ontology.main.ontology.test", "foundry-test-action"
-    )
+    mock_client.conjure.assert_not_called()
 
 
 def test_delete_action_type_resolves_rid_and_verifies_gone(mock_action_service):

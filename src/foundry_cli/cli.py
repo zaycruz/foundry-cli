@@ -65,7 +65,7 @@ from foundry_cli.commands.cp import cp_command
 from foundry_cli.commands.search import search_command
 
 app = typer.Typer(
-    name="foundry",
+    name="pfoundry",
     help="Command-line interface for Palantir Foundry APIs",
     no_args_is_help=True,
 )
@@ -215,7 +215,7 @@ app.command("cp", help="Copy datasets or folders into another Compass folder")(
 def version_callback(value: bool):
     """Show version and exit."""
     if value:
-        typer.echo(f"foundry {__version__}")
+        typer.echo(f"pfoundry {__version__}")
         raise typer.Exit()
 
 
@@ -297,7 +297,7 @@ def hello():
     if agent_mode_enabled():
         buffer_agent_payload({"status": "ok"}, meta={"operation": "hello"})
         return
-    typer.echo("Hello from foundry! 🚀")
+    typer.echo("Hello from pfoundry! 🚀")
     typer.echo("CLI is working correctly.")
 
 

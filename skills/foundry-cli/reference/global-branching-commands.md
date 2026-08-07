@@ -24,20 +24,20 @@ RID formats (note the DOUBLE DOT — empty service segment):
 ### Get Global Branch
 
 ```bash
-foundry global-branch get BRANCH_RID [--format FORMAT]
+pfoundry global-branch get BRANCH_RID [--format FORMAT]
 
 # Backed by branch-service PUT /branch/load/{branchRid} (empty-body load).
 # Success response is {"branchRecord": {...}} (contract-verified),
 # passed through raw.
 
 # Example
-foundry global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024
+pfoundry global-branch get ri.branch..branch.00000000-0000-0000-0000-000000000024
 ```
 
 ### Create Global Branch (plan-first; --apply issues the real mutation)
 
 ```bash
-foundry global-branch create DISPLAY_NAME \
+pfoundry global-branch create DISPLAY_NAME \
     --ontology-rid ONTOLOGY_RID [--description TEXT] \
     [--add-resource RESOURCE_RID]... [--apply] [--format FORMAT]
 
@@ -59,14 +59,14 @@ foundry global-branch create DISPLAY_NAME \
 # fully contract-verified path.
 
 # Example
-foundry global-branch create "My Branch" \
+pfoundry global-branch create "My Branch" \
     --ontology-rid ri.ontology.main.ontology.abc123 --apply
 ```
 
 ### Close Global Branch (DESTRUCTIVE; plan-first)
 
 ```bash
-foundry global-branch close BRANCH_RID [--apply] [--yes] [--format FORMAT]
+pfoundry global-branch close BRANCH_RID [--apply] [--yes] [--format FORMAT]
 
 # Backed by branch-service PUT /branch/close/{branchRid} (empty-body write
 # returning 200 {}; contract-verified). Without --apply the command
@@ -74,7 +74,7 @@ foundry global-branch close BRANCH_RID [--apply] [--yes] [--format FORMAT]
 # requires both --apply and --yes.
 
 # Example
-foundry global-branch close ri.branch..branch.00000000-0000-0000-0000-000000000024 --apply --yes
+pfoundry global-branch close ri.branch..branch.00000000-0000-0000-0000-000000000024 --apply --yes
 ```
 
 ## Global Proposal Commands
@@ -82,16 +82,16 @@ foundry global-branch close ri.branch..branch.00000000-0000-0000-0000-0000000000
 ### Get Global Proposal
 
 ```bash
-foundry global-proposal get PROPOSAL_RID [--format FORMAT]
+pfoundry global-proposal get PROPOSAL_RID [--format FORMAT]
 
 # Example
-foundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025
+pfoundry global-proposal get ri.branch..proposal.00000000-0000-0000-0000-000000000025
 ```
 
 ### Create Global Proposal (plan-first; --apply issues the real mutation)
 
 ```bash
-foundry global-proposal create DISPLAY_NAME \
+pfoundry global-proposal create DISPLAY_NAME \
     [--branch-rid BRANCH_RID] [--description TEXT] \
     [--merge-to main|BRANCH_RID] [--apply] [--format FORMAT]
 
@@ -108,14 +108,14 @@ foundry global-proposal create DISPLAY_NAME \
 # request.
 
 # Example
-foundry global-proposal create "My Proposal" \
+pfoundry global-proposal create "My Proposal" \
     --branch-rid ri.branch..branch.00000000-0000-0000-0000-000000000024 --apply
 ```
 
 ### Close Global Proposal (DESTRUCTIVE; plan-first)
 
 ```bash
-foundry global-proposal close PROPOSAL_RID [--apply] [--yes] [--format FORMAT]
+pfoundry global-proposal close PROPOSAL_RID [--apply] [--yes] [--format FORMAT]
 
 # Backed by branch-service PUT /branch/proposal/close/{proposalRid}
 # (empty-body write returning 200 {}; contract-verified). Without
@@ -123,5 +123,5 @@ foundry global-proposal close PROPOSAL_RID [--apply] [--yes] [--format FORMAT]
 # The real close requires both --apply and --yes.
 
 # Example
-foundry global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 --apply --yes
+pfoundry global-proposal close ri.branch..proposal.00000000-0000-0000-0000-000000000025 --apply --yes
 ```

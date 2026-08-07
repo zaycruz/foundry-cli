@@ -74,7 +74,7 @@ class SqlService(BaseService):
         except Exception as e:
             if isinstance(e, RuntimeError):
                 raise
-            raise RuntimeError(f"Failed to execute query: {e}")
+            raise RuntimeError(f"Failed to execute query: {self._describe_error(e)}")
 
     def submit_query(
         self,
@@ -102,7 +102,7 @@ class SqlService(BaseService):
             )
             return self._format_query_status(status)
         except Exception as e:
-            raise RuntimeError(f"Failed to submit query: {e}")
+            raise RuntimeError(f"Failed to submit query: {self._describe_error(e)}")
 
     def get_query_status(self, query_id: str, preview: bool = True) -> Dict[str, Any]:
         """
@@ -122,7 +122,7 @@ class SqlService(BaseService):
             status = self.service.get_status(query_id, preview=preview)
             return self._format_query_status(status)
         except Exception as e:
-            raise RuntimeError(f"Failed to get query status: {e}")
+            raise RuntimeError(f"Failed to get query status: {self._describe_error(e)}")
 
     def get_query_results(
         self, query_id: str, format: str = "table", preview: bool = True
@@ -162,7 +162,7 @@ class SqlService(BaseService):
         except Exception as e:
             if isinstance(e, RuntimeError):
                 raise
-            raise RuntimeError(f"Failed to get query results: {e}")
+            raise RuntimeError(f"Failed to get query results: {self._describe_error(e)}")
 
     def cancel_query(self, query_id: str, preview: bool = True) -> Dict[str, Any]:
         """
@@ -184,7 +184,7 @@ class SqlService(BaseService):
             status = self.service.get_status(query_id, preview=preview)
             return self._format_query_status(status)
         except Exception as e:
-            raise RuntimeError(f"Failed to cancel query: {e}")
+            raise RuntimeError(f"Failed to cancel query: {self._describe_error(e)}")
 
     def wait_for_completion(
         self,
@@ -230,7 +230,7 @@ class SqlService(BaseService):
             except Exception as e:
                 if isinstance(e, RuntimeError):
                     raise
-                raise RuntimeError(f"Error checking query status: {e}")
+                raise RuntimeError(f"Error checking query status: {self._describe_error(e)}")
 
         # Timeout reached
         raise RuntimeError(f"Query timed out after {timeout} seconds")
@@ -338,7 +338,7 @@ class SqlService(BaseService):
                 return {
                     "type": "binary",
                     "size_bytes": len(results_bytes),
-                    "decode_error": f"Failed to decode Arrow IPC: {e}",
+                    "decode_error": f"Failed to decode Arrow IPC: {self._describe_error(e)}",
                     "data": results_bytes.hex()[:200] + "..."
                     if len(results_bytes) > 100
                     else results_bytes.hex(),

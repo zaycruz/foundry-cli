@@ -7,7 +7,7 @@ SQL query functionality for executing queries against Foundry datasets.
 ## Execute Query (Synchronous)
 
 ```bash
-foundry sql execute QUERY [OPTIONS]
+pfoundry sql execute QUERY [OPTIONS]
 
 # Options:
 #   --timeout INTEGER         Query timeout in seconds [default: 300]
@@ -17,9 +17,9 @@ foundry sql execute QUERY [OPTIONS]
 #   --profile, -p TEXT        Profile name
 
 # Examples
-foundry sql execute "SELECT COUNT(*) FROM my_dataset"
-foundry sql execute "SELECT * FROM dataset WHERE category = 'A'" --format csv
-foundry sql execute "SELECT * FROM large_table" --timeout 600 --output results.csv
+pfoundry sql execute "SELECT COUNT(*) FROM my_dataset"
+pfoundry sql execute "SELECT * FROM dataset WHERE category = 'A'" --format csv
+pfoundry sql execute "SELECT * FROM large_table" --timeout 600 --output results.csv
 ```
 
 ## Submit Query (Asynchronous)
@@ -27,49 +27,49 @@ foundry sql execute "SELECT * FROM large_table" --timeout 600 --output results.c
 For long-running queries, submit without waiting:
 
 ```bash
-foundry sql submit QUERY [OPTIONS]
+pfoundry sql submit QUERY [OPTIONS]
 
 # Returns: Query ID
 
 # Example
-foundry sql submit "SELECT * FROM huge_dataset"
+pfoundry sql submit "SELECT * FROM huge_dataset"
 # Output: Query submitted with ID: abc-123-def
 ```
 
 ## Check Query Status
 
 ```bash
-foundry sql status QUERY_ID
+pfoundry sql status QUERY_ID
 
 # Example
-foundry sql status abc-123-def
+pfoundry sql status abc-123-def
 ```
 
 ## Get Query Results
 
 ```bash
-foundry sql results QUERY_ID [--format FORMAT] [--output FILE]
+pfoundry sql results QUERY_ID [--format FORMAT] [--output FILE]
 
 # Example
-foundry sql results abc-123-def --format json --output results.json
+pfoundry sql results abc-123-def --format json --output results.json
 ```
 
 ## Wait for Query Completion
 
 ```bash
-foundry sql wait QUERY_ID [--timeout SECONDS] [--format FORMAT]
+pfoundry sql wait QUERY_ID [--timeout SECONDS] [--format FORMAT]
 
 # Example
-foundry sql wait abc-123-def --timeout 3600 --format csv --output results.csv
+pfoundry sql wait abc-123-def --timeout 3600 --format csv --output results.csv
 ```
 
 ## Cancel Query
 
 ```bash
-foundry sql cancel QUERY_ID
+pfoundry sql cancel QUERY_ID
 
 # Example
-foundry sql cancel abc-123-def
+pfoundry sql cancel abc-123-def
 ```
 
 ## Export Query Results
@@ -77,32 +77,32 @@ foundry sql cancel abc-123-def
 Execute and export in one command:
 
 ```bash
-foundry sql export QUERY OUTPUT_FILE [OPTIONS]
+pfoundry sql export QUERY OUTPUT_FILE [OPTIONS]
 
 # Example
-foundry sql export "SELECT * FROM dataset WHERE date > '2025-01-01'" analysis.csv
+pfoundry sql export "SELECT * FROM dataset WHERE date > '2025-01-01'" analysis.csv
 ```
 
 ## Common Query Patterns
 
 ### Count rows
 ```bash
-foundry sql execute "SELECT COUNT(*) FROM my_dataset"
+pfoundry sql execute "SELECT COUNT(*) FROM my_dataset"
 ```
 
 ### Describe table structure
 ```bash
-foundry sql execute "DESCRIBE my_dataset"
+pfoundry sql execute "DESCRIBE my_dataset"
 ```
 
 ### Sample data
 ```bash
-foundry sql execute "SELECT * FROM my_dataset LIMIT 10"
+pfoundry sql execute "SELECT * FROM my_dataset LIMIT 10"
 ```
 
 ### Aggregation with grouping
 ```bash
-foundry sql execute "
+pfoundry sql execute "
   SELECT category, COUNT(*) as count, AVG(value) as avg_value
   FROM my_dataset
   GROUP BY category
@@ -117,10 +117,10 @@ QUERY_ID=$(foundry sql submit "SELECT * FROM huge_table WHERE complex_condition"
 echo "Query ID: $QUERY_ID"
 
 # Check status periodically
-foundry sql status $QUERY_ID
+pfoundry sql status $QUERY_ID
 
 # Get results when ready
-foundry sql wait $QUERY_ID --format csv --output results.csv
+pfoundry sql wait $QUERY_ID --format csv --output results.csv
 ```
 
 ### Parallel query execution
@@ -131,15 +131,15 @@ Q2=$(foundry sql submit "SELECT * FROM table2")
 Q3=$(foundry sql submit "SELECT * FROM table3")
 
 # Wait for all in parallel
-foundry sql wait $Q1 --output results1.csv &
-foundry sql wait $Q2 --output results2.csv &
-foundry sql wait $Q3 --output results3.csv &
+pfoundry sql wait $Q1 --output results1.csv &
+pfoundry sql wait $Q2 --output results2.csv &
+pfoundry sql wait $Q3 --output results3.csv &
 wait
 ```
 
 ### Date filtering
 ```bash
-foundry sql execute "
+pfoundry sql execute "
   SELECT date, metric, value
   FROM time_series_data
   WHERE date >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)

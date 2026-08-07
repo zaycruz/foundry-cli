@@ -50,7 +50,7 @@ class TestResourceService:
         result = resource_service.get_resource("ri.compass.main.dataset.123")
 
         mock_client.filesystem.Resource.get.assert_called_once_with(
-            "ri.compass.main.dataset.123", preview=True
+            "ri.compass.main.dataset.123", 
         )
         assert result["rid"] == "ri.compass.main.dataset.123"
         assert result["display_name"] == "Test Dataset"
@@ -96,7 +96,7 @@ class TestResourceService:
         )
 
         mock_client.filesystem.Resource.get_by_path.assert_called_once_with(
-            path="/My Organization/Project/Test Dataset", preview=True
+            path="/My Organization/Project/Test Dataset", 
         )
         assert result["rid"] == "ri.compass.main.dataset.123"
         assert result["display_name"] == "Test Dataset"
@@ -143,7 +143,7 @@ class TestResourceService:
         result = resource_service.list_resources()
 
         mock_client.filesystem.Folder.children.assert_called_once_with(
-            "ri.compass.main.folder.0", preview=True
+            "ri.compass.main.folder.0", 
         )
         assert len(result) == 2
         assert result[0]["rid"] == "ri.compass.main.dataset.123"
@@ -171,7 +171,7 @@ class TestResourceService:
 
         mock_client.filesystem.Folder.children.assert_called_once_with(
             "ri.compass.main.folder.789",
-            preview=True,
+            
             page_size=10,
             page_token="token123",
         )
@@ -194,7 +194,6 @@ class TestResourceService:
 
         # Verify the call was made with GetResourcesBatchRequestElement objects
         call_args = mock_client.filesystem.Resource.get_batch.call_args
-        assert call_args.kwargs["preview"] is True
         elements = call_args.kwargs["body"]
         assert len(elements) == 2
         assert elements[0].resource_rid == "ri.compass.main.dataset.123"
@@ -246,7 +245,7 @@ class TestResourceService:
         result = resource_service.search_resources("sales")
 
         mock_client.filesystem.Folder.children.assert_any_call(
-            "ri.compass.main.folder.0", preview=True
+            "ri.compass.main.folder.0"
         )
         assert len(result) == 2
         assert result[0]["display_name"] == "Sales Data"
@@ -281,7 +280,7 @@ class TestResourceService:
         )
 
         mock_client.filesystem.Folder.children.assert_any_call(
-            "ri.compass.main.folder.789", preview=True
+            "ri.compass.main.folder.789"
         )
         assert len(result) == 1
         assert result[0]["rid"] == "ri.compass.main.dataset.123"
@@ -315,7 +314,7 @@ class TestResourceService:
         result = resource_service.search_resources("sales", page_size=1)
 
         mock_client.filesystem.Folder.children.assert_called_once_with(
-            "ri.compass.main.folder.0", preview=True
+            "ri.compass.main.folder.0", 
         )
         assert len(result) == 1
         assert result[0]["rid"] == "ri.compass.main.dataset.111"
@@ -371,8 +370,7 @@ class TestResourceService:
         mock_resource.type = "dataset"
         mock_resource.folder_rid = "ri.compass.main.folder.456"
         mock_resource.created_by = "user123"
-        mock_resource.created_time = Mock()
-        mock_resource.created_time.time = "2023-01-01T00:00:00Z"
+        mock_resource.created_time = "2023-01-01T00:00:00Z"
         mock_resource.size_bytes = 1024
 
         result = resource_service._format_resource_info(mock_resource)
@@ -418,7 +416,7 @@ class TestResourceService:
         resource_service.delete_resource("ri.compass.main.dataset.123")
 
         mock_client.filesystem.Resource.delete.assert_called_once_with(
-            "ri.compass.main.dataset.123", preview=True
+            "ri.compass.main.dataset.123", 
         )
 
     def test_delete_resource_failure(self, resource_service, mock_client):
@@ -440,7 +438,7 @@ class TestResourceService:
         resource_service.restore_resource("ri.compass.main.dataset.123")
 
         mock_client.filesystem.Resource.restore.assert_called_once_with(
-            "ri.compass.main.dataset.123", preview=True
+            "ri.compass.main.dataset.123", 
         )
 
     def test_restore_resource_failure(self, resource_service, mock_client):
@@ -464,7 +462,7 @@ class TestResourceService:
         resource_service.permanently_delete_resource("ri.compass.main.dataset.123")
 
         mock_client.filesystem.Resource.permanently_delete.assert_called_once_with(
-            "ri.compass.main.dataset.123", preview=True
+            "ri.compass.main.dataset.123", 
         )
 
     def test_permanently_delete_resource_failure(self, resource_service, mock_client):
@@ -491,7 +489,7 @@ class TestResourceService:
         resource_service.add_markings("ri.compass.main.dataset.123", marking_ids)
 
         mock_client.filesystem.Resource.add_markings.assert_called_once_with(
-            "ri.compass.main.dataset.123", marking_ids=marking_ids, preview=True
+            "ri.compass.main.dataset.123", marking_ids=marking_ids, 
         )
 
     def test_add_markings_failure(self, resource_service, mock_client):
@@ -516,7 +514,7 @@ class TestResourceService:
         resource_service.remove_markings("ri.compass.main.dataset.123", marking_ids)
 
         mock_client.filesystem.Resource.remove_markings.assert_called_once_with(
-            "ri.compass.main.dataset.123", marking_ids=marking_ids, preview=True
+            "ri.compass.main.dataset.123", marking_ids=marking_ids, 
         )
 
     def test_remove_markings_failure(self, resource_service, mock_client):
@@ -548,7 +546,7 @@ class TestResourceService:
         result = resource_service.list_markings("ri.compass.main.dataset.123")
 
         mock_client.filesystem.Resource.markings.assert_called_once_with(
-            "ri.compass.main.dataset.123", preview=True
+            "ri.compass.main.dataset.123", 
         )
         assert len(result) == 2
         assert result[0]["marking_id"] == "marking-1"
@@ -570,7 +568,7 @@ class TestResourceService:
 
         mock_client.filesystem.Resource.markings.assert_called_once_with(
             "ri.compass.main.dataset.123",
-            preview=True,
+            
             page_size=10,
             page_token="token123",
         )
@@ -597,7 +595,7 @@ class TestResourceService:
         result = resource_service.get_access_requirements("ri.compass.main.dataset.123")
 
         mock_client.filesystem.Resource.get_access_requirements.assert_called_once_with(
-            "ri.compass.main.dataset.123", preview=True
+            "ri.compass.main.dataset.123", 
         )
         assert len(result["organizations"]) == 1
         assert result["organizations"][0]["organization_rid"] == "org-1"
@@ -636,7 +634,6 @@ class TestResourceService:
 
         # Verify the call was made with GetByPathResourcesBatchRequestElement objects
         call_args = mock_client.filesystem.Resource.get_by_path_batch.call_args
-        assert call_args.kwargs["preview"] is True
         elements = call_args.kwargs["body"]
         assert len(elements) == 2
         assert elements[0].path == "/Org/Project/Dataset1"

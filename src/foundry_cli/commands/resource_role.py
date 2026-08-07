@@ -264,23 +264,23 @@ def main():
 
     Examples:
         # Grant a role to a user
-        foundry resource-role grant ri.compass.main.dataset.xyz123 \\
+        pfoundry resource-role grant ri.compass.main.dataset.xyz123 \\
             --principal-id 12345678-1234-1234-1234-123456789abc \\
             --principal-type User --role ROLE_ID
 
         # Grant a role to a group
-        foundry resource-role grant ri.compass.main.project.abc456 \\
+        pfoundry resource-role grant ri.compass.main.project.abc456 \\
             --principal-id 87654321-4321-4321-4321-cba987654321 \\
             --principal-type Group --role ROLE_ID
 
         # List all roles on a resource
-        foundry resource-role list ri.compass.main.dataset.xyz123
+        pfoundry resource-role list ri.compass.main.dataset.xyz123
 
         # List only user roles on a resource
-        foundry resource-role list ri.compass.main.dataset.xyz123 --principal-type User
+        pfoundry resource-role list ri.compass.main.dataset.xyz123 --principal-type User
 
         # Revoke a role from a user
-        foundry resource-role revoke ri.compass.main.dataset.xyz123 \\
+        pfoundry resource-role revoke ri.compass.main.dataset.xyz123 \\
             --principal-id 12345678-1234-1234-1234-123456789abc \\
             --principal-type User --role ROLE_ID
     """

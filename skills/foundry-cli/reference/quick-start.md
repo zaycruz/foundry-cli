@@ -10,7 +10,7 @@ uv pip install "git+https://github.com/zaycruz/foundry-cli"
 pipx install "git+https://github.com/zaycruz/foundry-cli"
 
 # Verify installation
-foundry --version
+pfoundry --version
 ```
 
 ## Authentication Setup
@@ -21,7 +21,7 @@ foundry --version
 2. Configure foundry-cli:
 
 ```bash
-foundry configure configure
+pfoundry configure configure
 ```
 
 Enter:
@@ -40,7 +40,7 @@ export FOUNDRY_HOST="foundry.company.com"
 ### OAuth2 Authentication
 
 ```bash
-foundry configure configure --profile oauth-prod --auth-type oauth \
+pfoundry configure configure --profile oauth-prod --auth-type oauth \
   --host foundry.company.com \
   --client-id "your-client-id" \
   --client-secret "your-client-secret"
@@ -49,7 +49,7 @@ foundry configure configure --profile oauth-prod --auth-type oauth \
 ## Verify Connection
 
 ```bash
-foundry verify
+pfoundry verify
 # Expected: "Authentication successful!"
 ```
 
@@ -57,86 +57,86 @@ foundry verify
 
 ```bash
 # Configure multiple profiles
-foundry configure configure --profile production
-foundry configure configure --profile development
+pfoundry configure configure --profile production
+pfoundry configure configure --profile development
 
 # List profiles
-foundry configure list
+pfoundry configure list
 
 # Set default profile
-foundry configure use production
+pfoundry configure use production
 
 # Mark a profile as the default without switching sessions
-foundry configure set-default production
+pfoundry configure set-default production
 
 # Use specific profile
-foundry verify --profile development
+pfoundry verify --profile development
 ```
 
 ## Profile Management
 
 ```bash
 # List all profiles
-foundry configure list
+pfoundry configure list
 
 # Delete profile
-foundry configure delete old-profile --force
+pfoundry configure delete old-profile --force
 ```
 
 ## Output Formats
 
 ```bash
-foundry <command> --format table    # Rich table (default)
-foundry <command> --format json     # JSON
-foundry <command> --format csv      # CSV
-foundry <command> --output file.csv # Save to file
+pfoundry <command> --format table    # Rich table (default)
+pfoundry <command> --format json     # JSON
+pfoundry <command> --format csv      # CSV
+pfoundry <command> --output file.csv # Save to file
 ```
 
 ## Interactive Shell
 
 ```bash
-foundry shell --profile production
+pfoundry shell --profile production
 
 # Explicit equivalent:
-foundry shell start --profile production
+pfoundry shell start --profile production
 
 # In shell mode:
-foundry (production)> admin user current
-foundry (production)> sql execute "SELECT 1"
-foundry (production)> exit
+pfoundry (production)> admin user current
+pfoundry (production)> sql execute "SELECT 1"
+pfoundry (production)> exit
 ```
 
 ## Shell Completion
 
 ```bash
-foundry completion install           # Auto-detect shell
-foundry completion install --shell zsh
-foundry completion install --shell bash
+pfoundry completion install           # Auto-detect shell
+pfoundry completion install --shell zsh
+pfoundry completion install --shell bash
 
 # Print the completion script without installing it (manual setup, debugging)
-foundry completion show --shell zsh
+pfoundry completion show --shell zsh
 
 # Remove installed completions
-foundry completion uninstall
+pfoundry completion uninstall
 ```
 
 ## First Commands to Try
 
 ```bash
 # Sanity-check the CLI itself (no network call)
-foundry hello
+pfoundry hello
 
 # Check current user
-foundry admin user current
+pfoundry admin user current
 
 # List ontologies
-foundry ontology list
+pfoundry ontology list
 
 # Simple SQL query
-foundry sql execute "SELECT 1 as test"
+pfoundry sql execute "SELECT 1 as test"
 
 # Search builds
-foundry orchestration builds search
+pfoundry orchestration builds search
 ```
 
 ## Troubleshooting

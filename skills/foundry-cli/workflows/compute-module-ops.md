@@ -12,21 +12,21 @@ This workflow guarantees that the agent:
 - presents every mutation as a dry-run plan first and requires the explicit apply/confirmation flags;
 - runs a change-impact assessment before a dev-mode change that affects shared consumers.
 
-It does not create, deploy, or upgrade a compute module. `foundry compute` has no list or discovery command; the deployed-app RID must come from an external source (ticket, config, Compass). Do not invent one.
+It does not create, deploy, or upgrade a compute module. `pfoundry compute` has no list or discovery command; the deployed-app RID must come from an external source (ticket, config, Compass). Do not invent one.
 
 ## Phase 1: Pull the real compute docs
 
 Before authoring or invoking any function, read the curated compute-module documentation page:
 
 ```bash
-foundry docs compute
+pfoundry docs compute
 ```
 
 For follow-up pages from the wider corpus, use the bounded search and verbatim page loader:
 
 ```bash
-foundry docs search "compute module functions" --limit 5
-foundry docs page /docs/foundry/compute-modules/overview
+pfoundry docs search "compute module functions" --limit 5
+pfoundry docs page /docs/foundry/compute-modules/overview
 ```
 
 Do not rely on memory for function query types, input shapes, or module modes. The docs are the source of truth; search is bounded and honestly partial, so treat a missed hit as "not found," not "does not exist."
@@ -36,7 +36,7 @@ Do not rely on memory for function query types, input shapes, or module modes. T
 Load both status and config for the module, pinning the branch explicitly:
 
 ```bash
-foundry compute info ri.foundry.main.deployed-app.abc123 \
+pfoundry compute info ri.foundry.main.deployed-app.abc123 \
   --branch "$BRANCH" \
   --profile "$PROFILE" \
   --format json \
@@ -46,7 +46,7 @@ foundry compute info ri.foundry.main.deployed-app.abc123 \
 Use `--include status` or `--include config` (repeatable) when only one side is needed:
 
 ```bash
-foundry compute info ri.foundry.main.deployed-app.abc123 --include status --branch "$BRANCH"
+pfoundry compute info ri.foundry.main.deployed-app.abc123 --include status --branch "$BRANCH"
 ```
 
 Required interpretation:
@@ -59,10 +59,10 @@ Required interpretation:
 
 ## Phase 3: Read logs for one build job RID (read-only)
 
-`foundry compute logs` takes a build job (run) RID, not the deployed-app RID:
+`pfoundry compute logs` takes a build job (run) RID, not the deployed-app RID:
 
 ```bash
-foundry compute logs ri.foundry.main.job.abc123 \
+pfoundry compute logs ri.foundry.main.job.abc123 \
   --page-size-limit 500 \
   --profile "$PROFILE" \
   --format json \
@@ -73,7 +73,7 @@ Bound the window with microsecond-since-epoch timestamps when the default last-2
 
 ```bash
 FROM_MICROS="$(( $(date +%s) - 7200 ))000000"
-foundry compute logs ri.foundry.main.job.abc123 \
+pfoundry compute logs ri.foundry.main.job.abc123 \
   --from-inclusive "$FROM_MICROS" \
   --page-size-limit 1000 \
   --reverse
@@ -95,7 +95,7 @@ Gate: if the module serves shared pipelines or applications, run `workflows/chan
 Step 1 — print the dry-run plan (no network request is issued):
 
 ```bash
-foundry compute manage --action dev-mode \
+pfoundry compute manage --action dev-mode \
   --deployed-app-rid ri.foundry.main.deployed-app.abc123 \
   --branch "$BRANCH" \
   --dev-mode-until 2026-07-27T23:00:00Z \
@@ -105,7 +105,7 @@ foundry compute manage --action dev-mode \
 Step 2 — review the plan, then apply explicitly:
 
 ```bash
-foundry compute manage --action dev-mode \
+pfoundry compute manage --action dev-mode \
   --deployed-app-rid ri.foundry.main.deployed-app.abc123 \
   --branch "$BRANCH" \
   --dev-mode-until 2026-07-27T23:00:00Z \
@@ -116,7 +116,7 @@ foundry compute manage --action dev-mode \
 To disable dev mode, omit `--dev-mode-until` (an empty body is sent):
 
 ```bash
-foundry compute manage --action dev-mode \
+pfoundry compute manage --action dev-mode \
   --deployed-app-rid ri.foundry.main.deployed-app.abc123 \
   --branch "$BRANCH" \
   --profile "$PROFILE" \
@@ -132,7 +132,7 @@ Prerequisites from earlier phases: docs read (Phase 1), FUNCTION-mode confirmed,
 Step 1 — print the dry-run plan (no network request is issued):
 
 ```bash
-foundry compute execute ri.foundry.main.deployed-app.abc123 \
+pfoundry compute execute ri.foundry.main.deployed-app.abc123 \
   --query-type my-function \
   --query '{"input": 1}' \
   --branch "$BRANCH" \
@@ -142,7 +142,7 @@ foundry compute execute ri.foundry.main.deployed-app.abc123 \
 Step 2 — review the plan against the documented function signature, then apply explicitly:
 
 ```bash
-foundry compute execute ri.foundry.main.deployed-app.abc123 \
+pfoundry compute execute ri.foundry.main.deployed-app.abc123 \
   --query-type my-function \
   --query '{"input": 1}' \
   --branch "$BRANCH" \
@@ -172,7 +172,7 @@ Report:
 
 ## Anti-Patterns
 
-- Invoking a function without pulling `foundry docs compute` first
+- Invoking a function without pulling `pfoundry docs compute` first
 - Assuming a query type or input shape that the docs do not show
 - Running `compute execute` before confirming FUNCTION-mode and running state
 - Passing a deployed-app RID to `compute logs` (it requires a build job RID)

@@ -20,6 +20,54 @@ from ..utils.completion import (
     complete_output_format,
 )
 
+# SDK FieldDataType type -> dataType shape mapping
+_SDK_TYPE_MAP = {
+    "STRING": "string",
+    "INTEGER": "integer",
+    "LONG": "long",
+    "DOUBLE": "double",
+    "FLOAT": "float",
+    "BOOLEAN": "boolean",
+    "BYTE": "byte",
+    "SHORT": "short",
+    "DATE": "date",
+    "TIMESTAMP": "timestamp",
+    "DECIMAL": "decimal",
+    "BINARY": "binary",
+}
+
+
+def _normalize_stream_schema(schema_dict: dict) -> dict:
+    """Convert the CLI-friendly schema into the SDK StreamSchema shape.
+
+    The CLI accepts the legacy ``{"fieldSchemaList": [{"name", "type"}]}``
+    format; the SDK requires ``{"fields": [{"name", "schema": {"nullable",
+    "dataType": {"type": ...}}}]}``. A schema already in the SDK shape
+    (contains ``fields``) passes through unchanged.
+    """
+    if "fields" in schema_dict:
+        return schema_dict
+    fields = schema_dict.get("fieldSchemaList")
+    if not isinstance(fields, list):
+        return schema_dict
+    converted = []
+    for field in fields:
+        if not isinstance(field, dict) or "name" not in field:
+            continue
+        ftype = str(field.get("type", "")).upper()
+        data_type = _SDK_TYPE_MAP.get(ftype, ftype.lower())
+        converted.append(
+            {
+                "name": field["name"],
+                "schema": {
+                    "nullable": field.get("nullable", True),
+                    "dataType": {"type": data_type},
+                },
+            }
+        )
+    return {"fields": converted}
+
+
 # Create main app and sub-apps
 app = typer.Typer(help="Manage streaming datasets and streams")
 dataset_app = typer.Typer(help="Manage streaming datasets")
@@ -84,7 +132,7 @@ def create_dataset(
         ...,
         "--schema",
         "-s",
-        help="Stream schema as JSON or @file.json. Format: {'fieldSchemaList': [{'name': 'field', 'type': 'STRING'}]}",
+        help="Stream schema as JSON or @file.json. Accepts {'fieldSchemaList': [{'name': 'field', 'type': 'STRING'}]} or the SDK {'fields': [{'name': ..., 'schema': {...}}]} shape",
     ),
     branch: Optional[str] = typer.Option(
         None,
@@ -135,19 +183,19 @@ def create_dataset(
     Examples:
 
         # Create basic streaming dataset
-        foundry streams dataset create my-stream \\
+        pfoundry streams dataset create my-stream \\
             --folder ri.compass.main.folder.xxx \\
             --schema '{"fieldSchemaList": [{"name": "value", "type": "STRING"}]}'
 
         # Create from schema file
-        foundry streams dataset create sensor-data \\
+        pfoundry streams dataset create sensor-data \\
             --folder ri.compass.main.folder.xxx \\
             --schema @schema.json \\
             --partitions 5 \\
             --type HIGH_THROUGHPUT
 
         # With specific branch
-        foundry streams dataset create my-stream \\
+        pfoundry streams dataset create my-stream \\
             --folder ri.compass.main.folder.xxx \\
             --schema @schema.json \\
             --branch develop
@@ -158,6 +206,7 @@ def create_dataset(
         if schema_dict is None:
             console.print("[red]Error: Schema is required[/red]")
             raise typer.Exit(1)
+        schema_dict = _normalize_stream_schema(schema_dict)
 
         with SpinnerProgressTracker().track_spinner("Creating streaming dataset"):
             service = StreamsService(profile=profile)
@@ -252,12 +301,12 @@ def create_stream(
     Examples:
 
         # Create stream on new branch
-        foundry streams stream create ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream create ri.foundry.main.dataset.xxx \\
             --branch feature-branch \\
             --schema '{"fieldSchemaList": [{"name": "id", "type": "INTEGER"}]}'
 
         # High-throughput stream
-        foundry streams stream create ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream create ri.foundry.main.dataset.xxx \\
             --branch production \\
             --schema @schema.json \\
             --partitions 10 \\
@@ -269,6 +318,7 @@ def create_stream(
         if schema_dict is None:
             console.print("[red]Error: Schema is required[/red]")
             raise typer.Exit(1)
+        schema_dict = _normalize_stream_schema(schema_dict)
 
         with SpinnerProgressTracker().track_spinner("Creating stream"):
             service = StreamsService(profile=profile)
@@ -338,10 +388,10 @@ def get_stream(
     Examples:
 
         # Get stream on master branch
-        foundry streams stream get ri.foundry.main.dataset.xxx --branch master
+        pfoundry streams stream get ri.foundry.main.dataset.xxx --branch master
 
         # Get stream as JSON
-        foundry streams stream get ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream get ri.foundry.main.dataset.xxx \\
             --branch feature-branch \\
             --format json
     """
@@ -410,12 +460,12 @@ def publish_record(
     Examples:
 
         # Publish inline record
-        foundry streams stream publish ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream publish ri.foundry.main.dataset.xxx \\
             --branch master \\
             --record '{"id": 123, "name": "test", "timestamp": 1234567890}'
 
         # Publish from file
-        foundry streams stream publish ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream publish ri.foundry.main.dataset.xxx \\
             --branch master \\
             --record @record.json
     """
@@ -495,12 +545,12 @@ def publish_records(
     Examples:
 
         # Publish multiple records inline
-        foundry streams stream publish-batch ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream publish-batch ri.foundry.main.dataset.xxx \\
             --branch master \\
             --records '[{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]'
 
         # Publish from file
-        foundry streams stream publish-batch ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream publish-batch ri.foundry.main.dataset.xxx \\
             --branch master \\
             --records @records.json
     """
@@ -581,10 +631,10 @@ def reset_stream(
     Examples:
 
         # Reset with confirmation
-        foundry streams stream reset ri.foundry.main.dataset.xxx --branch master
+        pfoundry streams stream reset ri.foundry.main.dataset.xxx --branch master
 
         # Skip confirmation
-        foundry streams stream reset ri.foundry.main.dataset.xxx \\
+        pfoundry streams stream reset ri.foundry.main.dataset.xxx \\
             --branch master \\
             --confirm
     """

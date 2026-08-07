@@ -69,6 +69,7 @@ loudly instead of rendering as a result.
 """
 
 import os
+import re
 import shutil
 import subprocess
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -95,6 +96,10 @@ class RepositoryShapeError(RuntimeError):
 
 class RepositoryCloneError(RuntimeError):
     """Raised when a local clone cannot be completed honestly."""
+
+
+class RepositoryPushError(RuntimeError):
+    """Raised when a guarded local repository push cannot be completed."""
 
 
 class RepositoryService(BaseService):
@@ -139,7 +144,7 @@ class RepositoryService(BaseService):
                 request_timeout=self.PULL_REQUEST_LIST_TIMEOUT,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to list pull requests: {e}") from e
+            raise RuntimeError(f"Failed to list pull requests: {self._describe_error(e)}") from e
 
         self._raise_for_status(status, payload, raw, "pull-request list")
 
@@ -196,7 +201,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to read pull request {pull_request_rid}: {e}"
+                f"Failed to read pull request {pull_request_rid}: {self._describe_error(e)}"
             ) from e
 
         if status == 404:
@@ -344,7 +349,7 @@ class RepositoryService(BaseService):
                 json_body=plan["intended_body"],
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create pull request: {e}") from e
+            raise RuntimeError(f"Failed to create pull request: {self._describe_error(e)}") from e
 
         self._raise_for_status(status, payload, raw, "pull-request create")
         if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
@@ -404,7 +409,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to comment on pull request {pull_request_rid}: {e}"
+                f"Failed to comment on pull request {pull_request_rid}: {self._describe_error(e)}"
             ) from e
 
         self._raise_for_status(status, payload, raw, "pull-request comment create")
@@ -528,7 +533,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to close pull request {pull_request_rid}: {e}"
+                f"Failed to close pull request {pull_request_rid}: {self._describe_error(e)}"
             ) from e
         self._raise_for_status(status, payload, raw, "pull-request close")
         if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
@@ -553,7 +558,7 @@ class RepositoryService(BaseService):
             verification = {
                 "close_verified": None,
                 "verification_error": (
-                    f"read-back failed after a successful close PUT: {e}. "
+                    f"read-back failed after a successful close PUT: {self._describe_error(e)}. "
                     "The PUT returned 200; verify via `foundry repository "
                     "pull-request get` before retrying anything."
                 ),
@@ -593,7 +598,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to read repository {repository_rid}: {e}"
+                f"Failed to read repository {repository_rid}: {self._describe_error(e)}"
             ) from e
 
         if status == 404 and not (
@@ -625,7 +630,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to read Compass metadata for {repository_rid}: {e}"
+                f"Failed to read Compass metadata for {repository_rid}: {self._describe_error(e)}"
             ) from e
         self._raise_for_status(status, payload, raw, "compass repository get")
         if not isinstance(payload, Mapping) or not isinstance(payload.get("name"), str):
@@ -649,7 +654,7 @@ class RepositoryService(BaseService):
                 "GET", f"stemma/api/repos/{repository_rid}/head"
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to read HEAD for {repository_rid}: {e}") from e
+            raise RuntimeError(f"Failed to read HEAD for {repository_rid}: {self._describe_error(e)}") from e
         self._raise_for_status(status, payload, raw, "repository head")
         if not isinstance(payload, Mapping) or not isinstance(
             payload.get("commitish"), str
@@ -675,7 +680,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list branches for {repository_rid}: {e}"
+                f"Failed to list branches for {repository_rid}: {self._describe_error(e)}"
             ) from e
         self._raise_for_status(status, payload, raw, "repository branches")
         if not isinstance(payload, Mapping) or not isinstance(
@@ -710,7 +715,7 @@ class RepositoryService(BaseService):
                 "GET", f"stemma/api/repos/{repository_rid}/tags"
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to list tags for {repository_rid}: {e}") from e
+            raise RuntimeError(f"Failed to list tags for {repository_rid}: {self._describe_error(e)}") from e
         self._raise_for_status(status, payload, raw, "repository tags")
         if not isinstance(payload, list):
             raise RepositoryShapeError(
@@ -752,7 +757,7 @@ class RepositoryService(BaseService):
             status, payload, raw = client.conjure("GET", endpoint)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to read path tree for {repository_rid}: {e}"
+                f"Failed to read path tree for {repository_rid}: {self._describe_error(e)}"
             ) from e
         if status == 404 and not (
             isinstance(payload, Mapping)
@@ -904,20 +909,14 @@ class RepositoryService(BaseService):
             shutil.rmtree(target_dir)
 
         _, token = self._git_credentials()
-        env = dict(os.environ)
-        env["GIT_TERMINAL_PROMPT"] = "0"
-        # Keep the token out of argv: GIT_CONFIG_* injects http.extraHeader
-        # for this process only; nothing is persisted into the clone.
-        env["GIT_CONFIG_COUNT"] = "1"
-        env["GIT_CONFIG_KEY_0"] = "http.extraHeader"
-        env["GIT_CONFIG_VALUE_0"] = f"Authorization: Bearer {token}"
+        env = self._git_env(token)
 
         cmd = ["git", "clone"]
         if branch:
             cmd += ["--branch", branch]
         cmd += [plan["git_url"], target_dir]
         try:
-            proc = subprocess.run(
+            proc = subprocess.run(  # nosec B603 - list argv, no shell; git url from stemma plan
                 cmd, env=env, capture_output=True, text=True, timeout=clone_timeout
             )
         except subprocess.TimeoutExpired as e:
@@ -941,6 +940,222 @@ class RepositoryService(BaseService):
     @staticmethod
     def _redact(text: str, token: str) -> str:
         return text.replace(token, "[REDACTED]") if token else text
+
+    @staticmethod
+    def _git_env(token: str) -> Dict[str, str]:
+        """Build a process-only git environment without persisting a token."""
+        env = dict(os.environ)
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        # Keep the token out of argv and repository config. Git reads this
+        # config only for the child process and its descendants.
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "http.extraHeader"
+        env["GIT_CONFIG_VALUE_0"] = "Authorization: Bearer " + token
+        return env
+
+    def push_repository(
+        self,
+        repository_rid: str,
+        local_ref: str,
+        destination_branch: str,
+        *,
+        apply: bool = False,
+        allow_default_branch: bool = False,
+        git_timeout: float = 600.0,
+    ) -> Dict[str, Any]:
+        """Guardedly push one local branch ref to one Foundry branch ref.
+
+        The repository context and profile-derived smart-HTTP URL are checked
+        before any local git operation. The remote is read exactly by ref,
+        existing tips must be ancestors of the local tip, and the post-push
+        read must equal the resolved local commit. No force or delete refspec
+        can enter this method.
+        """
+        self._validate_branch_ref(local_ref, "local ref")
+        self._validate_branch_ref(destination_branch, "destination branch")
+
+        context = self.get_repository_context(
+            repository_rid, include_tree=False
+        )
+        repository = context.get("repository")
+        if not isinstance(repository, Mapping) or repository.get("rid") != repository_rid:
+            raise RepositoryPushError(
+                f"Repository context RID does not match requested repository {repository_rid}"
+            )
+        default_branch = context.get("default_branch", {}).get("commitish")
+        if destination_branch == default_branch and not allow_default_branch:
+            raise RepositoryPushError(
+                f"Refusing to push the repository default branch {destination_branch}; "
+                "explicit authorization is required"
+            )
+
+        base_url, token = self._git_credentials()
+        remote_base_url = f"{base_url}/stemma/git/{repository_rid}"
+        repository_name = repository.get("compass", {}).get("name")
+        allowed_remote_urls = {remote_base_url}
+        if isinstance(repository_name, str) and re.fullmatch(
+            r"[A-Za-z0-9._-]+", repository_name
+        ):
+            allowed_remote_urls.add(f"{remote_base_url}/{repository_name}")
+        remote_url = self._assert_origin(
+            allowed_remote_urls, token, git_timeout
+        )
+        local_commit = self._git_stdout(
+            ["git", "rev-parse", "--verify", local_ref],
+            token,
+            git_timeout,
+            "resolve local ref",
+        ).strip()
+        if not re.fullmatch(r"[0-9a-fA-F]{40,64}", local_commit):
+            raise RepositoryPushError(
+                f"Local ref {local_ref} did not resolve to a commit object"
+            )
+
+        remote_commit = self._read_remote_ref(
+            remote_url, destination_branch, token, git_timeout
+        )
+        if remote_commit:
+            self._require_fast_forward(
+                remote_commit, local_commit, token, git_timeout
+            )
+
+        result: Dict[str, Any] = {
+            "operation": "push_code_repository_branch",
+            "repository_rid": repository_rid,
+            "remote": remote_url,
+            "local_ref": local_ref,
+            "destination_branch": destination_branch,
+            "local_commit": local_commit,
+            "remote_commit": remote_commit,
+            "refspec": f"{local_ref}:{destination_branch}",
+            "default_branch_authorized": bool(
+                destination_branch == default_branch and allow_default_branch
+            ),
+            "status": "dry-run",
+        }
+        if not apply:
+            return result
+
+        self._git_run(
+            ["git", "push", remote_url, f"{local_ref}:{destination_branch}"],
+            token,
+            git_timeout,
+            "push repository branch",
+        )
+        verified_commit = self._read_remote_ref(
+            remote_url, destination_branch, token, git_timeout
+        )
+        if verified_commit != local_commit:
+            raise RepositoryPushError(
+                "Remote verification failed: destination tip does not equal "
+                f"local commit {local_commit}"
+            )
+        result["remote_commit"] = verified_commit
+        result["status"] = "pushed"
+        return result
+
+    @staticmethod
+    def _validate_branch_ref(ref: str, label: str) -> None:
+        if not isinstance(ref, str) or not re.fullmatch(
+            r"refs/heads/[^\s:*?\[\\]+", ref
+        ):
+            raise RepositoryPushError(
+                f"Invalid {label} {ref!r}; require a fully qualified refs/heads/* ref"
+            )
+        branch = ref.removeprefix("refs/heads/")
+        if (
+            branch.startswith(".")
+            or branch.endswith(".")
+            or branch.endswith("/")
+            or ".." in branch
+            or "@{" in branch
+        ):
+            raise RepositoryPushError(f"Invalid {label} {ref!r}")
+
+    def _assert_origin(
+        self, allowed_remote_urls: set[str], token: str, timeout: float
+    ) -> str:
+        configured = self._git_stdout(
+            ["git", "remote", "get-url", "origin"],
+            token,
+            timeout,
+            "read local repository remote",
+        ).strip().rstrip("/")
+        allowed = {url.rstrip("/") for url in allowed_remote_urls}
+        if configured not in allowed:
+            raise RepositoryPushError(
+                "Local origin does not match the verified profile-host repository "
+                f"URL (configured remote {self._redact(configured, token)!r})"
+            )
+        return configured
+
+    def _read_remote_ref(
+        self, remote_url: str, ref: str, token: str, timeout: float
+    ) -> Optional[str]:
+        output = self._git_stdout(
+            ["git", "ls-remote", remote_url, ref],
+            token,
+            timeout,
+            "read remote ref",
+        )
+        matches = [line.split("\t", 1) for line in output.splitlines()]
+        matching = [parts[0] for parts in matches if len(parts) == 2 and parts[1] == ref]
+        if not matching:
+            return None
+        if len(matching) != 1 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", matching[0]):
+            raise RepositoryPushError(f"Unverified remote ref response for {ref}")
+        return matching[0].lower()
+
+    def _require_fast_forward(
+        self, remote_commit: str, local_commit: str, token: str, timeout: float
+    ) -> None:
+        proc = self._git_run(
+            ["git", "merge-base", "--is-ancestor", remote_commit, local_commit],
+            token,
+            timeout,
+            "check fast-forward",
+            allow_returncodes={0, 1},
+        )
+        if proc.returncode == 1:
+            raise RepositoryPushError(
+                "Refusing non-fast-forward push: remote tip is not an ancestor "
+                "of the local commit"
+            )
+
+    def _git_stdout(
+        self, command: List[str], token: str, timeout: float, operation: str
+    ) -> str:
+        return self._git_run(command, token, timeout, operation).stdout
+
+    def _git_run(
+        self,
+        command: List[str],
+        token: str,
+        timeout: float,
+        operation: str,
+        *,
+        allow_returncodes: Optional[set[int]] = None,
+    ) -> subprocess.CompletedProcess[str]:
+        try:
+            proc = subprocess.run(  # nosec B603 - list argv, no shell; git argv from CLI call sites
+                command,
+                env=self._git_env(token),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RepositoryPushError(
+                f"git {operation} timed out after {timeout}s"
+            ) from e
+        allowed = allow_returncodes or {0}
+        if proc.returncode not in allowed:
+            detail = self._redact(proc.stderr, token).strip()[:400]
+            raise RepositoryPushError(
+                f"git {operation} failed (exit {proc.returncode})"
+                + (f": {detail}" if detail else "")
+            )
+        return proc
 
     def _git_credentials(self) -> Tuple[str, str]:
         """Resolve (base_url, token) for the active profile."""
@@ -1039,7 +1254,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to resolve enclosing project for {folder_rid}: {e}"
+                f"Failed to resolve enclosing project for {folder_rid}: {self._describe_error(e)}"
             ) from e
         self._raise_for_status(status, payload, raw, "folder-to-project resolve")
         if not isinstance(payload, Mapping):
@@ -1091,7 +1306,7 @@ class RepositoryService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to read Compass path for project {project_rid}: {e}"
+                f"Failed to read Compass path for project {project_rid}: {self._describe_error(e)}"
             ) from e
         self._raise_for_status(status, payload, raw, "project path read")
         if not isinstance(payload, Mapping):
@@ -1197,7 +1412,7 @@ class RepositoryService(BaseService):
                 "POST", "stemma/api/repos", json_body=stemma_body
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create repository {name!r}: {e}") from e
+            raise RuntimeError(f"Failed to create repository {name!r}: {self._describe_error(e)}") from e
         self._raise_for_status(status, payload, raw, "repository create")
         if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
             raise RepositoryShapeError(
@@ -1221,7 +1436,7 @@ class RepositoryService(BaseService):
         except Exception as e:
             raise RuntimeError(
                 f"Repository {repository_rid} was created but the "
-                f"bootstrapper call failed: {e}. The repository is a bare "
+                f"bootstrapper call failed: {self._describe_error(e)}. The repository is a bare "
                 "empty repo without the transforms template; reconcile or "
                 f"delete it ({self.CREATE_CLEANUP_POLICY})."
             ) from e
@@ -1255,7 +1470,7 @@ class RepositoryService(BaseService):
             verification = {
                 "bootstrap_verified": None,
                 "verification_error": (
-                    f"read-back failed after a successful bootstrap: {e}. "
+                    f"read-back failed after a successful bootstrap: {self._describe_error(e)}. "
                     "The repository exists; verify via `foundry repository "
                     "context` before retrying anything."
                 ),

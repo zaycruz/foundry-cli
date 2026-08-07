@@ -72,13 +72,13 @@ def get_check(
     Examples:
 
         # Get check details
-        foundry data-health check get ri.data-health.main.check.abc123
+        pfoundry data-health check get ri.data-health.main.check.abc123
 
         # Get as JSON
-        foundry data-health check get ri.data-health.main.check.abc123 --format json
+        pfoundry data-health check get ri.data-health.main.check.abc123 --format json
 
         # Save to file
-        foundry data-health check get ri.data-health.main.check.abc123 \\
+        pfoundry data-health check get ri.data-health.main.check.abc123 \\
             --format json \\
             --output check-details.json
     """
@@ -157,7 +157,7 @@ def create_check(
     Examples:
 
         # Create a build status check from JSON string
-        foundry data-health check create '{
+        pfoundry data-health check create '{
             "type": "buildStatus",
             "subject": {
                 "datasetRid": "ri.foundry.main.dataset.xxx",
@@ -167,10 +167,10 @@ def create_check(
         }' --intent "Monitor production builds"
 
         # Create from JSON file
-        foundry data-health check create @check-config.json
+        pfoundry data-health check create @check-config.json
 
         # Create with JSON output
-        foundry data-health check create @config.json --format json
+        pfoundry data-health check create @config.json --format json
     """
     try:
         # Parse config from JSON string or file
@@ -252,12 +252,12 @@ def replace_check(
     Examples:
 
         # Update check configuration
-        foundry data-health check replace ri.data-health.main.check.abc123 \\
+        pfoundry data-health check replace ri.data-health.main.check.abc123 \\
             '{"type": "buildStatus", ...}' \\
             --intent "Updated threshold"
 
         # Update from file
-        foundry data-health check replace ri.data-health.main.check.abc123 \\
+        pfoundry data-health check replace ri.data-health.main.check.abc123 \\
             @updated-config.json
     """
     try:
@@ -323,10 +323,10 @@ def delete_check(
     Examples:
 
         # Delete with confirmation
-        foundry data-health check delete ri.data-health.main.check.abc123
+        pfoundry data-health check delete ri.data-health.main.check.abc123
 
         # Delete without confirmation
-        foundry data-health check delete ri.data-health.main.check.abc123 --force
+        pfoundry data-health check delete ri.data-health.main.check.abc123 --force
     """
     # Handle confirmation outside try-except to avoid catching typer.Exit
     if not force:
@@ -409,16 +409,16 @@ def get_report(
     Examples:
 
         # Get report details
-        foundry data-health report get ri.data-health.main.check.abc123 \
+        pfoundry data-health report get ri.data-health.main.check.abc123 \
             ri.data-health.main.check-report.abc123
 
         # Get as JSON
-        foundry data-health report get ri.data-health.main.check.abc123 \
+        pfoundry data-health report get ri.data-health.main.check.abc123 \
             ri.data-health.main.check-report.abc123 \\
             --format json
 
         # Save to file
-        foundry data-health report get ri.data-health.main.check.abc123 \
+        pfoundry data-health report get ri.data-health.main.check.abc123 \
             ri.data-health.main.check-report.abc123 \\
             --format json \\
             --output report.json

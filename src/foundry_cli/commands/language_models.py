@@ -349,23 +349,23 @@ def anthropic_messages(
     Examples:
 
         # Basic message
-        foundry language-models anthropic messages ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \\
             --message "Explain quantum computing"
 
         # With system prompt and custom parameters
-        foundry language-models anthropic messages ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \\
             --message "Write a haiku" \\
             --system "You are a poetic assistant" \\
             --temperature 0.8 \\
             --max-tokens 100
 
         # With stop sequences
-        foundry language-models anthropic messages ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \\
             --message "List three items" \\
             --stop "." --stop "\\n\\n"
 
         # Save response to file
-        foundry language-models anthropic messages ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages ri.language-models.main.model.abc123 \\
             --message "Summarize AI trends" \\
             --output response.json
     """
@@ -471,15 +471,15 @@ def anthropic_messages_advanced(
         #   ],
         #   "maxTokens": 500
         # }
-        foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \\
             --request @conversation.json
 
         # Inline JSON with system prompt
-        foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \\
             --request '{"messages": [{"role": "USER", "content": [{"type": "text", "text": "Hi"}]}], "maxTokens": 100, "system": [{"type": "text", "text": "Be concise"}]}'
 
         # With extended thinking
-        foundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \\
+        pfoundry language-models anthropic messages-advanced ri.language-models.main.model.abc123 \\
             --request '{"messages": [{"role": "USER", "content": [{"type": "text", "text": "Solve this problem"}]}], "maxTokens": 2000, "thinking": {"type": "enabled", "budget": 10000}}'
     """
     try:
@@ -588,26 +588,26 @@ def openai_embeddings(
     Examples:
 
         # Single text
-        foundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
+        pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
             --input "Machine learning is fascinating"
 
         # Multiple texts (inline JSON array)
-        foundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
+        pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
             --input '["Document 1", "Document 2", "Document 3"]'
 
         # Multiple texts from file
         # texts.json: ["Text 1", "Text 2", "Text 3"]
-        foundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
+        pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
             --input @texts.json
 
         # Custom dimensions and encoding
-        foundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
+        pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
             --input "Sample text" \\
             --dimensions 1024 \\
             --encoding base64
 
         # Save embeddings to file
-        foundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
+        pfoundry language-models openai embeddings ri.language-models.main.model.xyz789 \\
             --input '["Text 1", "Text 2"]' \\
             --output embeddings.json
     """

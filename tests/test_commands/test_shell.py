@@ -47,7 +47,7 @@ class TestShellCommand:
         prompt = get_prompt()
 
         # Assert
-        assert prompt == "foundry (test-profile)> "
+        assert prompt == "pfoundry (test-profile)> "
         mock_profile_manager_class.assert_called_once()
         mock_profile_manager.get_active_profile.assert_called_once()
 
@@ -63,7 +63,7 @@ class TestShellCommand:
         prompt = get_prompt()
 
         # Assert
-        assert prompt == "foundry> "
+        assert prompt == "pfoundry> "
 
     @patch("foundry_cli.commands.shell.ProfileManager")
     def test_get_prompt_exception(self, mock_profile_manager_class):
@@ -75,7 +75,7 @@ class TestShellCommand:
         prompt = get_prompt()
 
         # Assert
-        assert prompt == "foundry> "
+        assert prompt == "pfoundry> "
 
     def test_shell_app_help(self):
         """Test shell app help command."""

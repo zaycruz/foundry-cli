@@ -10,6 +10,7 @@ from foundry_cli.services.repository import (
     PullRequestShapeError,
     RepositoryCloneError,
     RepositoryNotFoundError,
+    RepositoryPushError,
     RepositoryService,
     RepositoryShapeError,
 )
@@ -97,6 +98,255 @@ class TestListPullRequests:
         service = RepositoryService(profile="test")
         with pytest.raises(PullRequestShapeError, match="Unverified"):
             service.list_pull_requests()
+
+
+class TestPushRepository:
+    """Guarded smart-HTTP push tests; all git and Foundry reads are mocked."""
+
+    TOKEN = "super-secret-token"
+    GIT_URL = f"https://foundry.example.com/stemma/git/{REPO_RID}"
+    LOCAL = "a" * 40
+    REMOTE = "b" * 40
+
+    def _service(self, context=None):
+        service = RepositoryService(profile="test")
+        service.get_repository_context = Mock(
+            return_value=context
+            or {
+                "repository": {"rid": REPO_RID},
+                "default_branch": {"commitish": "refs/heads/master"},
+                "refs": {"branches": [], "tags": []},
+            }
+        )
+        service._git_credentials = Mock(
+            return_value=("https://foundry.example.com", self.TOKEN)
+        )
+        return service
+
+    @staticmethod
+    def _proc(command, stdout="", stderr="", returncode=0):
+        from subprocess import CompletedProcess
+
+        return CompletedProcess(command, returncode, stdout=stdout, stderr=stderr)
+
+    def _git_reads(self, *, remote=None, verification=None):
+        return [
+            self._proc(["git", "remote", "get-url", "origin"], self.GIT_URL + "\n"),
+            self._proc(["git", "rev-parse"], self.LOCAL + "\n"),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{remote}\trefs/heads/review\n" if remote else "",
+            ),
+        ] + ([verification] if verification is not None else [])
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_dry_run_reads_context_and_remote_but_never_pushes(self, run):
+        run.side_effect = self._git_reads(
+            remote=self.REMOTE,
+            verification=self._proc(["git", "merge-base"], returncode=0),
+        )
+        service = self._service()
+
+        result = service.push_repository(
+            REPO_RID, "refs/heads/feature", "refs/heads/review"
+        )
+
+        assert result["status"] == "dry-run"
+        assert result["local_commit"] == self.LOCAL
+        assert result["remote_commit"] == self.REMOTE
+        assert all(call.args[0][1] != "push" for call in run.call_args_list)
+        service.get_repository_context.assert_called_once_with(
+            REPO_RID, include_tree=False
+        )
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_apply_order_and_single_non_force_refspec(self, run):
+        verification = self._proc(["git", "merge-base"], returncode=0)
+        run.side_effect = self._git_reads(
+            remote=self.REMOTE, verification=verification
+        ) + [
+            self._proc(["git", "push"]),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{self.LOCAL}\trefs/heads/review\n",
+            ),
+        ]
+        service = self._service()
+
+        result = service.push_repository(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/review",
+            apply=True,
+        )
+
+        assert result["status"] == "pushed"
+        commands = [call.args[0] for call in run.call_args_list]
+        assert [command[1] for command in commands] == [
+            "remote",
+            "rev-parse",
+            "ls-remote",
+            "merge-base",
+            "push",
+            "ls-remote",
+        ]
+        assert commands[4] == [
+            "git",
+            "push",
+            self.GIT_URL,
+            "refs/heads/feature:refs/heads/review",
+        ]
+        assert "--force" not in commands[4]
+        assert all(
+            call.kwargs["env"]["GIT_CONFIG_VALUE_0"]
+            == "Authorization: Bearer " + self.TOKEN
+            for call in run.call_args_list
+        )
+        assert all(self.TOKEN not in " ".join(command) for command in commands)
+
+    @pytest.mark.parametrize(
+        "local_ref,destination",
+        [
+            ("feature", "refs/heads/review"),
+            ("refs/tags/v1", "refs/heads/review"),
+            ("refs/heads/feature", "refs/tags/review"),
+            ("refs/heads/feature", "refs/heads/review:"),
+            ("refs/heads/feature", "refs/heads/master"),
+        ],
+    )
+    def test_rejects_unsafe_refs_before_git(self, local_ref, destination):
+        service = self._service()
+        with pytest.raises(RepositoryPushError):
+            service.push_repository(REPO_RID, local_ref, destination)
+        if destination == "refs/heads/master":
+            service.get_repository_context.assert_called_once()
+        else:
+            service.get_repository_context.assert_not_called()
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_explicitly_authorizes_fast_forward_default_branch(self, run):
+        run.side_effect = [
+            self._proc(["git", "remote"], self.GIT_URL + "\n"),
+            self._proc(["git", "rev-parse"], self.LOCAL + "\n"),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{self.REMOTE}\trefs/heads/master\n",
+            ),
+            self._proc(["git", "merge-base"], returncode=0),
+        ]
+        service = self._service()
+
+        result = service.push_repository(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/master",
+            allow_default_branch=True,
+        )
+
+        assert result["status"] == "dry-run"
+        assert result["default_branch_authorized"] is True
+        assert all(call.args[0][1] != "push" for call in run.call_args_list)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_rejects_mismatched_context_rid(self, run):
+        service = self._service(
+            {
+                "repository": {"rid": OTHER_REPO_RID},
+                "default_branch": {"commitish": "refs/heads/master"},
+            }
+        )
+        with pytest.raises(RepositoryPushError, match="does not match"):
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review"
+            )
+        run.assert_not_called()
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_rejects_mismatched_origin(self, run):
+        run.return_value = self._proc(
+            ["git", "remote"], "https://other.example/stemma/git/other\n"
+        )
+        service = self._service()
+        with pytest.raises(RepositoryPushError, match="does not match") as error:
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review"
+            )
+        assert self.TOKEN not in str(error.value)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_accepts_context_verified_repository_name_suffix(self, run):
+        suffixed_url = f"{self.GIT_URL}/demo-functions"
+        run.side_effect = [
+            self._proc(["git", "remote"], suffixed_url + "/\n"),
+            self._proc(["git", "rev-parse"], self.LOCAL + "\n"),
+            self._proc(["git", "ls-remote"], ""),
+        ]
+        service = self._service(
+            {
+                "repository": {
+                    "rid": REPO_RID,
+                    "compass": {"name": "demo-functions"},
+                },
+                "default_branch": {"commitish": "refs/heads/master"},
+            }
+        )
+
+        result = service.push_repository(
+            REPO_RID, "refs/heads/feature", "refs/heads/review"
+        )
+
+        assert result["remote"] == suffixed_url
+        assert run.call_args_list[2].args[0] == [
+            "git",
+            "ls-remote",
+            suffixed_url,
+            "refs/heads/review",
+        ]
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_rejects_non_fast_forward_without_push(self, run):
+        run.side_effect = self._git_reads(
+            remote=self.REMOTE,
+            verification=self._proc(["git", "merge-base"], returncode=1),
+        )
+        service = self._service()
+        with pytest.raises(RepositoryPushError, match="non-fast-forward"):
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review", apply=True
+            )
+        assert all(call.args[0][1] != "push" for call in run.call_args_list)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_redacts_secret_from_git_failure(self, run):
+        run.side_effect = self._git_reads(remote=None) + [
+            self._proc(
+                ["git", "push"],
+                stderr=f"Authorization Bearer {self.TOKEN}",
+                returncode=128,
+            )
+        ]
+        service = self._service()
+        with pytest.raises(RepositoryPushError) as error:
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review", apply=True
+            )
+        assert self.TOKEN not in str(error.value)
+        assert "[REDACTED]" in str(error.value)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_fails_when_post_push_tip_does_not_match(self, run):
+        run.side_effect = self._git_reads(remote=None) + [
+            self._proc(["git", "push"]),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{self.REMOTE}\trefs/heads/review\n",
+            ),
+        ]
+        service = self._service()
+        with pytest.raises(RepositoryPushError, match="verification failed"):
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review", apply=True
+            )
 
     @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_entry_without_rid_fails_loudly(self, mock_client_class):
@@ -530,7 +780,7 @@ class TestCloneRepository:
         assert "--branch" in cmd and "master" in cmd
         env = kwargs["env"]
         assert env["GIT_CONFIG_KEY_0"] == "http.extraHeader"
-        assert env["GIT_CONFIG_VALUE_0"] == "Authorization: Bearer secret-token"
+        assert env["GIT_CONFIG_VALUE_0"] == "Authorization: Bearer " + "secret-token"
         assert env["GIT_TERMINAL_PROMPT"] == "0"
 
     @patch("foundry_cli.services.repository.FoundryInternalClient")

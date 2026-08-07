@@ -11,9 +11,9 @@ Transactions give atomic visibility: files uploaded inside an open transaction b
 ### Phase 1: Preflight
 
 ```bash
-foundry verify --profile "$PROFILE"
-foundry dataset get ri.foundry.main.dataset.abc123 --profile "$PROFILE"
-foundry dataset files list ri.foundry.main.dataset.abc123 --branch master
+pfoundry verify --profile "$PROFILE"
+pfoundry dataset get ri.foundry.main.dataset.abc123 --profile "$PROFILE"
+pfoundry dataset files list ri.foundry.main.dataset.abc123 --branch master
 ```
 
 Confirm the dataset RID, the target branch, and the current file set before opening a transaction.
@@ -22,11 +22,11 @@ Confirm the dataset RID, the target branch, and the current file set before open
 
 ```bash
 # Append new files (default type)
-foundry dataset transactions start ri.foundry.main.dataset.abc123 \
+pfoundry dataset transactions start ri.foundry.main.dataset.abc123 \
   --branch master --type APPEND --format json
 
 # Idempotent full replace: rerun-safe, the new view replaces the old
-foundry dataset transactions start ri.foundry.main.dataset.abc123 \
+pfoundry dataset transactions start ri.foundry.main.dataset.abc123 \
   --branch master --type SNAPSHOT --format json
 ```
 
@@ -37,7 +37,7 @@ Capture the transaction RID from the JSON response.
 ### Phase 3: Upload files into the transaction
 
 ```bash
-foundry dataset files upload "./export_001.csv" ri.foundry.main.dataset.abc123 \
+pfoundry dataset files upload "./export_001.csv" ri.foundry.main.dataset.abc123 \
   --branch master --transaction-rid ri.foundry.main.transaction.xyz789
 ```
 
@@ -47,15 +47,15 @@ Repeat per file. An upload without `--transaction-rid` writes inside its own imp
 
 ```bash
 # Inspect before committing
-foundry dataset transactions status ri.foundry.main.dataset.abc123 \
+pfoundry dataset transactions status ri.foundry.main.dataset.abc123 \
   ri.foundry.main.transaction.xyz789 --format json
 
 # Commit: publishes the transaction's files
-foundry dataset transactions commit ri.foundry.main.dataset.abc123 \
+pfoundry dataset transactions commit ri.foundry.main.dataset.abc123 \
   ri.foundry.main.transaction.xyz789
 
 # Abort on any failure: discards uploaded files (rollback)
-foundry dataset transactions abort ri.foundry.main.dataset.abc123 \
+pfoundry dataset transactions abort ri.foundry.main.dataset.abc123 \
   ri.foundry.main.transaction.xyz789 --yes
 ```
 
@@ -63,8 +63,8 @@ There is no transaction dry-run; the plan-first gate is the status check before 
 
 Notes:
 
-- `foundry dataset transactions list` is dataset-wide; the pinned SDK transaction endpoint has no branch filter.
-- After commit, verify with `foundry dataset files list` or `foundry dataset stats DATASET_RID --branch master`.
+- `pfoundry dataset transactions list` is dataset-wide; the pinned SDK transaction endpoint has no branch filter.
+- After commit, verify with `pfoundry dataset files list` or `pfoundry dataset stats DATASET_RID --branch master`.
 
 ## Path B: Connectivity Imports
 
@@ -72,15 +72,15 @@ Use this path when data arrives through a Data Connection source. The CLI surfac
 
 ```bash
 # Find the connection
-foundry connectivity connection list --format json --output connections.json
-foundry connectivity connection get ri.conn.main.connection.12345
+pfoundry connectivity connection list --format json --output connections.json
+pfoundry connectivity connection get ri.conn.main.connection.12345
 
 # Inventory existing imports on the connection
-foundry connectivity import list-file --connection ri.conn.main.connection.12345
-foundry connectivity import list-table --connection ri.conn.main.connection.12345
+pfoundry connectivity import list-file --connection ri.conn.main.connection.12345
+pfoundry connectivity import list-table --connection ri.conn.main.connection.12345
 
 # Inspect a specific import (target dataset, sync mode, status)
-foundry connectivity import get-table ri.import.main.table.456 \
+pfoundry connectivity import get-table ri.import.main.table.456 \
   --connection ri.conn.main.connection.12345 --format json
 ```
 
@@ -93,24 +93,24 @@ Use streams for continuous record-level ingestion. Streams are not transactional
 ```bash
 # 1. Create the streaming dataset with its initial stream (mutating; no dry-run —
 #    confirm NAME, folder RID, and schema before running)
-foundry streams dataset create events \
+pfoundry streams dataset create events \
   --folder ri.compass.main.folder.xyz789 \
   --schema '{"fieldSchemaList": [{"name": "event_id", "type": "STRING"}, {"name": "timestamp", "type": "TIMESTAMP"}, {"name": "data", "type": "STRING"}]}'
 
 # 2. Confirm the stream exists on the branch
-foundry streams stream get ri.foundry.main.dataset.abc123 --branch master --format json
+pfoundry streams stream get ri.foundry.main.dataset.abc123 --branch master --format json
 
 # 3. Publish records — prefer batches over per-record calls
-foundry streams stream publish-batch ri.foundry.main.dataset.abc123 \
+pfoundry streams stream publish-batch ri.foundry.main.dataset.abc123 \
   --branch master \
   --records '[{"event_id": "evt-001", "timestamp": 1735689600, "data": "payload"}]'
 
 # Single record when needed
-foundry streams stream publish ri.foundry.main.dataset.abc123 \
+pfoundry streams stream publish ri.foundry.main.dataset.abc123 \
   --branch master --record @record.json
 ```
 
-For volume, size partitions up front: each partition handles roughly 5 MB/s (`--partitions N --type HIGH_THROUGHPUT` on `streams dataset create`). To add a stream on another branch of an existing dataset, use `foundry streams stream create DATASET_RID --branch BRANCH --schema SCHEMA`.
+For volume, size partitions up front: each partition handles roughly 5 MB/s (`--partitions N --type HIGH_THROUGHPUT` on `streams dataset create`). To add a stream on another branch of an existing dataset, use `pfoundry streams stream create DATASET_RID --branch BRANCH --schema SCHEMA`.
 
 ## End-to-End Idempotent Ingest Script
 
@@ -133,15 +133,15 @@ TRANSACTION_RID=""
 rollback() {
   if [ -n "$TRANSACTION_RID" ]; then
     echo "Rolling back transaction $TRANSACTION_RID"
-    foundry dataset transactions abort "$DATASET_RID" "$TRANSACTION_RID" \
+    pfoundry dataset transactions abort "$DATASET_RID" "$TRANSACTION_RID" \
       --yes --profile "$PROFILE" || echo "WARN: abort failed; transaction may remain open"
   fi
 }
 trap rollback ERR
 
 # 1. Preflight
-foundry verify --profile "$PROFILE"
-foundry dataset get "$DATASET_RID" --profile "$PROFILE" >/dev/null
+pfoundry verify --profile "$PROFILE"
+pfoundry dataset get "$DATASET_RID" --profile "$PROFILE" >/dev/null
 
 # 2. Start a SNAPSHOT transaction (rerun-safe full replace)
 #    Adjust the jq field to the RID field in the observed JSON response.
@@ -153,23 +153,23 @@ echo "Opened transaction $TRANSACTION_RID"
 # 3. Upload all files into the transaction
 for f in "${FILES[@]}"; do
   echo "Uploading $f"
-  foundry dataset files upload "$f" "$DATASET_RID" \
+  pfoundry dataset files upload "$f" "$DATASET_RID" \
     --branch "$BRANCH" --transaction-rid "$TRANSACTION_RID" \
     --profile "$PROFILE"
 done
 
 # 4. Gate on status before commit
-foundry dataset transactions status "$DATASET_RID" "$TRANSACTION_RID" \
+pfoundry dataset transactions status "$DATASET_RID" "$TRANSACTION_RID" \
   --format json --profile "$PROFILE"
 
 # 5. Commit and disarm the rollback trap
-foundry dataset transactions commit "$DATASET_RID" "$TRANSACTION_RID" \
+pfoundry dataset transactions commit "$DATASET_RID" "$TRANSACTION_RID" \
   --profile "$PROFILE"
 TRANSACTION_RID=""
 trap - ERR
 
 # 6. Post-commit verification
-foundry dataset files list "$DATASET_RID" --branch "$BRANCH" --profile "$PROFILE"
+pfoundry dataset files list "$DATASET_RID" --branch "$BRANCH" --profile "$PROFILE"
 echo "Ingest complete."
 ```
 

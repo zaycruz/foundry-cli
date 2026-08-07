@@ -19,10 +19,10 @@ It does not diagnose transforms code, Spark plans, or non-compute-module job int
 
 State these before triage begins; do not work around them silently:
 
-- There is no dedicated `builds rerun` command. A rerun is `foundry orchestration builds create` with the same target JSON.
+- There is no dedicated `builds rerun` command. A rerun is `pfoundry orchestration builds create` with the same target JSON.
 - `orchestration builds create`, `orchestration builds cancel`, `orchestration schedules pause`, and `orchestration schedules unpause` have no `--apply`, `--yes`, or dry-run flag. They mutate immediately. Plan-first is enforced by this workflow, not by the CLI.
-- `foundry compute logs` covers compute-module jobs only. There is no log command for Spark or other job types; document that as a gap when the failing job is not a compute-module job.
-- `foundry data-health report get` requires both a check RID and a report RID. There is no command to list reports for a check; if report RIDs are not visible in the check details, report the gap.
+- `pfoundry compute logs` covers compute-module jobs only. There is no log command for Spark or other job types; document that as a gap when the failing job is not a compute-module job.
+- `pfoundry data-health report get` requires both a check RID and a report RID. There is no command to list reports for a check; if report RIDs are not visible in the check details, report the gap.
 - The `compute logs` step-2 response shape is bundle-derived and not contract-verified; treat its payload as raw evidence, not parsed truth.
 
 ## Phase 1: Locate the build
@@ -30,7 +30,7 @@ State these before triage begins; do not work around them silently:
 If the build RID is given, skip to Phase 2. Otherwise search recent builds:
 
 ```bash
-foundry orchestration builds search --profile "$PROFILE" --format json --output builds.json
+pfoundry orchestration builds search --profile "$PROFILE" --format json --output builds.json
 ```
 
 Use `--page-size`, `--max-pages`, or `--all` when the first page does not reach the failure window. Filter `builds.json` locally (status, branch, creation time) to select the candidate `ri.orchestration.main.build.*` RID. Do not page the full build history into agent context.
@@ -38,7 +38,7 @@ Use `--page-size`, `--max-pages`, or `--all` when the first page does not reach 
 ## Phase 2: Read the build
 
 ```bash
-foundry orchestration builds get ri.orchestration.main.build.abc123 \
+pfoundry orchestration builds get ri.orchestration.main.build.abc123 \
   --profile "$PROFILE" --format json --output build.json
 ```
 
@@ -47,7 +47,7 @@ Record status, branch, target, created-by, and any schedule association. A `RUNN
 ## Phase 3: Isolate the failing jobs
 
 ```bash
-foundry orchestration builds jobs ri.orchestration.main.build.abc123 \
+pfoundry orchestration builds jobs ri.orchestration.main.build.abc123 \
   --profile "$PROFILE" --format json --output jobs.json
 ```
 
@@ -55,17 +55,17 @@ Extract failed or long-running job RIDs locally:
 
 ```bash
 JOB_RIDS=$(jq -r '.[] | select(.status == "FAILED" or .status == "RUNNING") | .rid' jobs.json | tr '\n' ',' | sed 's/,$//')
-foundry orchestration jobs get-batch "$JOB_RIDS" --profile "$PROFILE" --format json --output job-details.json
+pfoundry orchestration jobs get-batch "$JOB_RIDS" --profile "$PROFILE" --format json --output job-details.json
 ```
 
-Use `foundry orchestration jobs get ri.orchestration.main.job.def456 --format json` for a single job. `get-batch` accepts a comma-separated list, max 500. Record each failing job's type, status, duration, and output dataset RID.
+Use `pfoundry orchestration jobs get ri.orchestration.main.job.def456 --format json` for a single job. `get-batch` accepts a comma-separated list, max 500. Record each failing job's type, status, duration, and output dataset RID.
 
 ## Phase 4: Pull logs for compute-module jobs
 
 For each failing job whose type is a compute module:
 
 ```bash
-foundry compute logs ri.orchestration.main.job.def456 \
+pfoundry compute logs ri.orchestration.main.job.def456 \
   --profile "$PROFILE" --page-size-limit 500 --reverse \
   --format json --output job-logs.json
 ```
@@ -77,10 +77,10 @@ foundry compute logs ri.orchestration.main.job.def456 \
 When the failure looks like a quality gate rather than a crash, inspect the checks on the output dataset:
 
 ```bash
-foundry data-health check get ri.data-health.main.check.abc123 \
+pfoundry data-health check get ri.data-health.main.check.abc123 \
   --profile "$PROFILE" --format json
 
-foundry data-health report get ri.data-health.main.check.abc123 \
+pfoundry data-health report get ri.data-health.main.check.abc123 \
   ri.data-health.main.check-report.def456 \
   --profile "$PROFILE" --format json --output report.json
 ```
@@ -92,17 +92,17 @@ Report statuses are `PASSED`, `FAILED`, `WARNING`, `ERROR`, `NOT_APPLICABLE`, `N
 Query the output dataset directly to distinguish "build failed, no output" from "build succeeded, output is wrong". SQL is preview-mode by default; keep queries small:
 
 ```bash
-foundry sql execute "SELECT COUNT(*) AS row_count FROM my_output_dataset" \
+pfoundry sql execute "SELECT COUNT(*) AS row_count FROM my_output_dataset" \
   --profile "$PROFILE"
 
-foundry sql execute "SELECT * FROM my_output_dataset LIMIT 10" \
+pfoundry sql execute "SELECT * FROM my_output_dataset LIMIT 10" \
   --profile "$PROFILE" --format json --output sample.json
 
-foundry sql execute "SELECT MAX(updated_at) AS latest FROM my_output_dataset" \
+pfoundry sql execute "SELECT MAX(updated_at) AS latest FROM my_output_dataset" \
   --profile "$PROFILE"
 ```
 
-Use `foundry sql submit` + `foundry sql wait` for heavier checks. Zero rows after a "successful" build, stale `MAX` timestamps, or nulls in required columns all point remediation at the pipeline logic, not at a retry.
+Use `pfoundry sql submit` + `pfoundry sql wait` for heavier checks. Zero rows after a "successful" build, stale `MAX` timestamps, or nulls in required columns all point remediation at the pipeline logic, not at a retry.
 
 ## Phase 7: Decide and gate remediation
 
@@ -117,18 +117,18 @@ Remediation options:
 
 ```bash
 # Rerun: create a new build for the same target (there is no rerun command)
-foundry orchestration builds create \
+pfoundry orchestration builds create \
   '{"type": "manual", "targetRids": ["ri.foundry.main.dataset.abc123"]}' \
   --branch master --force
 
 # Cancel a stuck build and its unfinished jobs
-foundry orchestration builds cancel ri.orchestration.main.build.abc123
+pfoundry orchestration builds cancel ri.orchestration.main.build.abc123
 
 # Pause the schedule while the root cause is fixed
-foundry orchestration schedules pause ri.orchestration.main.schedule.ghi789
+pfoundry orchestration schedules pause ri.orchestration.main.schedule.ghi789
 
 # Resume after the fix is verified
-foundry orchestration schedules unpause ri.orchestration.main.schedule.ghi789
+pfoundry orchestration schedules unpause ri.orchestration.main.schedule.ghi789
 ```
 
 Decision rules:
@@ -143,10 +143,10 @@ Decision rules:
 After a rerun, poll the new build; after an unpause, confirm the schedule fires:
 
 ```bash
-foundry orchestration builds get ri.orchestration.main.build.new456 \
+pfoundry orchestration builds get ri.orchestration.main.build.new456 \
   --profile "$PROFILE" --format json
 
-foundry orchestration schedules runs ri.orchestration.main.schedule.ghi789 \
+pfoundry orchestration schedules runs ri.orchestration.main.schedule.ghi789 \
   --profile "$PROFILE" --page-size 5 --format json
 ```
 

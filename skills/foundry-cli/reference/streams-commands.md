@@ -13,7 +13,7 @@ Commands for managing streaming datasets and publishing real-time data records t
 Create a new streaming dataset with an initial stream.
 
 ```bash
-foundry streams dataset create NAME --folder FOLDER_RID --schema SCHEMA [OPTIONS]
+pfoundry streams dataset create NAME --folder FOLDER_RID --schema SCHEMA [OPTIONS]
 
 # Options:
 #   --folder, -f TEXT       Parent folder RID (required)
@@ -29,19 +29,19 @@ foundry streams dataset create NAME --folder FOLDER_RID --schema SCHEMA [OPTIONS
 # Examples
 
 # Create basic streaming dataset
-foundry streams dataset create my-stream \
+pfoundry streams dataset create my-stream \
     --folder ri.compass.main.folder.xxx \
     --schema '{"fieldSchemaList": [{"name": "value", "type": "STRING"}]}'
 
 # Create from schema file with high throughput
-foundry streams dataset create sensor-data \
+pfoundry streams dataset create sensor-data \
     --folder ri.compass.main.folder.xxx \
     --schema @schema.json \
     --partitions 5 \
     --type HIGH_THROUGHPUT
 
 # With specific branch
-foundry streams dataset create my-stream \
+pfoundry streams dataset create my-stream \
     --folder ri.compass.main.folder.xxx \
     --schema @schema.json \
     --branch develop
@@ -54,7 +54,7 @@ foundry streams dataset create my-stream \
 Create a new stream on a branch of an existing streaming dataset.
 
 ```bash
-foundry streams stream create DATASET_RID --branch BRANCH --schema SCHEMA [OPTIONS]
+pfoundry streams stream create DATASET_RID --branch BRANCH --schema SCHEMA [OPTIONS]
 
 # Options:
 #   --branch, -b TEXT       Branch name to create stream on (required)
@@ -69,12 +69,12 @@ foundry streams stream create DATASET_RID --branch BRANCH --schema SCHEMA [OPTIO
 # Examples
 
 # Create stream on new branch
-foundry streams stream create ri.foundry.main.dataset.xxx \
+pfoundry streams stream create ri.foundry.main.dataset.xxx \
     --branch feature-branch \
     --schema '{"fieldSchemaList": [{"name": "id", "type": "INTEGER"}]}'
 
 # High-throughput stream with multiple partitions
-foundry streams stream create ri.foundry.main.dataset.xxx \
+pfoundry streams stream create ri.foundry.main.dataset.xxx \
     --branch production \
     --schema @schema.json \
     --partitions 10 \
@@ -86,7 +86,7 @@ foundry streams stream create ri.foundry.main.dataset.xxx \
 Get information about a stream.
 
 ```bash
-foundry streams stream get DATASET_RID --branch BRANCH [OPTIONS]
+pfoundry streams stream get DATASET_RID --branch BRANCH [OPTIONS]
 
 # Options:
 #   --branch, -b TEXT       Stream branch name (required)
@@ -97,10 +97,10 @@ foundry streams stream get DATASET_RID --branch BRANCH [OPTIONS]
 # Examples
 
 # Get stream on master branch
-foundry streams stream get ri.foundry.main.dataset.xxx --branch master
+pfoundry streams stream get ri.foundry.main.dataset.xxx --branch master
 
 # Get stream as JSON
-foundry streams stream get ri.foundry.main.dataset.xxx \
+pfoundry streams stream get ri.foundry.main.dataset.xxx \
     --branch feature-branch \
     --format json
 ```
@@ -110,7 +110,7 @@ foundry streams stream get ri.foundry.main.dataset.xxx \
 Publish a single record to a stream.
 
 ```bash
-foundry streams stream publish DATASET_RID --branch BRANCH --record RECORD [OPTIONS]
+pfoundry streams stream publish DATASET_RID --branch BRANCH --record RECORD [OPTIONS]
 
 # Options:
 #   --branch, -b TEXT       Stream branch name (required)
@@ -122,12 +122,12 @@ foundry streams stream publish DATASET_RID --branch BRANCH --record RECORD [OPTI
 # Examples
 
 # Publish inline record
-foundry streams stream publish ri.foundry.main.dataset.xxx \
+pfoundry streams stream publish ri.foundry.main.dataset.xxx \
     --branch master \
     --record '{"id": 123, "name": "test", "timestamp": 1234567890}'
 
 # Publish from file
-foundry streams stream publish ri.foundry.main.dataset.xxx \
+pfoundry streams stream publish ri.foundry.main.dataset.xxx \
     --branch master \
     --record @record.json
 ```
@@ -137,7 +137,7 @@ foundry streams stream publish ri.foundry.main.dataset.xxx \
 Publish multiple records to a stream in a batch (more efficient than individual publishes).
 
 ```bash
-foundry streams stream publish-batch DATASET_RID --branch BRANCH --records RECORDS [OPTIONS]
+pfoundry streams stream publish-batch DATASET_RID --branch BRANCH --records RECORDS [OPTIONS]
 
 # Options:
 #   --branch, -b TEXT       Stream branch name (required)
@@ -149,12 +149,12 @@ foundry streams stream publish-batch DATASET_RID --branch BRANCH --records RECOR
 # Examples
 
 # Publish multiple records inline
-foundry streams stream publish-batch ri.foundry.main.dataset.xxx \
+pfoundry streams stream publish-batch ri.foundry.main.dataset.xxx \
     --branch master \
     --records '[{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}]'
 
 # Publish from file
-foundry streams stream publish-batch ri.foundry.main.dataset.xxx \
+pfoundry streams stream publish-batch ri.foundry.main.dataset.xxx \
     --branch master \
     --records @records.json
 ```
@@ -164,7 +164,7 @@ foundry streams stream publish-batch ri.foundry.main.dataset.xxx \
 Reset a stream, clearing all existing data. **Warning: This is irreversible!**
 
 ```bash
-foundry streams stream reset DATASET_RID --branch BRANCH [OPTIONS]
+pfoundry streams stream reset DATASET_RID --branch BRANCH [OPTIONS]
 
 # Options:
 #   --branch, -b TEXT       Stream branch name to reset (required)
@@ -176,10 +176,10 @@ foundry streams stream reset DATASET_RID --branch BRANCH [OPTIONS]
 # Examples
 
 # Reset with confirmation prompt
-foundry streams stream reset ri.foundry.main.dataset.xxx --branch master
+pfoundry streams stream reset ri.foundry.main.dataset.xxx --branch master
 
 # Skip confirmation (use with caution)
-foundry streams stream reset ri.foundry.main.dataset.xxx \
+pfoundry streams stream reset ri.foundry.main.dataset.xxx \
     --branch master \
     --confirm
 ```
@@ -225,7 +225,7 @@ The schema uses `fieldSchemaList` to define record structure:
 
 ```bash
 # High-volume stream with 10 partitions
-foundry streams dataset create high-volume-stream \
+pfoundry streams dataset create high-volume-stream \
     --folder ri.compass.main.folder.xxx \
     --schema @schema.json \
     --partitions 10 \
@@ -238,12 +238,12 @@ foundry streams dataset create high-volume-stream \
 
 ```bash
 # 1. Create the streaming dataset
-foundry streams dataset create events \
+pfoundry streams dataset create events \
     --folder ri.compass.main.folder.xxx \
     --schema '{"fieldSchemaList": [{"name": "event_id", "type": "STRING"}, {"name": "timestamp", "type": "TIMESTAMP"}, {"name": "data", "type": "STRING"}]}'
 
 # 2. Publish initial records
-foundry streams stream publish-batch ri.foundry.main.dataset.xxx \
+pfoundry streams stream publish-batch ri.foundry.main.dataset.xxx \
     --branch master \
     --records @initial-events.json
 ```
@@ -259,7 +259,7 @@ while true; do
     # Generate or fetch new records
     RECORD='{"id": '$RANDOM', "timestamp": '$(date +%s)', "value": '$RANDOM'}'
 
-    foundry streams stream publish "$DATASET_RID" \
+    pfoundry streams stream publish "$DATASET_RID" \
         --branch "$BRANCH" \
         --record "$RECORD"
 

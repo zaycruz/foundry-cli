@@ -37,7 +37,7 @@ class WidgetsService(BaseService):
             settings = self.service.DevModeSettings.enable(preview=True)
             return self._serialize_response(settings)
         except Exception as e:
-            raise RuntimeError(f"Failed to enable dev mode: {e}") from e
+            raise RuntimeError(f"Failed to enable dev mode: {self._describe_error(e)}") from e
 
     # ===== WidgetSet =====
 
@@ -72,7 +72,7 @@ class WidgetsService(BaseService):
             return self._serialize_response(widget_set)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get widget set '{widget_set_rid}': {e}"
+                f"Failed to get widget set '{widget_set_rid}': {self._describe_error(e)}"
             ) from e
 
     # ===== Releases =====
@@ -117,7 +117,7 @@ class WidgetsService(BaseService):
             return [self._serialize_response(r) for r in releases]
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list releases for '{widget_set_rid}': {e}"
+                f"Failed to list releases for '{widget_set_rid}': {self._describe_error(e)}"
             ) from e
 
     def get_release(
@@ -157,7 +157,7 @@ class WidgetsService(BaseService):
             return self._serialize_response(release)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get release '{release_version}' for '{widget_set_rid}': {e}"
+                f"Failed to get release '{release_version}' for '{widget_set_rid}': {self._describe_error(e)}"
             ) from e
 
     def delete_release(
@@ -190,7 +190,7 @@ class WidgetsService(BaseService):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to delete release '{release_version}' for '{widget_set_rid}': {e}"
+                f"Failed to delete release '{release_version}' for '{widget_set_rid}': {self._describe_error(e)}"
             ) from e
 
     # ===== Repository =====
@@ -226,5 +226,5 @@ class WidgetsService(BaseService):
             return self._serialize_response(repository)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get repository '{repository_rid}': {e}"
+                f"Failed to get repository '{repository_rid}': {self._describe_error(e)}"
             ) from e

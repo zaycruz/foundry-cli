@@ -1,5 +1,5 @@
 """
-SQL commands for the foundry CLI.
+SQL commands for the pfoundry CLI.
 Provides commands for executing SQL queries against Foundry datasets.
 """
 
@@ -134,10 +134,10 @@ def submit_query(
             console.print("[green]Query completed immediately[/green]")
         elif result.get("status") == "running":
             console.print(
-                "Use [bold]foundry sql status <query-id>[/bold] to check progress"
+                "Use [bold]pfoundry sql status <query-id>[/bold] to check progress"
             )
             console.print(
-                "Use [bold]foundry sql results <query-id>[/bold] to get results when completed"
+                "Use [bold]pfoundry sql results <query-id>[/bold] to get results when completed"
             )
 
     except Exception as e:
@@ -175,7 +175,7 @@ def get_query_status(
             console.print("Query is still executing...")
         elif status == "succeeded":
             console.print(f"Status: [green]{status}[/green]")
-            console.print("Use [bold]foundry sql results <query-id>[/bold] to get results")
+            console.print("Use [bold]pfoundry sql results <query-id>[/bold] to get results")
         elif status == "failed":
             console.print(f"Status: [red]{status}[/red]")
             error_msg = result.get("error_message", "Unknown error")
@@ -398,7 +398,7 @@ def wait_for_query(
             else:
                 formatter.display(result, output_format)
         else:
-            console.print("Use [bold]foundry sql results <query-id>[/bold] to get results")
+            console.print("Use [bold]pfoundry sql results <query-id>[/bold] to get results")
 
     except Exception as e:
         formatter.print_error(f"Failed while waiting for query: {e}")

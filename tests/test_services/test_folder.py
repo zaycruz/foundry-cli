@@ -34,14 +34,9 @@ def sample_folder():
     folder.description = "Test folder description"
     folder.parent_folder_rid = "ri.compass.main.folder.parent"
 
-    # Mock timestamp
-    created = Mock()
-    created.time = "2024-01-01T00:00:00Z"
-    folder.created = created
-
-    modified = Mock()
-    modified.time = "2024-01-02T00:00:00Z"
-    folder.modified = modified
+    # Timestamps: SDK deserializes datetime; a str passes through.
+    folder.created = "2024-01-01T00:00:00Z"
+    folder.modified = "2024-01-02T00:00:00Z"
 
     return folder
 
@@ -84,7 +79,7 @@ def test_create_folder(mock_folder_service, sample_folder):
     mock_folder_class.create.assert_called_once_with(
         display_name="Test Folder",
         parent_folder_rid="ri.compass.main.folder.parent",
-        preview=True,
+        
     )
 
 
@@ -100,7 +95,7 @@ def test_get_folder(mock_folder_service, sample_folder):
     assert result["description"] == "Test folder description"
 
     mock_folder_class.get.assert_called_once_with(
-        "ri.compass.main.folder.test-folder", preview=True
+        "ri.compass.main.folder.test-folder", 
     )
 
 
@@ -119,7 +114,7 @@ def test_move_folder_preserves_current_name(mock_folder_service, sample_folder):
     assert result["rid"] == "ri.compass.main.folder.test-folder"
     assert result["display_name"] == "Test Folder"
     mock_folder_class.get.assert_called_once_with(
-        "ri.compass.main.folder.test-folder", preview=True
+        "ri.compass.main.folder.test-folder", 
     )
     mock_folder_class.replace.assert_called_once_with(
         folder_rid="ri.compass.main.folder.test-folder",
@@ -142,7 +137,7 @@ def test_move_folder_overrides_name_after_fetch(mock_folder_service, sample_fold
     )
 
     mock_folder_class.get.assert_called_once_with(
-        "ri.compass.main.folder.test-folder", preview=True
+        "ri.compass.main.folder.test-folder", 
     )
     mock_folder_class.replace.assert_called_once_with(
         folder_rid="ri.compass.main.folder.test-folder",
@@ -193,7 +188,7 @@ def test_list_children(mock_folder_service, sample_children):
     assert result[1]["name"] == "Child Dataset"
 
     mock_folder_class.children.assert_called_once_with(
-        "ri.compass.main.folder.parent", page_size=None, page_token=None, preview=True
+        "ri.compass.main.folder.parent", page_size=None, page_token=None, 
     )
 
 
@@ -212,7 +207,7 @@ def test_list_children_with_pagination(mock_folder_service, sample_children):
         "ri.compass.main.folder.parent",
         page_size=10,
         page_token="next-page-token",
-        preview=True,
+        
     )
 
 
@@ -235,7 +230,6 @@ def test_get_folders_batch(mock_folder_service, sample_folder):
 
     # Verify the call was made with GetFoldersBatchRequestElement objects
     call_args = mock_folder_class.get_batch.call_args
-    assert call_args.kwargs["preview"] is True
     elements = call_args.kwargs["body"]
     assert len(elements) == 2
     assert elements[0].folder_rid == "ri.compass.main.folder.folder1"
@@ -330,11 +324,10 @@ def test_format_timestamp_none(mock_folder_service):
     assert result is None
 
 
-def test_format_timestamp_with_time_attr(mock_folder_service):
-    """Test timestamp formatting with time attribute."""
+def test_format_timestamp_with_isoformat(mock_folder_service):
+    """Test timestamp formatting of a datetime (ISO-8601)."""
     service, _ = mock_folder_service
-    timestamp = Mock()
-    timestamp.time = "2024-01-01T00:00:00Z"
+    timestamp = "2024-01-01T00:00:00Z"
     result = service._format_timestamp(timestamp)
     assert result == "2024-01-01T00:00:00Z"
 

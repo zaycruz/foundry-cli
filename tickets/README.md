@@ -13,7 +13,7 @@ implementation, per the repo rule: no unverified contracts, no guessed behavior.
 | [005](TICKET-005-preview-transform.md) | `preview_transform` unblock paths | Blocked upstream | Watch / needs enrollment |
 
 Evidence-class legend, matching the standard set in
-`src/pltr/services/global_branching.py:1-43`:
+`src/foundry_cli/services/global_branching.py:1-43`:
 
 - **Published client contract**: verb + path recovered from Palantir's own
   shipped client code (`@palantir/mcp` dist / generated service APIs).

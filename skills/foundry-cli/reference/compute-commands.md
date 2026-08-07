@@ -25,7 +25,7 @@ requires `--yes`.
 ## Get Compute Module Info (read-only)
 
 ```bash
-foundry compute info DEPLOYED_APP_RID [--branch BRANCH] [--include status|config] [--format FORMAT]
+pfoundry compute info DEPLOYED_APP_RID [--branch BRANCH] [--include status|config] [--format FORMAT]
 
 # One internal GET per include entry against contour-backend-multiplexer:
 #   status -> /deployed-apps/{rid}/{branch}/status
@@ -33,13 +33,13 @@ foundry compute info DEPLOYED_APP_RID [--branch BRANCH] [--include status|config
 # Default loads both.
 
 # Example
-foundry compute info ri.foundry.main.deployed-app.abc123 --include status
+pfoundry compute info ri.foundry.main.deployed-app.abc123 --include status
 ```
 
 ## Read Compute Module Logs (read-only)
 
 ```bash
-foundry compute logs BUILD_JOB_RID [--from-inclusive MICROS] [--to-exclusive MICROS] \
+pfoundry compute logs BUILD_JOB_RID [--from-inclusive MICROS] [--to-exclusive MICROS] \
     [--page-size-limit N] [--reverse] [--format FORMAT]
 
 # Two-step telemetry flow: resolve the container/session via
@@ -49,15 +49,15 @@ foundry compute logs BUILD_JOB_RID [--from-inclusive MICROS] [--to-exclusive MIC
 # bundle-derived and NOT contract-verified; the response is passed through raw.
 
 # Example
-foundry compute logs ri.foundry.main.job.abc123 --page-size-limit 500
+pfoundry compute logs ri.foundry.main.job.abc123 --page-size-limit 500
 ```
 
 ## Manage Compute Modules (plan-first)
 
 ```bash
-foundry compute manage --action start --deployed-app-rid RID [--branch BRANCH] [--apply]
-foundry compute manage --action stop --build-rid BUILD_RID [--apply] [--yes]
-foundry compute manage --action dev-mode --deployed-app-rid RID [--branch BRANCH] \
+pfoundry compute manage --action start --deployed-app-rid RID [--branch BRANCH] [--apply]
+pfoundry compute manage --action stop --build-rid BUILD_RID [--apply] [--yes]
+pfoundry compute manage --action dev-mode --deployed-app-rid RID [--branch BRANCH] \
     [--dev-mode-until ISO8601] [--apply]
 
 # start: build2 POST /manager/submitBuild with the deployed-app RID passed as
@@ -69,16 +69,16 @@ foundry compute manage --action dev-mode --deployed-app-rid RID [--branch BRANCH
 # Without --apply each action prints the dry-run plan and issues no request.
 
 # Examples
-foundry compute manage --action start --deployed-app-rid ri.foundry.main.deployed-app.abc123
-foundry compute manage --action stop --build-rid ri.foundry.main.build.abc123 --apply --yes
-foundry compute manage --action dev-mode --deployed-app-rid ri.foundry.main.deployed-app.abc123 \
+pfoundry compute manage --action start --deployed-app-rid ri.foundry.main.deployed-app.abc123
+pfoundry compute manage --action stop --build-rid ri.foundry.main.build.abc123 --apply --yes
+pfoundry compute manage --action dev-mode --deployed-app-rid ri.foundry.main.deployed-app.abc123 \
     --dev-mode-until 2026-07-25T20:00:00Z --apply
 ```
 
 ## Execute a Compute Module Function (plan-first)
 
 ```bash
-foundry compute execute DEPLOYED_APP_RID --query-type TYPE [--query JSON] \
+pfoundry compute execute DEPLOYED_APP_RID --query-type TYPE [--query JSON] \
     [--branch BRANCH] [--apply] [--format FORMAT]
 
 # contour-backend-multiplexer POST /module-group-multiplexer/compute-modules/
@@ -88,6 +88,6 @@ foundry compute execute DEPLOYED_APP_RID --query-type TYPE [--query JSON] \
 # command prints the dry-run plan and issues no network request.
 
 # Example
-foundry compute execute ri.foundry.main.deployed-app.abc123 \
+pfoundry compute execute ri.foundry.main.deployed-app.abc123 \
     --query-type my-function --query '{"input": 1}' --apply
 ```

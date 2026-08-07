@@ -240,8 +240,37 @@ def test_upsert_object_type_command_success(mock_services):
         display_name="Example Object",
         primary_key="id",
         backing_dataset="ri.foundry.main.dataset.example",
+        primary_key_backing_column=None,
         description=None,
         apply=False,
+    )
+
+
+def test_upsert_object_type_command_forwards_primary_key_backing_column(mock_services):
+    """A normalized key can be explicitly mapped to a source-system column."""
+    mock_instance = Mock()
+    mock_instance.upsert_object_type.return_value = {
+        "mode": "dry-run",
+        "apiName": "ExampleObject",
+        "objectTypeId": "ns0abcde.example-object",
+        "ontologyRid": "ri.ontology.main.ontology.test",
+        "validation": {"status": "success", "errors": []},
+    }
+    mock_services["object_type"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        _object_type_upsert_args(
+            "--primary-key-backing-column", "SOURCE_EMPLOYEE_ID"
+        ),
+    )
+
+    assert result.exit_code == 0
+    assert (
+        mock_instance.upsert_object_type.call_args.kwargs[
+            "primary_key_backing_column"
+        ]
+        == "SOURCE_EMPLOYEE_ID"
     )
 
 
@@ -1328,6 +1357,17 @@ def test_upsert_help_texts_reference_publication_order():
         assert result.exit_code == 0
         assert "publication" in result.output
         assert step in result.output
+
+
+def test_action_type_upsert_help_marks_apply_as_experimental_and_blocked():
+    result = runner.invoke(app, ["action-type-upsert", "--help"])
+
+    assert result.exit_code == 0
+    normalized = " ".join(result.output.split()).lower()
+    assert "experimental" in normalized
+    assert "dry-run" in normalized
+    assert "--apply" in normalized
+    assert "authoritative http 200" in normalized
 
 
 # object-type-add-property command tests

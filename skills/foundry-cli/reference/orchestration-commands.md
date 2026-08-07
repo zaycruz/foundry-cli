@@ -12,25 +12,25 @@ Manage builds, jobs, and schedules in Foundry.
 ### Search Builds
 
 ```bash
-foundry orchestration builds search [--page-size N] [--format FORMAT]
+pfoundry orchestration builds search [--page-size N] [--format FORMAT]
 
 # Example
-foundry orchestration builds search --format table
+pfoundry orchestration builds search --format table
 ```
 
 ### Get Build Details
 
 ```bash
-foundry orchestration builds get BUILD_RID [--format FORMAT] [--output FILE]
+pfoundry orchestration builds get BUILD_RID [--format FORMAT] [--output FILE]
 
 # Example
-foundry orchestration builds get ri.orchestration.main.build.abc123 --format json
+pfoundry orchestration builds get ri.orchestration.main.build.abc123 --format json
 ```
 
 ### Create Build
 
 ```bash
-foundry orchestration builds create TARGET [OPTIONS]
+pfoundry orchestration builds create TARGET [OPTIONS]
 
 # Options:
 #   --branch TEXT             Branch name
@@ -39,36 +39,36 @@ foundry orchestration builds create TARGET [OPTIONS]
 #   --notifications/--no-notifications  Enable notifications [default: enabled]
 
 # Example (TARGET is JSON)
-foundry orchestration builds create '{"dataset_rid": "ri.foundry.main.dataset.abc"}' --branch main --force
+pfoundry orchestration builds create '{"dataset_rid": "ri.foundry.main.dataset.abc"}' --branch main --force
 ```
 
 ### Cancel Build
 
 ```bash
-foundry orchestration builds cancel BUILD_RID
+pfoundry orchestration builds cancel BUILD_RID
 
 # Example
-foundry orchestration builds cancel ri.orchestration.main.build.abc123
+pfoundry orchestration builds cancel ri.orchestration.main.build.abc123
 ```
 
 ### List Jobs in Build
 
 ```bash
-foundry orchestration builds jobs BUILD_RID [--page-size N] [--format FORMAT]
+pfoundry orchestration builds jobs BUILD_RID [--page-size N] [--format FORMAT]
 
 # Example
-foundry orchestration builds jobs ri.orchestration.main.build.abc123
+pfoundry orchestration builds jobs ri.orchestration.main.build.abc123
 ```
 
 ### Get Multiple Builds (Batch)
 
 ```bash
-foundry orchestration builds get-batch BUILD_RIDS
+pfoundry orchestration builds get-batch BUILD_RIDS
 
 # BUILD_RIDS is comma-separated, max 100
 
 # Example
-foundry orchestration builds get-batch "ri.orchestration.main.build.abc,ri.orchestration.main.build.def"
+pfoundry orchestration builds get-batch "ri.orchestration.main.build.abc,ri.orchestration.main.build.def"
 ```
 
 ## Job Commands
@@ -76,21 +76,21 @@ foundry orchestration builds get-batch "ri.orchestration.main.build.abc,ri.orche
 ### Get Job Details
 
 ```bash
-foundry orchestration jobs get JOB_RID [--format FORMAT]
+pfoundry orchestration jobs get JOB_RID [--format FORMAT]
 
 # Example
-foundry orchestration jobs get ri.orchestration.main.job.def456
+pfoundry orchestration jobs get ri.orchestration.main.job.def456
 ```
 
 ### Get Multiple Jobs (Batch)
 
 ```bash
-foundry orchestration jobs get-batch JOB_RIDS
+pfoundry orchestration jobs get-batch JOB_RIDS
 
 # JOB_RIDS is comma-separated, max 500
 
 # Example
-foundry orchestration jobs get-batch "ri.orchestration.main.job.abc,ri.orchestration.main.job.def"
+pfoundry orchestration jobs get-batch "ri.orchestration.main.job.abc,ri.orchestration.main.job.def"
 ```
 
 ## Schedule Commands
@@ -98,16 +98,16 @@ foundry orchestration jobs get-batch "ri.orchestration.main.job.abc,ri.orchestra
 ### Get Schedule
 
 ```bash
-foundry orchestration schedules get SCHEDULE_RID [--preview] [--format FORMAT]
+pfoundry orchestration schedules get SCHEDULE_RID [--preview] [--format FORMAT]
 
 # Example
-foundry orchestration schedules get ri.orchestration.main.schedule.ghi789 --preview
+pfoundry orchestration schedules get ri.orchestration.main.schedule.ghi789 --preview
 ```
 
 ### Create Schedule
 
 ```bash
-foundry orchestration schedules create ACTION [OPTIONS]
+pfoundry orchestration schedules create ACTION [OPTIONS]
 
 # Options:
 #   --name TEXT          Display name
@@ -118,7 +118,7 @@ foundry orchestration schedules create ACTION [OPTIONS]
 # ACTION is JSON config
 
 # Example - Daily build at 2 AM
-foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.abc"}' \
+pfoundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.abc"}' \
   --name "Daily Build" \
   --description "Automated daily build" \
   --trigger '{"type": "CRON", "expression": "0 2 * * *"}'
@@ -127,46 +127,46 @@ foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.
 ### Delete Schedule
 
 ```bash
-foundry orchestration schedules delete SCHEDULE_RID [--yes]
+pfoundry orchestration schedules delete SCHEDULE_RID [--yes]
 
 # Example
-foundry orchestration schedules delete ri.orchestration.main.schedule.ghi789 --yes
+pfoundry orchestration schedules delete ri.orchestration.main.schedule.ghi789 --yes
 ```
 
 ### Pause Schedule
 
 ```bash
-foundry orchestration schedules pause SCHEDULE_RID
+pfoundry orchestration schedules pause SCHEDULE_RID
 
 # Example
-foundry orchestration schedules pause ri.orchestration.main.schedule.ghi789
+pfoundry orchestration schedules pause ri.orchestration.main.schedule.ghi789
 ```
 
 ### Unpause Schedule
 
 ```bash
-foundry orchestration schedules unpause SCHEDULE_RID
+pfoundry orchestration schedules unpause SCHEDULE_RID
 
 # Example
-foundry orchestration schedules unpause ri.orchestration.main.schedule.ghi789
+pfoundry orchestration schedules unpause ri.orchestration.main.schedule.ghi789
 ```
 
 ### Run Schedule Immediately
 
 ```bash
-foundry orchestration schedules run SCHEDULE_RID
+pfoundry orchestration schedules run SCHEDULE_RID
 
 # Example
-foundry orchestration schedules run ri.orchestration.main.schedule.ghi789
+pfoundry orchestration schedules run ri.orchestration.main.schedule.ghi789
 ```
 
 ### Replace Schedule
 
 ```bash
-foundry orchestration schedules replace SCHEDULE_RID ACTION [OPTIONS]
+pfoundry orchestration schedules replace SCHEDULE_RID ACTION [OPTIONS]
 
 # Example
-foundry orchestration schedules replace ri.orchestration.main.schedule.ghi789 \
+pfoundry orchestration schedules replace ri.orchestration.main.schedule.ghi789 \
   '{"type": "BUILD", "target": "ri.foundry.main.dataset.new"}' \
   --name "Updated Schedule"
 ```
@@ -174,12 +174,12 @@ foundry orchestration schedules replace ri.orchestration.main.schedule.ghi789 \
 ### List Schedule Runs
 
 ```bash
-foundry orchestration schedules runs SCHEDULE_RID [--page-size N] [--page-token TEXT] [--format FORMAT]
+pfoundry orchestration schedules runs SCHEDULE_RID [--page-size N] [--page-token TEXT] [--format FORMAT]
 
 # List recent execution runs for a schedule
 
 # Example
-foundry orchestration schedules runs ri.orchestration.main.schedule.ghi789 --page-size 20
+pfoundry orchestration schedules runs ri.orchestration.main.schedule.ghi789 --page-size 20
 ```
 
 ## Common Patterns
@@ -189,21 +189,21 @@ foundry orchestration schedules runs ri.orchestration.main.schedule.ghi789 --pag
 BUILD_RID="ri.orchestration.main.build.abc123"
 
 # Get build status
-foundry orchestration builds get $BUILD_RID
+pfoundry orchestration builds get $BUILD_RID
 
 # List all jobs
-foundry orchestration builds jobs $BUILD_RID --format json --output jobs.json
+pfoundry orchestration builds jobs $BUILD_RID --format json --output jobs.json
 
 # Get running jobs
 JOB_RIDS=$(cat jobs.json | jq -r '.[] | select(.status == "RUNNING") | .rid' | tr '\n' ',' | sed 's/,$//')
 if [ ! -z "$JOB_RIDS" ]; then
-  foundry orchestration jobs get-batch "$JOB_RIDS"
+  pfoundry orchestration jobs get-batch "$JOB_RIDS"
 fi
 ```
 
 ### Create daily ETL schedule
 ```bash
-foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.etl-pipeline"}' \
+pfoundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.main.dataset.etl-pipeline"}' \
   --name "Daily ETL" \
   --description "Run ETL pipeline at 2 AM daily" \
   --trigger '{"type": "CRON", "expression": "0 2 * * *"}'
@@ -212,10 +212,10 @@ foundry orchestration schedules create '{"type": "BUILD", "target": "ri.foundry.
 ### Pause schedule for maintenance
 ```bash
 # Pause
-foundry orchestration schedules pause ri.orchestration.main.schedule.daily-etl
+pfoundry orchestration schedules pause ri.orchestration.main.schedule.daily-etl
 
 # ... do maintenance ...
 
 # Resume
-foundry orchestration schedules unpause ri.orchestration.main.schedule.daily-etl
+pfoundry orchestration schedules unpause ri.orchestration.main.schedule.daily-etl
 ```

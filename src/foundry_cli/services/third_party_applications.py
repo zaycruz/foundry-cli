@@ -49,5 +49,5 @@ class ThirdPartyApplicationsService(BaseService):
             return self._serialize_response(application)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get third-party application {application_rid}: {e}"
+                f"Failed to get third-party application {application_rid}: {self._describe_error(e)}"
             )

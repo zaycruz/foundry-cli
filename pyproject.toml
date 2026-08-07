@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click>=8.3.3,<8.4.0",
     "click-repl>=0.3.0",
+    "defusedxml>=0.7.1",
     "foundry-platform-sdk>=1.95.0,<2.0.0",
     "keyring>=25.6.0",
     "pandas>=2.0.0",
@@ -56,7 +57,7 @@ Changelog = "https://github.com/zaycruz/foundry-cli/blob/main/CHANGELOG.md"
 Documentation = "https://github.com/zaycruz/foundry-cli/blob/main/README.md"
 
 [project.scripts]
-foundry = "foundry_cli.cli:main_entrypoint"
+pfoundry = "foundry_cli.cli:main_entrypoint"
 
 [project.optional-dependencies]
 langfuse = [
@@ -104,5 +105,6 @@ dev = [
     "pytest-cov>=6.2.1",
     "ruff>=0.12.8",
     "tomli-w>=1.2.0",
+    "types-defusedxml>=0.7.0.20260504",
     "types-requests>=2.32.4.20250611",
 ]

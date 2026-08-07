@@ -35,7 +35,7 @@ class ResourceService(BaseService):
             Resource information dictionary
         """
         try:
-            resource = self.service.Resource.get(resource_rid, preview=True)
+            resource = self.service.Resource.get(resource_rid)
             return self._format_resource_info(resource)
         except Exception as e:
             detail = self._format_error_detail(e)
@@ -52,7 +52,7 @@ class ResourceService(BaseService):
             Resource information dictionary
         """
         try:
-            resource = self.service.Resource.get_by_path(path=path, preview=True)
+            resource = self.service.Resource.get_by_path(path=path)
             return self._format_resource_info(resource)
         except Exception as e:
             detail = self._format_error_detail(e)
@@ -86,7 +86,7 @@ class ResourceService(BaseService):
         try:
             parent_folder_rid = folder_rid or self.ROOT_FOLDER_RID
             resources = []
-            list_params: Dict[str, Any] = {"preview": True}
+            list_params: Dict[str, Any] = {}
             if page_size:
                 list_params["page_size"] = page_size
             if page_token:
@@ -120,7 +120,7 @@ class ResourceService(BaseService):
                 GetResourcesBatchRequestElement(resource_rid=rid)
                 for rid in resource_rids
             ]
-            response = self.service.Resource.get_batch(body=elements, preview=True)
+            response = self.service.Resource.get_batch(body=elements)
             resources = []
             for resource in response.resources:
                 resources.append(self._format_resource_info(resource))
@@ -174,7 +174,7 @@ class ResourceService(BaseService):
                 visited_folders.add(current_folder_rid)
 
                 children = self.service.Folder.children(
-                    current_folder_rid, preview=True
+                    current_folder_rid
                 )
                 for resource in children:
                     if self._matches_resource_type(
@@ -218,7 +218,7 @@ class ResourceService(BaseService):
             RuntimeError: If deletion fails
         """
         try:
-            self.service.Resource.delete(resource_rid, preview=True)
+            self.service.Resource.delete(resource_rid)
         except Exception as e:
             detail = self._format_error_detail(e)
             raise RuntimeError(f"Failed to delete resource {resource_rid}: {detail}")
@@ -237,7 +237,7 @@ class ResourceService(BaseService):
             RuntimeError: If restoration fails
         """
         try:
-            self.service.Resource.restore(resource_rid, preview=True)
+            self.service.Resource.restore(resource_rid)
         except Exception as e:
             detail = self._format_error_detail(e)
             raise RuntimeError(f"Failed to restore resource {resource_rid}: {detail}")
@@ -255,7 +255,7 @@ class ResourceService(BaseService):
             RuntimeError: If permanent deletion fails
         """
         try:
-            self.service.Resource.permanently_delete(resource_rid, preview=True)
+            self.service.Resource.permanently_delete(resource_rid)
         except Exception as e:
             detail = self._format_error_detail(e)
             raise RuntimeError(
@@ -277,7 +277,7 @@ class ResourceService(BaseService):
         """
         try:
             self.service.Resource.add_markings(
-                resource_rid, marking_ids=marking_ids, preview=True
+                resource_rid, marking_ids=marking_ids
             )
         except Exception as e:
             detail = self._format_error_detail(e)
@@ -298,7 +298,7 @@ class ResourceService(BaseService):
         """
         try:
             self.service.Resource.remove_markings(
-                resource_rid, marking_ids=marking_ids, preview=True
+                resource_rid, marking_ids=marking_ids
             )
         except Exception as e:
             detail = self._format_error_detail(e)
@@ -325,7 +325,7 @@ class ResourceService(BaseService):
         """
         try:
             markings = []
-            list_params: Dict[str, Any] = {"preview": True}
+            list_params: Dict[str, Any] = {}
 
             if page_size:
                 list_params["page_size"] = page_size
@@ -357,7 +357,7 @@ class ResourceService(BaseService):
         """
         try:
             requirements = self.service.Resource.get_access_requirements(
-                resource_rid, preview=True
+                resource_rid
             )
             return self._format_access_requirements(requirements)
         except Exception as e:
@@ -382,7 +382,7 @@ class ResourceService(BaseService):
         try:
             elements = [GetByPathResourcesBatchRequestElement(path=p) for p in paths]
             response = self.service.Resource.get_by_path_batch(
-                body=elements, preview=True
+                body=elements
             )
             resources = []
             for resource in response.resources:
@@ -472,9 +472,13 @@ class ResourceService(BaseService):
         if timestamp is None:
             return None
 
-        # Handle different timestamp formats from the SDK
-        if hasattr(timestamp, "time"):
-            return str(timestamp.time)
+        # The SDK deserializes timestamps as datetime.datetime; serialize to
+        # ISO-8601. A str passes through unchanged (some SDK models return a
+        # pre-formatted string). Never fall back to a repr of a bound method.
+        if isinstance(timestamp, str):
+            return timestamp
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
         return str(timestamp)
 
     @staticmethod

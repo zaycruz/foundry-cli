@@ -88,7 +88,7 @@ class ConnectivityService(BaseService):
             )
             return self._list_connections_from_filesystem()
         except Exception as e:
-            raise RuntimeError(f"Failed to list connections: {e}")
+            raise RuntimeError(f"Failed to list connections: {self._describe_error(e)}")
 
     def get_connection(self, connection_rid: str) -> Dict[str, Any]:
         """
@@ -104,7 +104,7 @@ class ConnectivityService(BaseService):
             connection = self.connections_service.Connection.get(connection_rid)
             return self._format_connection_info(connection)
         except Exception as e:
-            raise RuntimeError(f"Failed to get connection {connection_rid}: {e}")
+            raise RuntimeError(f"Failed to get connection {connection_rid}: {self._describe_error(e)}")
 
     def create_connection(
         self,
@@ -134,7 +134,7 @@ class ConnectivityService(BaseService):
             )
             return self._format_connection_info(connection)
         except Exception as e:
-            raise RuntimeError(f"Failed to create connection '{display_name}': {e}")
+            raise RuntimeError(f"Failed to create connection '{display_name}': {self._describe_error(e)}")
 
     def get_connection_configuration(self, connection_rid: str) -> Dict[str, Any]:
         """
@@ -153,7 +153,7 @@ class ConnectivityService(BaseService):
             return {"connection_rid": connection_rid, "configuration": config}
         except Exception as e:
             raise RuntimeError(
-                f"Failed to get configuration for connection {connection_rid}: {e}"
+                f"Failed to get configuration for connection {connection_rid}: {self._describe_error(e)}"
             )
 
     def update_export_settings(
@@ -180,7 +180,7 @@ class ConnectivityService(BaseService):
             }
         except Exception as e:
             raise RuntimeError(
-                f"Failed to update export settings for connection {connection_rid}: {e}"
+                f"Failed to update export settings for connection {connection_rid}: {self._describe_error(e)}"
             )
 
     def update_secrets(
@@ -204,7 +204,7 @@ class ConnectivityService(BaseService):
             return {"connection_rid": connection_rid, "status": "secrets updated"}
         except Exception as e:
             raise RuntimeError(
-                f"Failed to update secrets for connection {connection_rid}: {e}"
+                f"Failed to update secrets for connection {connection_rid}: {self._describe_error(e)}"
             )
 
     def upload_custom_jdbc_drivers(
@@ -242,7 +242,7 @@ class ConnectivityService(BaseService):
             return self._format_connection_info(connection)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to upload JDBC driver to connection {connection_rid}: {e}"
+                f"Failed to upload JDBC driver to connection {connection_rid}: {self._describe_error(e)}"
             )
 
     def get_file_import(self, connection_rid: str, import_rid: str) -> Dict[str, Any]:
@@ -263,7 +263,7 @@ class ConnectivityService(BaseService):
             )
             return self._format_import_info(file_import)
         except Exception as e:
-            raise RuntimeError(f"Failed to get file import {import_rid}: {e}")
+            raise RuntimeError(f"Failed to get file import {import_rid}: {self._describe_error(e)}")
 
     def execute_file_import(
         self, connection_rid: str, import_rid: str
@@ -276,7 +276,7 @@ class ConnectivityService(BaseService):
             )
             return {"build_rid": build_rid}
         except Exception as e:
-            raise RuntimeError(f"Failed to execute file import {import_rid}: {e}")
+            raise RuntimeError(f"Failed to execute file import {import_rid}: {self._describe_error(e)}")
 
     def get_table_import(self, connection_rid: str, import_rid: str) -> Dict[str, Any]:
         """
@@ -296,7 +296,7 @@ class ConnectivityService(BaseService):
             )
             return self._format_import_info(table_import)
         except Exception as e:
-            raise RuntimeError(f"Failed to get table import {import_rid}: {e}")
+            raise RuntimeError(f"Failed to get table import {import_rid}: {self._describe_error(e)}")
 
     def execute_table_import(
         self, connection_rid: str, import_rid: str
@@ -309,7 +309,7 @@ class ConnectivityService(BaseService):
             )
             return {"build_rid": build_rid}
         except Exception as e:
-            raise RuntimeError(f"Failed to execute table import {import_rid}: {e}")
+            raise RuntimeError(f"Failed to execute table import {import_rid}: {self._describe_error(e)}")
 
     def list_file_imports(self, connection_rid: str) -> List[Dict[str, Any]]:
         """
@@ -325,7 +325,7 @@ class ConnectivityService(BaseService):
             imports = self.file_imports_service.list(connection_rid=connection_rid)
             return [self._format_import_info(imp) for imp in imports]
         except Exception as e:
-            raise RuntimeError(f"Failed to list file imports: {e}")
+            raise RuntimeError(f"Failed to list file imports: {self._describe_error(e)}")
 
     def list_table_imports(self, connection_rid: str) -> List[Dict[str, Any]]:
         """
@@ -341,7 +341,7 @@ class ConnectivityService(BaseService):
             imports = self.table_imports_service.list(connection_rid=connection_rid)
             return [self._format_import_info(imp) for imp in imports]
         except Exception as e:
-            raise RuntimeError(f"Failed to list table imports: {e}")
+            raise RuntimeError(f"Failed to list table imports: {self._describe_error(e)}")
 
     def get_webhook(
         self, webhook_rid: str, version: Optional[int] = None
@@ -373,7 +373,7 @@ class ConnectivityService(BaseService):
         try:
             status, payload, raw = client.conjure("GET", path)
         except Exception as e:
-            raise RuntimeError(f"Failed to read webhook {webhook_rid}: {e}") from e
+            raise RuntimeError(f"Failed to read webhook {webhook_rid}: {self._describe_error(e)}") from e
 
         if not 200 <= status < 300:
             error_name = (
@@ -581,7 +581,7 @@ class ConnectivityService(BaseService):
             status, payload, raw = client.conjure("GET", path)
         except Exception as e:
             raise RuntimeError(
-                f"Failed to read source config for {source_rid}: {e}"
+                f"Failed to read source config for {source_rid}: {self._describe_error(e)}"
             ) from e
 
         if not 200 <= status < 300:
@@ -683,7 +683,7 @@ class ConnectivityService(BaseService):
                 "POST", "webhooks/api/registry/v0", json_body=body
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create webhook '{name}': {e}") from e
+            raise RuntimeError(f"Failed to create webhook '{name}': {self._describe_error(e)}") from e
 
         if not 200 <= status < 300:
             error_name = (
@@ -764,7 +764,7 @@ class ConnectivityService(BaseService):
                 json_body={"spec": spec},
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to update webhook {webhook_rid}: {e}") from e
+            raise RuntimeError(f"Failed to update webhook {webhook_rid}: {self._describe_error(e)}") from e
 
         if not 200 <= status < 300:
             error_name = (
@@ -928,7 +928,7 @@ class ConnectivityService(BaseService):
                 json_body=body,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create REST source '{name}': {e}") from e
+            raise RuntimeError(f"Failed to create REST source '{name}': {self._describe_error(e)}") from e
 
         if not 200 <= status < 300:
             error_name = (
@@ -1038,7 +1038,7 @@ class ConnectivityService(BaseService):
                 request_timeout=self.EGRESS_READ_TIMEOUT,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to list network egress policies: {e}") from e
+            raise RuntimeError(f"Failed to list network egress policies: {self._describe_error(e)}") from e
         self._raise_egress_for_status(status, payload, raw, "get-all-policies")
         if not isinstance(payload, Mapping):
             raise EgressPolicyShapeError(
@@ -1060,7 +1060,7 @@ class ConnectivityService(BaseService):
                 request_timeout=self.EGRESS_READ_TIMEOUT,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to read network egress policies: {e}") from e
+            raise RuntimeError(f"Failed to read network egress policies: {self._describe_error(e)}") from e
         self._raise_egress_for_status(status, payload, raw, "get-batch")
         if not isinstance(payload, Mapping):
             raise EgressPolicyShapeError(
@@ -1167,7 +1167,7 @@ class ConnectivityService(BaseService):
             visited_folders.add(folder_rid)
 
             try:
-                children = folder_client.children(folder_rid, preview=True)
+                children = folder_client.children(folder_rid)
             except Exception as error:
                 if folder_rid == start_folder_rid:
                     raise RuntimeError(

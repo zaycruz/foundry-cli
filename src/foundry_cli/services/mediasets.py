@@ -38,7 +38,7 @@ class MediaSetsService(BaseService):
             )
             return self._format_media_item_info(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get media item info: {e}")
+            raise RuntimeError(f"Failed to get media item info: {self._describe_error(e)}")
 
     def get_media_item_by_path(
         self,
@@ -68,7 +68,7 @@ class MediaSetsService(BaseService):
             )
             return {"rid": response.rid, "path": media_item_path}
         except Exception as e:
-            raise RuntimeError(f"Failed to get media item by path: {e}")
+            raise RuntimeError(f"Failed to get media item by path: {self._describe_error(e)}")
 
     def create_transaction(
         self,
@@ -95,7 +95,7 @@ class MediaSetsService(BaseService):
             )
             return response.transaction_id
         except Exception as e:
-            raise RuntimeError(f"Failed to create transaction: {e}")
+            raise RuntimeError(f"Failed to create transaction: {self._describe_error(e)}")
 
     def commit_transaction(
         self,
@@ -118,7 +118,7 @@ class MediaSetsService(BaseService):
                 preview=preview,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to commit transaction: {e}")
+            raise RuntimeError(f"Failed to commit transaction: {self._describe_error(e)}")
 
     def abort_transaction(
         self,
@@ -141,7 +141,7 @@ class MediaSetsService(BaseService):
                 preview=preview,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to abort transaction: {e}")
+            raise RuntimeError(f"Failed to abort transaction: {self._describe_error(e)}")
 
     def upload_media(
         self,
@@ -186,7 +186,7 @@ class MediaSetsService(BaseService):
                 "uploaded": True,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to upload media: {e}")
+            raise RuntimeError(f"Failed to upload media: {self._describe_error(e)}")
 
     def download_media(
         self,
@@ -236,7 +236,7 @@ class MediaSetsService(BaseService):
                 "original": original,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to download media: {e}")
+            raise RuntimeError(f"Failed to download media: {self._describe_error(e)}")
 
     def get_media_reference(
         self,
@@ -263,7 +263,7 @@ class MediaSetsService(BaseService):
             )
             return self._format_media_reference(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get media reference: {e}")
+            raise RuntimeError(f"Failed to get media reference: {self._describe_error(e)}")
 
     def _format_media_item_info(self, info_response: Any) -> Dict[str, Any]:
         """Format media item info response for display."""
@@ -329,7 +329,7 @@ class MediaSetsService(BaseService):
             )
             return self._format_thumbnail_status(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to calculate thumbnail: {e}")
+            raise RuntimeError(f"Failed to calculate thumbnail: {self._describe_error(e)}")
 
     def retrieve_thumbnail(
         self,
@@ -378,7 +378,7 @@ class MediaSetsService(BaseService):
                 "format": "image/webp",
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to retrieve thumbnail: {e}")
+            raise RuntimeError(f"Failed to retrieve thumbnail: {self._describe_error(e)}")
 
     def upload_temp_media(
         self,
@@ -417,7 +417,7 @@ class MediaSetsService(BaseService):
 
             return self._format_media_reference(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to upload temporary media: {e}")
+            raise RuntimeError(f"Failed to upload temporary media: {self._describe_error(e)}")
 
     def _format_thumbnail_status(self, status_response: Any) -> Dict[str, Any]:
         """Format thumbnail calculation status response for display."""

@@ -47,7 +47,7 @@ class AuthManager:
                     return provider.get_client()
                 raise ProfileNotFoundError(
                     "No profile specified and no default profile configured. "
-                    "Run 'foundry configure configure' to set up authentication, "
+                    "Run 'pfoundry configure configure' to set up authentication, "
                     "or set FOUNDRY_HOST with FOUNDRY_TOKEN (or "
                     "FOUNDRY_CLIENT_ID and FOUNDRY_CLIENT_SECRET)."
                 )
@@ -58,7 +58,7 @@ class AuthManager:
         except ProfileNotFoundError:
             raise ProfileNotFoundError(
                 f"Profile '{profile}' not found. "
-                f"Run 'foundry configure configure --profile {profile}' to set it up."
+                f"Run 'pfoundry configure configure --profile {profile}' to set it up."
             )
 
         # Create appropriate auth provider

@@ -847,3 +847,90 @@ class TestPullRequestCloseCommand:
 
         assert result.exit_code == 1
         assert "Error closing pull request" in result.stdout
+
+
+class TestPushCommand:
+    """Tests for the dry-run-first guarded push command surface."""
+
+    @patch("foundry_cli.commands.repository.RepositoryService")
+    def test_push_defaults_to_dry_run(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.push_repository.return_value = {
+            "operation": "push_code_repository_branch",
+            "status": "dry-run",
+        }
+
+        result = CliRunner().invoke(
+            app,
+            [
+                "push",
+                REPO_RID,
+                "refs/heads/feature",
+                "refs/heads/review",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.push_repository.assert_called_once_with(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/review",
+            apply=False,
+            allow_default_branch=False,
+        )
+        assert "dry-run" in result.stdout
+
+    @patch("foundry_cli.commands.repository.RepositoryService")
+    def test_push_apply_is_forwarded(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.push_repository.return_value = {"status": "pushed"}
+
+        result = CliRunner().invoke(
+            app,
+            [
+                "push",
+                REPO_RID,
+                "refs/heads/feature",
+                "refs/heads/review",
+                "--apply",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.push_repository.assert_called_once_with(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/review",
+            apply=True,
+            allow_default_branch=False,
+        )
+
+    @patch("foundry_cli.commands.repository.RepositoryService")
+    def test_push_default_branch_authorization_is_forwarded(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.push_repository.return_value = {"status": "dry-run"}
+
+        result = CliRunner().invoke(
+            app,
+            [
+                "push",
+                REPO_RID,
+                "refs/heads/feature",
+                "refs/heads/master",
+                "--allow-default-branch",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_service.push_repository.assert_called_once_with(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/master",
+            apply=False,
+            allow_default_branch=True,
+        )

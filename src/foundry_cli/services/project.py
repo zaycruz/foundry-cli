@@ -115,16 +115,16 @@ class ProjectService(BaseService):
                     for param in params.values()
                 )
                 if supports_kwargs:
-                    project = create_fn(**create_params, preview=True)
+                    project = create_fn(**create_params)
                 elif "body" in params:
-                    project = create_fn(body=create_params, preview=True)
+                    project = create_fn(body=create_params)
                 else:
-                    project = create_fn(**create_params, preview=True)
+                    project = create_fn(**create_params)
             except (TypeError, ValueError):
-                project = create_fn(**create_params, preview=True)
+                project = create_fn(**create_params)
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to create project '{display_name}': {e}")
+            raise RuntimeError(f"Failed to create project '{display_name}': {self._describe_error(e)}")
 
     def get_project(self, project_rid: str) -> Dict[str, Any]:
         """
@@ -137,10 +137,10 @@ class ProjectService(BaseService):
             Project information dictionary
         """
         try:
-            project = self.service.Project.get(project_rid, preview=True)
+            project = self.service.Project.get(project_rid)
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to get project {project_rid}: {e}")
+            raise RuntimeError(f"Failed to get project {project_rid}: {self._describe_error(e)}")
 
     def list_projects(
         self,
@@ -170,7 +170,7 @@ class ProjectService(BaseService):
             # page_size/page_token are cursor semantics for a single folder listing.
             # They are not meaningful when aggregating projects across all spaces.
             projects_by_rid: Dict[str, Dict[str, Any]] = {}
-            for space in self.service.Space.list(preview=True):
+            for space in self.service.Space.list():
                 parent_space_rid = getattr(space, "rid", None)
                 if not parent_space_rid:
                     continue
@@ -185,7 +185,7 @@ class ProjectService(BaseService):
 
             return list(projects_by_rid.values())
         except Exception as e:
-            raise RuntimeError(f"Failed to list projects: {e}")
+            raise RuntimeError(f"Failed to list projects: {self._describe_error(e)}")
 
     def update_project(
         self,
@@ -212,7 +212,7 @@ class ProjectService(BaseService):
             # supply must be read back first. Back-filling only display_name
             # silently erased the description on a name-only update.
             if not display_name or description is None:
-                current_project = self.service.Project.get(project_rid, preview=True)
+                current_project = self.service.Project.get(project_rid)
                 if not display_name:
                     display_name = current_project.display_name
                 if description is None:
@@ -226,7 +226,7 @@ class ProjectService(BaseService):
             )
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to update project {project_rid}: {e}")
+            raise RuntimeError(f"Failed to update project {project_rid}: {self._describe_error(e)}")
 
     def get_project_imports(
         self,
@@ -458,11 +458,11 @@ class ProjectService(BaseService):
         """
         try:
             self.service.Project.add_organizations(
-                project_rid, organization_rids=organization_rids, preview=True
+                project_rid, organization_rids=organization_rids
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to add organizations to project {project_rid}: {e}"
+                f"Failed to add organizations to project {project_rid}: {self._describe_error(e)}"
             )
 
     def remove_organizations(
@@ -480,11 +480,11 @@ class ProjectService(BaseService):
         """
         try:
             self.service.Project.remove_organizations(
-                project_rid, organization_rids=organization_rids, preview=True
+                project_rid, organization_rids=organization_rids
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to remove organizations from project {project_rid}: {e}"
+                f"Failed to remove organizations from project {project_rid}: {self._describe_error(e)}"
             )
 
     def list_organizations(
@@ -506,7 +506,7 @@ class ProjectService(BaseService):
         """
         try:
             organizations = []
-            list_params: Dict[str, Any] = {"preview": True}
+            list_params: Dict[str, Any] = {}
 
             if page_size:
                 list_params["page_size"] = page_size
@@ -518,7 +518,7 @@ class ProjectService(BaseService):
             return organizations
         except Exception as e:
             raise RuntimeError(
-                f"Failed to list organizations for project {project_rid}: {e}"
+                f"Failed to list organizations for project {project_rid}: {self._describe_error(e)}"
             )
 
     # ==================== Template Operations ====================
@@ -548,7 +548,6 @@ class ProjectService(BaseService):
             create_params: Dict[str, Any] = {
                 "template_rid": template_rid,
                 "variable_values": variable_values,
-                "preview": True,
             }
 
             if default_roles:
@@ -561,7 +560,7 @@ class ProjectService(BaseService):
             project = self.service.Project.create_from_template(**create_params)
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to create project from template: {e}")
+            raise RuntimeError(f"Failed to create project from template: {self._describe_error(e)}")
 
     def _format_project_info(self, project: Any) -> Dict[str, Any]:
         """
@@ -604,7 +603,7 @@ class ProjectService(BaseService):
         page_token: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """List project resources directly under a parent folder (space)."""
-        list_params: Dict[str, Any] = {"preview": True}
+        list_params: Dict[str, Any] = {}
         if page_size:
             list_params["page_size"] = page_size
         if page_token:
@@ -618,10 +617,22 @@ class ProjectService(BaseService):
 
     @staticmethod
     def _is_project_resource(resource: Any) -> bool:
-        """Check whether a filesystem resource is a project."""
-        resource_type = str(getattr(resource, "type", "") or "").upper()
+        """Check whether a filesystem resource is a project.
+
+        Projects are Compass folders: Folder.children returns Resource objects
+        with ``type == "COMPASS_FOLDER"`` and a ``project_rid`` attribute that
+        is non-None exactly for projects (equal to the resource's own rid).
+        A bare ``type == "PROJECT"`` never matches, and canonical project
+        RIDs carry a ``folder`` segment, not ``project``.
+        """
         resource_rid = str(getattr(resource, "rid", "") or "")
-        # Fallback to canonical project RID prefix when type is missing.
+        project_rid = getattr(resource, "project_rid", None)
+        # A project is a Compass folder whose project_rid equals its own rid.
+        # (Mock auto-attributes must not count: require an explicit value.)
+        if project_rid is not None and str(project_rid) == resource_rid:
+            return True
+        resource_type = str(getattr(resource, "type", "") or "").upper()
+        # Fallback to the canonical project RID prefix when the type is missing.
         return resource_type == "PROJECT" or resource_rid.startswith(
             "ri.compass.main.project."
         )
@@ -655,7 +666,11 @@ class ProjectService(BaseService):
         if timestamp is None:
             return None
 
-        # Handle different timestamp formats from the SDK
-        if hasattr(timestamp, "time"):
-            return str(timestamp.time)
+        # The SDK deserializes timestamps as datetime.datetime; serialize to
+        # ISO-8601. A str passes through unchanged (some SDK models return a
+        # pre-formatted string). Never fall back to a repr of a bound method.
+        if isinstance(timestamp, str):
+            return timestamp
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
         return str(timestamp)

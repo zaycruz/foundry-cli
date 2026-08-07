@@ -814,7 +814,7 @@ class DeveloperConsoleService:
                 command.extend(["--target", str(target)])
             else:
                 command.extend(["--prefix", str(target)])
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603 - list argv, no shell; command from package-manager plan
             command,
             capture_output=True,
             text=True,
