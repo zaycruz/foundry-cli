@@ -1,0 +1,82 @@
+name: Ontology E2E
+
+# Real-stack ontology lifecycle tests. These MUTATE a real Foundry stack
+# (disposable resources only, cleaned up on exit), so they are NOT part of
+# the push/PR CI. Run them manually or on a schedule against a designated
+# test ontology.
+#
+# Required repository secrets:
+#   FOUNDRY_HOST    stack hostname (e.g. your-stack.palantirfoundry.com)
+#   FOUNDRY_TOKEN   API token with ontology + filesystem write access
+#   ONTOLOGY_RID    the ontology to run against (e.g. ri.ontology.main.ontology.<uuid>)
+# Optional:
+#   SPACE_RID       space to create the disposable project in (defaults to first)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ontology_rid:
+        description: "Ontology RID (overrides secret)"
+        required: false
+        type: string
+      space_rid:
+        description: "Compass space RID (overrides secret)"
+        required: false
+        type: string
+  schedule:
+    # Nightly smoke against the test stack.
+    - cron: "0 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ontology-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lifecycle:
+    name: ontology lifecycle (real stack)
+    runs-on: ubuntu-latest
+    environment: foundry-test
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Install pfoundry from this branch
+        run: |
+          uv tool install --force --refresh . --name foundry-cli
+          pfoundry --version
+
+      - name: Configure auth
+        env:
+          FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
+          FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
+        run: |
+          pfoundry --non-interactive configure configure --profile e2e \
+            --host "${FOUNDRY_HOST}" \
+            --token "${FOUNDRY_TOKEN}" --auth-type token --force
+          pfoundry verify --profile e2e
+
+      - name: Run ontology lifecycle
+        env:
+          FOUNDRY_HOST: ${{ secrets.FOUNDRY_HOST }}
+          FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
+          ONTOLOGY_RID: ${{ inputs.ontology_rid || secrets.ONTOLOGY_RID }}
+          SPACE_RID: ${{ inputs.space_rid || secrets.SPACE_RID }}
+          PFOUNDRY: pfoundry
+        run: |
+          bash scripts/ontology-e2e/run-lifecycle.sh
+
+      - name: Upload lifecycle log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ontology-e2e-log
+          path: /tmp/ontology-e2e-*.log
+          if-no-files-found: ignore
