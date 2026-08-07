@@ -23,6 +23,7 @@ Flags:
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -124,6 +125,37 @@ def check_git_status():
         )
         print("Uncommitted changes:")
         print(status)
+        sys.exit(1)
+
+
+def check_secrets():
+    """Run gitleaks over the full history; abort the release on any finding.
+
+    The repository policy treats real environment data (RIDs, hostnames,
+    user identifiers) as secrets, not just credentials. The release gate
+    uses gitleaks with the repository's .gitleaks.toml; a non-zero exit
+    aborts before the tag is created.
+    """
+    gitleaks_bin = shutil.which("gitleaks")
+    if gitleaks_bin is None:
+        print(
+            "Warning: gitleaks not found on PATH; skipping the release secret "
+            "gate. Install gitleaks (brew install gitleaks) to enforce it."
+        )
+        return
+    print("Running gitleaks secret scan over git history...")
+    try:
+        subprocess.run(
+            [gitleaks_bin, "detect", "--source", ".", "--no-banner", "--redact"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print("gitleaks: no leaks found.")
+    except subprocess.CalledProcessError as e:
+        print("Error: gitleaks found secrets or real environment data.")
+        print(e.stdout)
+        print(e.stderr)
         sys.exit(1)
 
 
@@ -344,6 +376,9 @@ def main():
 
     # Check git status
     check_git_status()
+
+    # Secret gate: no secrets or real environment data may be released
+    check_secrets()
 
     # Check if tag already exists
     if check_tag_exists(new_version):

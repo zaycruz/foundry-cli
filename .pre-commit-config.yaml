@@ -107,3 +107,11 @@ ci:
   autofix_commit_msg: '[pre-commit.ci] auto fixes from pre-commit hooks'
   autoupdate_schedule: weekly
   autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+
+  # Secret scanning with gitleaks
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: gitleaks secret scan
+        description: Blocks commits containing secrets or real environment data
