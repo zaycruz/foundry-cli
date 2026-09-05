@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from pltr.auth.base import ProfileNotFoundError
-from pltr.cli import app
+from foundry_cli.auth.base import ProfileNotFoundError
+from foundry_cli.cli import app
 
 
 runner = CliRunner()
@@ -42,14 +42,14 @@ def test_agent_list_returns_profiles_in_single_envelope() -> None:
     ]
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage", return_value=storage),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage", return_value=storage),
     ):
         result = runner.invoke(app, ["--agent", "configure", "list"])
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"] == {
         "profiles": [
             {
@@ -74,15 +74,15 @@ def test_agent_list_returns_empty_profiles_in_single_envelope() -> None:
     manager = profile_manager([])
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage"),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage"),
     ):
         result = runner.invoke(app, ["--agent", "configure", "list"])
 
     assert result.exit_code == 0
     assert result.stdout.count('"schema_version"') == 1
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"] == {"profiles": []}
     assert "No profiles configured" not in result.stdout
 
@@ -93,8 +93,8 @@ def test_agent_list_missing_credentials_uses_null_host_and_warning() -> None:
     storage.get_profile.side_effect = ProfileNotFoundError("secret details")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage", return_value=storage),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage", return_value=storage),
     ):
         result = runner.invoke(app, ["--agent", "configure", "list"])
 
@@ -119,8 +119,8 @@ def test_human_list_missing_credentials_preserves_sentinel() -> None:
     storage.get_profile.side_effect = ProfileNotFoundError("missing")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage", return_value=storage),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage", return_value=storage),
     ):
         result = runner.invoke(app, ["configure", "list"])
 
@@ -134,8 +134,8 @@ def test_agent_list_storage_exception_returns_single_safe_error() -> None:
     storage.get_profile.side_effect = RuntimeError("token=do-not-expose")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage", return_value=storage),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage", return_value=storage),
     ):
         result = runner.invoke(app, ["--agent", "configure", "list"])
 
@@ -153,8 +153,8 @@ def test_agent_list_metadata_exception_returns_single_safe_error() -> None:
     manager.list_profiles.side_effect = OSError("secret metadata path")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage"),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage"),
     ):
         result = runner.invoke(app, ["--agent", "configure", "list"])
 
@@ -168,7 +168,7 @@ def test_agent_list_metadata_exception_returns_single_safe_error() -> None:
 def test_agent_set_default_returns_single_success_envelope() -> None:
     manager = profile_manager(["existing"])
 
-    with patch("pltr.commands.configure.ProfileManager", return_value=manager):
+    with patch("foundry_cli.commands.configure.ProfileManager", return_value=manager):
         result = runner.invoke(app, ["--agent", "configure", "set-default", "existing"])
 
     assert result.exit_code == 0
@@ -184,7 +184,7 @@ def test_agent_set_default_returns_single_success_envelope() -> None:
 def test_agent_use_returns_single_success_envelope() -> None:
     manager = profile_manager(["existing"])
 
-    with patch("pltr.commands.configure.ProfileManager", return_value=manager):
+    with patch("foundry_cli.commands.configure.ProfileManager", return_value=manager):
         result = runner.invoke(app, ["--agent", "configure", "use", "existing"])
 
     assert result.exit_code == 0
@@ -215,13 +215,13 @@ def test_agent_set_default_failures_return_single_safe_error(
 
     if failure_stage == "construction":
         manager_patch = patch(
-            "pltr.commands.configure.ProfileManager",
+            "foundry_cli.commands.configure.ProfileManager",
             side_effect=RuntimeError(secret),
         )
     else:
         getattr(manager, failure_stage).side_effect = RuntimeError(secret)
         manager_patch = patch(
-            "pltr.commands.configure.ProfileManager",
+            "foundry_cli.commands.configure.ProfileManager",
             return_value=manager,
         )
 
@@ -247,7 +247,7 @@ def test_human_set_default_unexpected_exception_propagates() -> None:
     secret = "secret-human-details"
 
     with patch(
-        "pltr.commands.configure.ProfileManager",
+        "foundry_cli.commands.configure.ProfileManager",
         side_effect=RuntimeError(secret),
     ):
         result = runner.invoke(
@@ -264,10 +264,10 @@ def test_agent_delete_without_force_never_prompts_and_returns_error() -> None:
     manager = profile_manager(["default"], default="default")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
         patch(
-            "pltr.utils.agent_output.typer.confirm",
+            "foundry_cli.utils.agent_output.typer.confirm",
             side_effect=AssertionError("prompted"),
         ),
     ):
@@ -275,7 +275,7 @@ def test_agent_delete_without_force_never_prompts_and_returns_error() -> None:
 
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert "explicit --force" in payload["errors"][0]["message"]
     storage_class.return_value.delete_profile.assert_not_called()
     manager.remove_profile.assert_not_called()
@@ -285,10 +285,10 @@ def test_non_interactive_delete_without_force_never_prompts_or_mutates() -> None
     manager = profile_manager(["default"], default="default")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
         patch(
-            "pltr.utils.agent_output.typer.confirm",
+            "foundry_cli.utils.agent_output.typer.confirm",
             side_effect=AssertionError("prompted"),
         ),
     ):
@@ -306,7 +306,7 @@ def test_non_interactive_delete_without_force_never_prompts_or_mutates() -> None
     assert result.exit_code == 1
     assert result.stdout.count('"schema_version"') == 1
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert len(payload["errors"]) == 1
     message = " ".join(payload["errors"][0]["message"].split())
     assert "explicit --force" in message
@@ -318,10 +318,10 @@ def test_agent_forced_delete_does_not_prompt_and_deletes_profile() -> None:
     manager = profile_manager(["default"], default="default")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
         patch(
-            "pltr.utils.agent_output.typer.confirm",
+            "foundry_cli.utils.agent_output.typer.confirm",
             side_effect=AssertionError("prompted"),
         ),
     ):
@@ -332,7 +332,7 @@ def test_agent_forced_delete_does_not_prompt_and_deletes_profile() -> None:
 
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["meta"]["messages"] == [
         {"level": "success", "message": "Profile 'default' deleted"}
     ]
@@ -344,8 +344,8 @@ def test_agent_delete_missing_profile_returns_single_error_without_mutation() ->
     manager = profile_manager([])
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
     ):
         result = runner.invoke(
             app, ["--agent", "configure", "delete", "missing", "--force"]
@@ -365,8 +365,8 @@ def test_agent_delete_storage_exception_returns_single_safe_error() -> None:
     manager = profile_manager(["default"], default="default")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
     ):
         storage_class.return_value.delete_profile.side_effect = RuntimeError(
             "token=do-not-expose"
@@ -388,8 +388,8 @@ def test_agent_delete_metadata_exception_returns_single_safe_error() -> None:
     manager.list_profiles.side_effect = OSError("secret metadata path")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
     ):
         result = runner.invoke(
             app, ["--agent", "configure", "delete", "default", "--force"]
@@ -408,8 +408,8 @@ def test_interactive_delete_cancellation_does_not_mutate() -> None:
     manager = profile_manager(["default"], default="default")
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage") as storage_class,
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage") as storage_class,
     ):
         result = runner.invoke(
             app,
@@ -433,8 +433,8 @@ def test_human_list_preserves_rich_table_output() -> None:
     }
 
     with (
-        patch("pltr.commands.configure.ProfileManager", return_value=manager),
-        patch("pltr.commands.configure.CredentialStorage", return_value=storage),
+        patch("foundry_cli.commands.configure.ProfileManager", return_value=manager),
+        patch("foundry_cli.commands.configure.CredentialStorage", return_value=storage),
     ):
         result = runner.invoke(app, ["configure", "list"])
 

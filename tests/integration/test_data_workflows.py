@@ -9,10 +9,10 @@ from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 import pytest
 
-from pltr.cli import app
-from pltr.config.profiles import ProfileManager
-from pltr.config.settings import Settings
-from pltr.auth.storage import CredentialStorage
+from foundry_cli.cli import app
+from foundry_cli.config.profiles import ProfileManager
+from foundry_cli.config.settings import Settings
+from foundry_cli.auth.storage import CredentialStorage
 
 
 class TestDataWorkflows:
@@ -48,7 +48,7 @@ class TestDataWorkflows:
         self, runner, authenticated_profile
     ):
         """Test creating a dataset and then retrieving it."""
-        with patch("pltr.services.dataset.DatasetService") as mock_dataset_service:
+        with patch("foundry_cli.services.dataset.DatasetService") as mock_dataset_service:
             mock_service = Mock()
 
             # Mock dataset creation
@@ -97,7 +97,7 @@ class TestDataWorkflows:
     @pytest.mark.skip(reason="Requires real SQL service integration - skipped in CI")
     def test_sql_query_workflow(self, runner, authenticated_profile):
         """Test SQL query submission, status checking, and results retrieval."""
-        with patch("pltr.services.sql.SqlService") as mock_sql_service:
+        with patch("foundry_cli.services.sql.SqlService") as mock_sql_service:
             mock_service = Mock()
             query_id = "query-789"
 
@@ -152,7 +152,7 @@ class TestDataWorkflows:
     @pytest.mark.skip(reason="Requires real SQL service integration - skipped in CI")
     def test_sql_export_workflow(self, runner, authenticated_profile, tmp_path):
         """Test SQL query export to different formats."""
-        with patch("pltr.services.sql.SqlService") as mock_sql_service:
+        with patch("foundry_cli.services.sql.SqlService") as mock_sql_service:
             mock_service = Mock()
             mock_service.execute.return_value = {
                 "columns": [

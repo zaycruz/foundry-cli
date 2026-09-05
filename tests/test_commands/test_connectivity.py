@@ -6,8 +6,8 @@ import json
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.commands.connectivity import app
-from pltr.auth.base import ProfileNotFoundError
+from foundry_cli.commands.connectivity import app
+from foundry_cli.auth.base import ProfileNotFoundError
 
 
 class TestConnectivityCommands:
@@ -17,7 +17,7 @@ class TestConnectivityCommands:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_connections_success(self, mock_service_class):
         """Test successful connection listing command."""
         mock_service = Mock()
@@ -36,7 +36,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         mock_service.list_connections.assert_called_once()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_connections_empty(self, mock_service_class):
         """Test connection listing with no results."""
         mock_service = Mock()
@@ -48,7 +48,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         assert "No connections found" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_connections_with_profile(self, mock_service_class):
         """Test connection listing with specific profile."""
         mock_service = Mock()
@@ -60,7 +60,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         mock_service_class.assert_called_once_with(profile="test")
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_connections_auth_error(self, mock_service_class):
         """Test connection listing with authentication error."""
         mock_service = Mock()
@@ -74,7 +74,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Authentication error" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_connections_general_error(self, mock_service_class):
         """Test connection listing with general error."""
         mock_service = Mock()
@@ -86,7 +86,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Error listing connections" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_connection_success(self, mock_service_class):
         """Test successful connection get command."""
         mock_service = Mock()
@@ -107,7 +107,7 @@ class TestConnectivityCommands:
             "ri.conn.main.connection.123"
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_connection_error(self, mock_service_class):
         """Test connection get with error."""
         mock_service = Mock()
@@ -121,7 +121,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Error getting connection" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_file_imports_success(self, mock_service_class):
         """Test successful file imports listing command."""
         mock_service = Mock()
@@ -143,7 +143,7 @@ class TestConnectivityCommands:
             connection_rid="ri.conn.main.connection.123"
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_file_imports_empty(self, mock_service_class):
         """Test file imports listing with no results."""
         mock_service = Mock()
@@ -157,7 +157,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         assert "No file imports found" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_list_table_imports_success(self, mock_service_class):
         """Test successful table imports listing command."""
         mock_service = Mock()
@@ -179,7 +179,7 @@ class TestConnectivityCommands:
             connection_rid="ri.conn.main.connection.123"
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_file_import_success(self, mock_service_class):
         """Test successful file import get command."""
         mock_service = Mock()
@@ -206,7 +206,7 @@ class TestConnectivityCommands:
             "ri.conn.main.connection.123", "ri.import.main.file.123"
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_table_import_success(self, mock_service_class):
         """Test successful table import get command."""
         mock_service = Mock()
@@ -233,7 +233,7 @@ class TestConnectivityCommands:
             "ri.conn.main.connection.123", "ri.import.main.table.123"
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_connection_success(self, mock_service_class):
         """Test successful connection creation command."""
         mock_service = Mock()
@@ -266,7 +266,7 @@ class TestConnectivityCommands:
             worker={"type": "direct"},
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_connection_with_config_file(self, mock_service_class, tmp_path):
         """Test connection creation with config files."""
         mock_service = Mock()
@@ -299,7 +299,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         mock_service.create_connection.assert_called_once()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_connection_invalid_json(self, mock_service_class):
         """Test connection creation with invalid JSON."""
         result = self.runner.invoke(
@@ -317,7 +317,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Invalid JSON" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_connection_error(self, mock_service_class):
         """Test connection creation error handling."""
         mock_service = Mock()
@@ -339,7 +339,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Error creating connection" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_connection_configuration_success(self, mock_service_class):
         """Test successful connection configuration retrieval command."""
         mock_service = Mock()
@@ -359,7 +359,7 @@ class TestConnectivityCommands:
             "ri.conn.main.connection.123"
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_connection_configuration_error(self, mock_service_class):
         """Test connection configuration retrieval error handling."""
         mock_service = Mock()
@@ -374,7 +374,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Error getting connection configuration" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_connection_secrets_success(self, mock_service_class, tmp_path):
         """Test successful connection secrets update command."""
         mock_service = Mock()
@@ -406,7 +406,7 @@ class TestConnectivityCommands:
             {"password": "newpass"},
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_connection_secrets_file_not_found(self, mock_service_class):
         """Test secrets update with non-existent file."""
         result = self.runner.invoke(
@@ -423,7 +423,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Secrets file not found" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_connection_secrets_invalid_json(self, mock_service_class, tmp_path):
         """Test secrets update with invalid JSON."""
         secrets_file = tmp_path / "secrets.json"
@@ -443,7 +443,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Invalid JSON" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_export_settings_success(self, mock_service_class):
         """Test successful export settings update command."""
         mock_service = Mock()
@@ -470,7 +470,7 @@ class TestConnectivityCommands:
             {"exportsEnabled": True},
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_export_settings_with_file(self, mock_service_class, tmp_path):
         """Test export settings update with file."""
         mock_service = Mock()
@@ -497,7 +497,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         mock_service.update_export_settings.assert_called_once()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_export_settings_error(self, mock_service_class):
         """Test export settings update error handling."""
         mock_service = Mock()
@@ -517,7 +517,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "Error updating export settings" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_upload_jdbc_drivers_success(self, mock_service_class, tmp_path):
         """Test successful JDBC driver upload command."""
         mock_service = Mock()
@@ -545,7 +545,7 @@ class TestConnectivityCommands:
         assert "Uploaded" in result.stdout
         mock_service.upload_custom_jdbc_drivers.assert_called_once()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_upload_jdbc_drivers_file_not_found(self, mock_service_class):
         """Test JDBC driver upload with non-existent file."""
         result = self.runner.invoke(
@@ -561,7 +561,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "File not found" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_upload_jdbc_drivers_invalid_extension(self, mock_service_class, tmp_path):
         """Test JDBC driver upload with non-JAR file."""
         txt_file = tmp_path / "file.txt"
@@ -580,7 +580,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 1
         assert "must be a JAR file" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_upload_jdbc_drivers_multiple_files(self, mock_service_class, tmp_path):
         """Test JDBC driver upload with multiple files."""
         mock_service = Mock()
@@ -610,7 +610,7 @@ class TestConnectivityCommands:
         assert result.exit_code == 0
         assert mock_service.upload_custom_jdbc_drivers.call_count == 2
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_upload_jdbc_drivers_error(self, mock_service_class, tmp_path):
         """Test JDBC driver upload error handling."""
         mock_service = Mock()
@@ -643,7 +643,7 @@ class TestWebhookCommands:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_webhook_success(self, mock_service_class):
         """Test successful webhook get command."""
         mock_service = Mock()
@@ -659,7 +659,7 @@ class TestWebhookCommands:
         assert result.exit_code == 0
         mock_service.get_webhook.assert_called_once_with(self.WEBHOOK_RID, version=None)
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_webhook_with_version(self, mock_service_class):
         """Test webhook get with a pinned version."""
         mock_service = Mock()
@@ -676,7 +676,7 @@ class TestWebhookCommands:
         assert result.exit_code == 0
         mock_service.get_webhook.assert_called_once_with(self.WEBHOOK_RID, version=1)
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_webhook_json_format(self, mock_service_class):
         """Test webhook get with JSON output."""
         mock_service = Mock()
@@ -693,10 +693,10 @@ class TestWebhookCommands:
         assert result.exit_code == 0
         assert self.WEBHOOK_RID in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_webhook_not_found(self, mock_service_class):
         """Test webhook get when the registry has no webhook for the RID."""
-        from pltr.services.connectivity import WebhookNotFoundError
+        from foundry_cli.services.connectivity import WebhookNotFoundError
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -709,7 +709,7 @@ class TestWebhookCommands:
         assert result.exit_code == 1
         assert "No webhook found" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_webhook_error(self, mock_service_class):
         """Test webhook get error handling."""
         mock_service = Mock()
@@ -721,7 +721,7 @@ class TestWebhookCommands:
         assert result.exit_code == 1
         assert "Error getting webhook" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_get_webhook_with_profile(self, mock_service_class):
         """Test webhook get with a specific profile."""
         mock_service = Mock()
@@ -749,7 +749,7 @@ class TestEgressCommands:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_egress_ensure_match(self, mock_service_class):
         """Test ensure when a matching policy exists."""
         mock_service = Mock()
@@ -766,7 +766,7 @@ class TestEgressCommands:
         assert result.exit_code == 0
         mock_service.ensure_egress_policy.assert_called_once_with(self.HOSTNAME)
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_egress_ensure_match_json(self, mock_service_class):
         """Test ensure with JSON output."""
         mock_service = Mock()
@@ -785,10 +785,10 @@ class TestEgressCommands:
         assert result.exit_code == 0
         assert self.POLICY_RID in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_egress_ensure_would_create(self, mock_service_class):
         """Test ensure exits loudly when no policy matches."""
-        from pltr.services.connectivity import EgressPolicyNotFoundError
+        from foundry_cli.services.connectivity import EgressPolicyNotFoundError
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -802,10 +802,10 @@ class TestEgressCommands:
         assert result.exit_code == 1
         assert "mutations are not enabled" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_egress_ensure_unverified_shape(self, mock_service_class):
         """Test ensure fails loudly on unverified response shapes."""
-        from pltr.services.connectivity import EgressPolicyShapeError
+        from foundry_cli.services.connectivity import EgressPolicyShapeError
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -818,7 +818,7 @@ class TestEgressCommands:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_egress_ensure_error(self, mock_service_class):
         """Test ensure error handling."""
         mock_service = Mock()
@@ -830,7 +830,7 @@ class TestEgressCommands:
         assert result.exit_code == 1
         assert "Error ensuring network egress policy" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_egress_ensure_with_profile(self, mock_service_class):
         """Test ensure with a specific profile."""
         mock_service = Mock()
@@ -859,7 +859,7 @@ class TestWebhookCreateCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_defaults_to_plan(self, mock_service_class):
         """Test that create without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -876,7 +876,7 @@ class TestWebhookCreateCommand:
         )
         mock_service.create_webhook.assert_not_called()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_apply_sends(self, mock_service_class):
         """Test that --apply issues the verified create body."""
         mock_service = Mock()
@@ -896,7 +896,7 @@ class TestWebhookCreateCommand:
             "wh", "wh", "", self.SOURCE_RID, None
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_apply_permission_error(self, mock_service_class):
         """Test that a 403 from the registry surfaces as a loud failure."""
         mock_service = Mock()
@@ -915,7 +915,7 @@ class TestWebhookCreateCommand:
         assert result.exit_code == 1
         assert "Error creating webhook" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_spec_file_override(self, mock_service_class, tmp_path):
         """Test that --spec-file replaces the default spec."""
         spec_path = tmp_path / "spec.json"
@@ -954,7 +954,7 @@ class TestWebhookUpdateCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_defaults_to_plan(self, mock_service_class):
         """Test that update without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -971,7 +971,7 @@ class TestWebhookUpdateCommand:
         )
         mock_service.update_webhook.assert_not_called()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_apply_sends(self, mock_service_class):
         """Test that --apply publishes the new webhook version."""
         mock_service = Mock()
@@ -991,7 +991,7 @@ class TestWebhookUpdateCommand:
             self.WEBHOOK_RID, {"inputs": []}
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_apply_permission_error(self, mock_service_class):
         """Test that a resource-scoped 403 surfaces as a loud failure."""
         mock_service = Mock()
@@ -1009,7 +1009,7 @@ class TestWebhookUpdateCommand:
         assert result.exit_code == 1
         assert "Error updating webhook" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_requires_spec(self, mock_service_class):
         """Test that a missing spec argument fails before any service call."""
         result = self.runner.invoke(app, ["webhook", "update", self.WEBHOOK_RID])
@@ -1017,7 +1017,7 @@ class TestWebhookUpdateCommand:
         assert result.exit_code == 1
         assert "Must specify either spec or --spec-file" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_assembly_mode_builds_spec(self, mock_service_class):
         """Test --source-rid/--domain/--calls assembles the spec via the service."""
         mock_service = Mock()
@@ -1069,7 +1069,7 @@ class TestWebhookUpdateCommand:
             inputs=[],
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_assembly_requires_source_rid_and_domain(self, mock_service_class):
         """Test assembly mode without --domain fails before any lookup."""
         result = self.runner.invoke(
@@ -1088,7 +1088,7 @@ class TestWebhookUpdateCommand:
         assert result.exit_code == 1
         assert "requires both --source-rid and --domain" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_update_spec_and_assembly_conflict(self, mock_service_class):
         """Test that a verbatim spec cannot be combined with assembly options."""
         result = self.runner.invoke(
@@ -1134,7 +1134,7 @@ class TestRestSourceCreateCommand:
             *extra,
         ]
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_defaults_to_plan(self, mock_service_class):
         """Test that create without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -1155,7 +1155,7 @@ class TestRestSourceCreateCommand:
         )
         mock_service.create_rest_source.assert_not_called()
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_apply_sends(self, mock_service_class):
         """Test that --apply issues the verified addSourceV3 create."""
         mock_service = Mock()
@@ -1178,7 +1178,7 @@ class TestRestSourceCreateCommand:
             "",
         )
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_apply_permission_error(self, mock_service_class):
         """Test that a magritte:write-resource 403 surfaces loudly."""
         mock_service = Mock()
@@ -1192,7 +1192,7 @@ class TestRestSourceCreateCommand:
         assert result.exit_code == 1
         assert "Error creating REST API data source" in result.stdout
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_requires_parent_rid(self, mock_service_class):
         """Test that --parent-rid is mandatory."""
         result = self.runner.invoke(
@@ -1210,7 +1210,7 @@ class TestRestSourceCreateCommand:
 
         assert result.exit_code != 0
 
-    @patch("pltr.commands.connectivity.ConnectivityService")
+    @patch("foundry_cli.commands.connectivity.ConnectivityService")
     def test_create_requires_egress_policy_rid(self, mock_service_class):
         """Test that at least one --egress-policy-rid is mandatory."""
         result = self.runner.invoke(

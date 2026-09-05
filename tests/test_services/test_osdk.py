@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from pltr.services.osdk import OsdkService, _binding_examples, _summarize_entities
+from foundry_cli.services.osdk import OsdkService, _binding_examples, _summarize_entities
 
 
 def _ontology(rid="ri.ontology.main.ontology.1", api_name="main"):

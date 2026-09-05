@@ -27,7 +27,7 @@ tree-shaking in esbuild — this is the full class):
 - Also present: `updateProposal` —
   `PUT branch-service/api/branch/proposal/update/{proposalRid}`
 
-Existing verified sibling routes in `src/pltr/services/global_branching.py`
+Existing verified sibling routes in `src/foundry_cli/services/global_branching.py`
 (proposal load :455, create :555, close :589) — same `FoundryInternalClient`
 pattern, same service base path.
 
@@ -41,7 +41,7 @@ the published client. Live probing is mandatory before implementation.
    implement first; even an unverified-body probe is non-mutating.
 2. `GlobalProposalService.deploy_proposal_plan` / `deploy_proposal`
    (plan-first, `--apply --yes`, destructive risk class).
-3. Wire `pltr proposal accept global-proposal` to deploy; update
+3. Wire `foundry proposal accept global-proposal` to deploy; update
    `SDK_REACHABLE_CAPABILITIES` and `UNSUPPORTED_CAPABILITY_REASONS`.
 4. Delegation + service tests in the existing mocking style.
 5. Docs: `reference/proposal-commands.md`,
@@ -65,9 +65,9 @@ Against a disposable ontology branch + proposal on a live deployment:
 
 ## Acceptance criteria
 
-- `pltr proposal accept global-proposal <rid>` works end-to-end on a live
+- `foundry proposal accept global-proposal <rid>` works end-to-end on a live
   deployment, plan-first with double confirmation.
-- Preflight exposed (e.g. `pltr global-proposal check-deployable` or as a
+- Preflight exposed (e.g. `foundry global-proposal check-deployable` or as a
   plan-stage step) and used before deploy.
 - Tests green; drift check clean; CHANGELOG updated.
 

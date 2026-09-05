@@ -10,9 +10,9 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.services.foundry_internal_client import TokenExpiredError
-from pltr.services.notepad import NOTEPAD_TYPE_NAME
+from foundry_cli.cli import app
+from foundry_cli.services.foundry_internal_client import TokenExpiredError
+from foundry_cli.services.notepad import NOTEPAD_TYPE_NAME
 
 
 runner = CliRunner()
@@ -45,7 +45,7 @@ def test_readable_notepad_renders_body_and_reference_identifiers():
             },
         ],
     }
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.return_value = payload
         result = runner.invoke(
             app,
@@ -71,7 +71,7 @@ def test_readable_notepad_renders_body_and_reference_identifiers():
 
 
 def test_notepad_null_inconclusive_exits_nonzero_and_warns_not_empty():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.return_value = {
             "status": "inconclusive",
             "reason": "notepad-null",
@@ -88,7 +88,7 @@ def test_notepad_null_inconclusive_exits_nonzero_and_warns_not_empty():
 
 
 def test_empty_document_is_successful_and_plainly_identified():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.return_value = {
             "status": "empty-document",
             "reason": None,
@@ -107,7 +107,7 @@ def test_empty_document_is_successful_and_plainly_identified():
 
 
 def test_token_expired_shows_degraded_banner_and_exits_nonzero():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.side_effect = TokenExpiredError("expired")
         result = runner.invoke(app, ["notepad", "get", "ri.notepad.1"])
 
@@ -124,7 +124,7 @@ def test_inconclusive_json_and_csv_preserve_machine_format_and_warning():
         "body_text": None,
         "references": None,
     }
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.return_value = payload
         json_result = runner.invoke(
             app, ["notepad", "get", "ri.notepad.1", "--format", "json"]
@@ -184,7 +184,7 @@ def _list_payload() -> dict:
 
 
 def test_notepad_list_requires_path_prefix_instead_of_guessing_root():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         result = runner.invoke(app, ["notepad", "list"])
 
     assert result.exit_code == 2
@@ -193,7 +193,7 @@ def test_notepad_list_requires_path_prefix_instead_of_guessing_root():
 
 
 def test_notepad_list_agent_output_preserves_partial_page_signals():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.list.return_value = _list_payload()
         result = runner.invoke(
             app,
@@ -224,7 +224,7 @@ def test_notepad_list_agent_output_preserves_partial_page_signals():
 
 
 def test_notepad_list_text_filter_is_local_and_json_keeps_coverage():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.list.return_value = _list_payload()
         result = runner.invoke(
             app,
@@ -251,7 +251,7 @@ def test_notepad_list_text_filter_is_local_and_json_keeps_coverage():
 
 
 def test_notepad_list_inconclusive_and_ci_outputs_are_machine_readable():
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.list.return_value = {
             "mode": "notepad-list",
             "status": "inconclusive",
@@ -297,7 +297,7 @@ def test_notepad_list_is_registered_without_cli_module_edits():
 
 @pytest.mark.parametrize("page_size", [0, 501])
 def test_notepad_list_rejects_out_of_bounds_page_size(page_size):
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         result = runner.invoke(
             app,
             [
@@ -334,7 +334,7 @@ def test_notepad_list_empty_pages_render_coverage(
             "results": [],
         }
     )
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.list.return_value = payload
         result = runner.invoke(
             app,
@@ -364,7 +364,7 @@ def test_notepad_reference_table_treats_malformed_brackets_as_literal():
             }
         ],
     }
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.return_value = payload
         result = runner.invoke(app, ["notepad", "get", "ri.notepad.1"])
 
@@ -393,7 +393,7 @@ def test_notepad_csv_neutralizes_every_server_formula_cell():
             }
         ],
     }
-    with patch("pltr.commands.notepad.NotepadService") as service:
+    with patch("foundry_cli.commands.notepad.NotepadService") as service:
         service.return_value.get.return_value = payload
         result = runner.invoke(
             app,

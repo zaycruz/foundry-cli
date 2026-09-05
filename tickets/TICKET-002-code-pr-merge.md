@@ -41,7 +41,7 @@ This is a real merge mutation — requires an approved disposable-PR test plan:
 2. UI capture first (non-destructive): record the Merge request verbatim.
 3. If the UI route matches hypothesis 1, probe on the disposable PR:
    `PUT /pulls/{rid}/update` with `{"title": <unchanged>, "status": "MERGED"}`.
-4. Read back via `pltr repository pull-request get`; confirm `merged` state
+4. Read back via `foundry repository pull-request get`; confirm `merged` state
    and that the target branch advanced.
 5. Record the verified contract (or the killed hypothesis) in the service
    docstring.
@@ -50,13 +50,13 @@ This is a real merge mutation — requires an approved disposable-PR test plan:
 
 - `RepositoryService.merge_pull_request_plan` / `merge_pull_request`
   (plan-first, `--apply --yes`, destructive risk class).
-- Wire `pltr proposal merge code-pr`; update `SDK_REACHABLE_CAPABILITIES`
+- Wire `foundry proposal merge code-pr`; update `SDK_REACHABLE_CAPABILITIES`
   and reasons map; delegation tests; docs; CHANGELOG.
 
 ## Acceptance criteria
 
 - Hypothesis 1 confirmed or killed with recorded evidence.
-- If confirmed: `pltr proposal merge code-pr <rid>` works end-to-end,
+- If confirmed: `foundry proposal merge code-pr <rid>` works end-to-end,
   plan-first with double confirmation, tests green.
 
 ## Out of scope

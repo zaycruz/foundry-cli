@@ -13,19 +13,19 @@ import pytest
 import requests
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.commands import dependency as dependency_command
-from pltr.services.dependency import (
+from foundry_cli.cli import app
+from foundry_cli.commands import dependency as dependency_command
+from foundry_cli.services.dependency import (
     DependencyFatalError,
     DependencyGraphService as RealDependencyGraphService,
 )
-from pltr.utils.dependency_artifacts import (
+from foundry_cli.utils.dependency_artifacts import (
     ArtifactWriteError,
     artifact_identity,
     default_artifact_path,
     write_dependency_artifact,
 )
-from pltr.utils.formatting import ProtectedOutputCollisionError
+from foundry_cli.utils.formatting import ProtectedOutputCollisionError
 
 
 runner = CliRunner()
@@ -239,8 +239,8 @@ def _set(payload: dict, value, *path: str) -> dict:
 @pytest.fixture
 def service():
     with (
-        patch("pltr.commands.dependency.AuthManager") as auth_constructor,
-        patch("pltr.commands.dependency.DependencyGraphService") as constructor,
+        patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
+        patch("foundry_cli.commands.dependency.DependencyGraphService") as constructor,
     ):
         auth_manager = auth_constructor.return_value
         auth_manager.get_current_profile.return_value = "active"
@@ -391,7 +391,7 @@ def test_each_command_resolves_and_analyzes_once(
     ],
 )
 def test_hard_ceiling_fails_before_service_construction(tmp_path, option, value):
-    with patch("pltr.commands.dependency.DependencyGraphService") as constructor:
+    with patch("foundry_cli.commands.dependency.DependencyGraphService") as constructor:
         result = runner.invoke(
             app,
             [
@@ -472,8 +472,8 @@ def test_output_alias_collision_is_rejected_before_analysis_or_writes(
             pytest.skip(f"symlink creation unavailable on this platform: {exc}")
 
     with (
-        patch("pltr.commands.dependency.AuthManager") as auth_constructor,
-        patch("pltr.commands.dependency.DependencyGraphService") as constructor,
+        patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
+        patch("foundry_cli.commands.dependency.DependencyGraphService") as constructor,
     ):
         result = runner.invoke(
             app,
@@ -508,7 +508,7 @@ def test_nonexistent_filesystem_equivalent_alias_is_rechecked_after_artifact_wri
 
     with (
         patch(
-            "pltr.commands.dependency._paths_alias",
+            "foundry_cli.commands.dependency._paths_alias",
             side_effect=filesystem_equivalent_after_creation,
         ),
         patch.object(
@@ -563,8 +563,8 @@ def test_renderer_inode_guard_refuses_to_truncate_artifact(tmp_path):
 def test_active_profile_and_non_secret_host_are_resolved_once(tmp_path):
     graph = tmp_path / "graph.json"
     with (
-        patch("pltr.commands.dependency.AuthManager") as auth_constructor,
-        patch("pltr.commands.dependency.DependencyGraphService") as constructor,
+        patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
+        patch("foundry_cli.commands.dependency.DependencyGraphService") as constructor,
     ):
         auth_manager = auth_constructor.return_value
         auth_manager.get_current_profile.return_value = "prod"
@@ -720,8 +720,8 @@ def test_all_commands_accept_agent_options_and_project_comparison_artifact(
 )
 def test_agent_options_are_closed_enums_before_service_construction(option, value):
     with (
-        patch("pltr.commands.dependency._run") as run,
-        patch("pltr.commands.dependency.DependencyGraphService") as constructor,
+        patch("foundry_cli.commands.dependency._run") as run,
+        patch("foundry_cli.commands.dependency.DependencyGraphService") as constructor,
     ):
         result = runner.invoke(
             app,
@@ -1216,8 +1216,8 @@ def test_no_internal_preserves_sdk_only_graph_and_constructs_no_internal_client(
     expected["coverage_records"] = [{"surface": "query-metadata", "status": "partial"}]
     instance.analyze.return_value = expected
     with (
-        patch("pltr.commands.dependency.FoundryInternalClient") as internal_client,
-        patch("pltr.commands.dependency.ConjureRestProvider") as provider,
+        patch("foundry_cli.commands.dependency.FoundryInternalClient") as internal_client,
+        patch("foundry_cli.commands.dependency.ConjureRestProvider") as provider,
     ):
         result = runner.invoke(
             app,
@@ -1258,7 +1258,7 @@ def test_positive_controls_configure_the_shared_internal_client_once(
     tmp_path, service, positive_controls
 ):
     _, _, _, _ = service
-    with patch("pltr.commands.dependency.FoundryInternalClient") as client_constructor:
+    with patch("foundry_cli.commands.dependency.FoundryInternalClient") as client_constructor:
         arguments = [
             "dependency",
             "object-type",
@@ -1297,13 +1297,13 @@ def test_sdk_conjure_subset_never_invokes_graphql_and_records_no_graphql_provena
         )
 
     with (
-        patch("pltr.commands.dependency.AuthManager") as auth_constructor,
+        patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
         patch(
-            "pltr.commands.dependency.DependencyGraphService",
+            "foundry_cli.commands.dependency.DependencyGraphService",
             side_effect=build_service,
         ),
         patch(
-            "pltr.commands.dependency.FoundryInternalClient",
+            "foundry_cli.commands.dependency.FoundryInternalClient",
             return_value=internal_client,
         ) as client_constructor,
     ):
@@ -1373,8 +1373,8 @@ def test_provider_subset_configures_only_selected_internal_transports(
         )
     instance.analyze.return_value = payload
     with (
-        patch("pltr.commands.dependency.FoundryInternalClient") as client_constructor,
-        patch("pltr.commands.dependency.ConjureRestProvider") as provider_constructor,
+        patch("foundry_cli.commands.dependency.FoundryInternalClient") as client_constructor,
+        patch("foundry_cli.commands.dependency.ConjureRestProvider") as provider_constructor,
     ):
         internal_client = client_constructor.return_value
         provider = provider_constructor.return_value
@@ -1420,8 +1420,8 @@ def test_invalid_provider_subset_fails_before_internal_provider_construction(
     tmp_path, providers
 ):
     with (
-        patch("pltr.commands.dependency.FoundryInternalClient") as internal_client,
-        patch("pltr.commands.dependency.DependencyGraphService") as service_constructor,
+        patch("foundry_cli.commands.dependency.FoundryInternalClient") as internal_client,
+        patch("foundry_cli.commands.dependency.DependencyGraphService") as service_constructor,
     ):
         result = runner.invoke(
             app,
@@ -1454,7 +1454,7 @@ def test_each_rendering_mode_analyzes_and_writes_artifact_once(
     graph_path = tmp_path / f"{format_type}-{full}.json"
     real_writer = dependency_command.write_dependency_artifact
     with patch(
-        "pltr.commands.dependency.write_dependency_artifact", wraps=real_writer
+        "foundry_cli.commands.dependency.write_dependency_artifact", wraps=real_writer
     ) as writer:
         arguments = [
             "dependency",
@@ -1717,16 +1717,16 @@ def test_mocked_internal_http_degradation_exits_zero_with_sdk_graph(
         )
 
     with (
-        patch("pltr.commands.dependency.AuthManager") as auth_constructor,
+        patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
         patch(
-            "pltr.commands.dependency.DependencyGraphService",
+            "foundry_cli.commands.dependency.DependencyGraphService",
             side_effect=build_service,
         ),
         patch(
-            "pltr.services.foundry_internal_client.CredentialStorage"
+            "foundry_cli.services.foundry_internal_client.CredentialStorage"
         ) as credential_storage,
         patch(
-            "pltr.services.foundry_internal_client.requests.request",
+            "foundry_cli.services.foundry_internal_client.requests.request",
             return_value=response,
         ) as request,
     ):
@@ -1776,16 +1776,16 @@ def test_internal_connection_error_degrades_to_inconclusive_with_sdk_graph(tmp_p
         )
 
     with (
-        patch("pltr.commands.dependency.AuthManager") as auth_constructor,
+        patch("foundry_cli.commands.dependency.AuthManager") as auth_constructor,
         patch(
-            "pltr.commands.dependency.DependencyGraphService",
+            "foundry_cli.commands.dependency.DependencyGraphService",
             side_effect=build_service,
         ),
         patch(
-            "pltr.services.foundry_internal_client.CredentialStorage"
+            "foundry_cli.services.foundry_internal_client.CredentialStorage"
         ) as credential_storage,
         patch(
-            "pltr.services.foundry_internal_client.requests.request",
+            "foundry_cli.services.foundry_internal_client.requests.request",
             side_effect=requests.ConnectionError("endpoint unreachable"),
         ) as request,
     ):
@@ -1970,7 +1970,7 @@ def test_only_six_direct_target_commands_are_advertised():
 
 
 def test_resource_rejects_workshop_name_before_service_construction():
-    with patch("pltr.commands.dependency.DependencyGraphService") as constructor:
+    with patch("foundry_cli.commands.dependency.DependencyGraphService") as constructor:
         result = runner.invoke(app, ["dependency", "resource", "my-workshop-variable"])
     assert result.exit_code != 0
     assert "Compass-resolvable RID" in result.output
@@ -2030,7 +2030,7 @@ def test_unknown_exception_is_structured_without_traceback(tmp_path, service):
 
 def test_artifact_failure_prevents_compact_success_output(tmp_path, service):
     with patch(
-        "pltr.commands.dependency.write_dependency_artifact",
+        "foundry_cli.commands.dependency.write_dependency_artifact",
         side_effect=ArtifactWriteError("read only"),
     ):
         result = runner.invoke(

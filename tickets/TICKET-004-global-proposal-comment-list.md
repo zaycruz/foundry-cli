@@ -37,8 +37,8 @@ is the only path to a contract.
 
 1. Add the captured route to `GlobalProposalService` (or a comments service
    wrapper) behind the standard evidence comments.
-2. Wire `pltr proposal comment global-proposal` and/or
-   `pltr proposal list global-proposal`; update
+2. Wire `foundry proposal comment global-proposal` and/or
+   `foundry proposal list global-proposal`; update
    `SDK_REACHABLE_CAPABILITIES` and reasons map.
 3. Tests, docs (`reference/proposal-commands.md`,
    `reference/global-branching-commands.md`), CHANGELOG.

@@ -11,7 +11,7 @@ composable multi-step operations, e.g. `tag → watch build → verify function
 release`. Deferred in favor of composite mutation tools + self-correcting
 errors after Langfuse evidence showed where the actual pain lives.
 
-## Evidence snapshot (Langfuse `pltr-agent-session`, 38 sessions / 636 calls)
+## Evidence snapshot (Langfuse `foundry-agent-session`, 38 sessions / 636 calls)
 
 - **Zero polling/waiting loops observed.** No build-status or transaction
   polling anywhere in the sample. The stateful-chaining hypothesis
@@ -31,7 +31,7 @@ stateful chains.
    chainable steps (each already plan-first, idempotent-ish, self-verifying).
 2. **Chain runner** — execute an ordered sequence of composite ops with
    stop-on-failure and per-step artifacts. Candidate shapes: declarative
-   YAML/JSON pipeline (`pltr run pipeline.yaml`), or agent-manifest-level
+   YAML/JSON pipeline (`foundry run pipeline.yaml`), or agent-manifest-level
    composite tool registration.
 3. **Stateful waiting** — only if organic evidence appears: poll-with-timeout
    step type (e.g. wait for build RID to reach terminal state, wait for

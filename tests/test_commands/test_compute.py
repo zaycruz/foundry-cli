@@ -8,8 +8,8 @@ from unittest.mock import Mock, patch
 import typer
 from typer.testing import CliRunner
 
-from pltr.commands.compute import app
-from pltr.services.compute import (
+from foundry_cli.commands.compute import app
+from foundry_cli.services.compute import (
     ComputeModulesError,
     ComputeSessionNotFoundError,
     ComputeShapeError,
@@ -32,7 +32,7 @@ class TestComputeInfoCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_success_loads_status_and_config(self, mock_service_class):
         """Test info loads both includes by default."""
         mock_service = Mock()
@@ -46,7 +46,7 @@ class TestComputeInfoCommand:
         mock_service.get_status.assert_called_once_with(DEPLOYED_APP_RID, "master")
         mock_service.get_config.assert_called_once_with(DEPLOYED_APP_RID)
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_include_status_only(self, mock_service_class):
         """Test --include restricts which endpoints are called."""
         mock_service = Mock()
@@ -62,7 +62,7 @@ class TestComputeInfoCommand:
         mock_service.get_status.assert_called_once()
         mock_service.get_config.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_unknown_include_rejected(self, mock_service_class):
         """Test an unknown --include value fails before any request."""
         result = self.runner.invoke(
@@ -74,7 +74,7 @@ class TestComputeInfoCommand:
         assert "Unknown --include" in result.stdout
         mock_service_class.return_value.get_status.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_permission_denied_surfaces(self, mock_service_class):
         """Test the captured 403 contract surfaces honestly (exit 1, not hidden)."""
         mock_service = Mock()
@@ -89,7 +89,7 @@ class TestComputeInfoCommand:
         assert result.exit_code == 1
         assert "HTTP 403" in result.stdout
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_unverified_shape_fails_loudly(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -103,10 +103,10 @@ class TestComputeInfoCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_agent_format_marks_shape_unverified(self, mock_service_class):
         """Test the agent envelope honestly marks shape_verified false."""
-        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -132,7 +132,7 @@ class TestComputeLogsCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_logs_success(self, mock_service_class):
         """Test logs passes range and ordering through to the service."""
         mock_service = Mock()
@@ -168,7 +168,7 @@ class TestComputeLogsCommand:
             chronological=False,
         )
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_logs_no_session_is_loud(self, mock_service_class):
         """Test a missing telemetry session exits 1 with a clear message."""
         mock_service = Mock()
@@ -190,7 +190,7 @@ class TestComputeManageCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_start_defaults_to_plan(self, mock_service_class):
         """Test start without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -213,7 +213,7 @@ class TestComputeManageCommand:
         mock_service.plan_start.assert_called_once_with(DEPLOYED_APP_RID, "master")
         mock_service.start.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_start_apply_sends(self, mock_service_class):
         """Test start --apply issues the submitBuild mutation."""
         mock_service = Mock()
@@ -236,7 +236,7 @@ class TestComputeManageCommand:
         assert result.exit_code == 0
         mock_service.start.assert_called_once_with(DEPLOYED_APP_RID, "master")
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_start_requires_deployed_app_rid(self, mock_service_class):
         """Test start without --deployed-app-rid fails before any request."""
         result = self.runner.invoke(
@@ -246,7 +246,7 @@ class TestComputeManageCommand:
         assert result.exit_code == 2
         mock_service_class.return_value.start.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_stop_defaults_to_plan(self, mock_service_class):
         """Test stop without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -262,7 +262,7 @@ class TestComputeManageCommand:
         mock_service.plan_stop.assert_called_once_with(BUILD_RID)
         mock_service.stop.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_stop_apply_requires_yes(self, mock_service_class):
         """Test stop --apply without --yes asks, and 'n' cancels."""
         mock_service = Mock()
@@ -285,7 +285,7 @@ class TestComputeManageCommand:
         assert result.exit_code == 1
         mock_service.stop.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_stop_apply_yes_sends(self, mock_service_class):
         """Test stop --apply --yes issues the cancel."""
         mock_service = Mock()
@@ -309,7 +309,7 @@ class TestComputeManageCommand:
         assert result.exit_code == 0
         mock_service.stop.assert_called_once_with(BUILD_RID)
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_dev_mode_plan_and_apply(self, mock_service_class):
         """Test dev-mode plan by default and PUT behind --apply."""
         mock_service = Mock()
@@ -353,7 +353,7 @@ class TestComputeManageCommand:
             DEPLOYED_APP_RID, "master", None
         )
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_unknown_action_rejected(self, mock_service_class):
         """Test an unknown --action fails before any request."""
         result = self.runner.invoke(
@@ -363,10 +363,10 @@ class TestComputeManageCommand:
         assert result.exit_code == 2
         assert "Unknown --action" in result.stdout
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_manage_agent_plan_envelope(self, mock_service_class):
         """Test the agent plan envelope carries mode and verification flags."""
-        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -404,7 +404,7 @@ class TestComputeExecuteCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_execute_defaults_to_plan(self, mock_service_class):
         """Test execute without --apply prints the plan, no execution."""
         mock_service = Mock()
@@ -430,7 +430,7 @@ class TestComputeExecuteCommand:
         )
         mock_service.execute.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_execute_apply_sends(self, mock_service_class):
         """Test execute --apply issues the execution with parsed query JSON."""
         mock_service = Mock()
@@ -459,7 +459,7 @@ class TestComputeExecuteCommand:
         )
         assert '"answer": 42' in result.stdout
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_execute_invalid_query_json_rejected(self, mock_service_class):
         """Test malformed --query JSON fails before any request."""
         result = self.runner.invoke(
@@ -479,7 +479,7 @@ class TestComputeExecuteCommand:
         assert "not valid JSON" in result.stdout
         mock_service_class.return_value.execute.assert_not_called()
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_execute_captured_403_surfaces(self, mock_service_class):
         """Test the captured submit-permission 403 surfaces honestly."""
         mock_service = Mock()
@@ -504,10 +504,10 @@ class TestComputeExecuteCommand:
         assert result.exit_code == 1
         assert "HTTP 403" in result.stdout
 
-    @patch("pltr.commands.compute.ComputeService")
+    @patch("foundry_cli.commands.compute.ComputeService")
     def test_execute_agent_plan_envelope(self, mock_service_class):
         """Test the agent plan envelope carries the operation and flags."""
-        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service

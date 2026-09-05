@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "pltr-cli-command-manifest-v1",
+  "schemaVersion": "foundry-cli-command-manifest-v1",
   "commands": [
     {"path": "dataset list"},
     {"path": "ontology object-type-list"}

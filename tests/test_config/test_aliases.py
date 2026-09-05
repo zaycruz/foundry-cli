@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pltr.config.aliases import AliasManager
+from foundry_cli.config.aliases import AliasManager
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def alias_manager(temp_config_dir, monkeypatch):
         def __init__(self):
             self.config_dir = temp_config_dir
 
-    monkeypatch.setattr("pltr.config.aliases.Settings", MockSettings)
+    monkeypatch.setattr("foundry_cli.config.aliases.Settings", MockSettings)
     return AliasManager()
 
 
@@ -165,7 +165,7 @@ class TestAliasManager:
             def __init__(self):
                 self.config_dir = temp_config_dir
 
-        monkeypatch.setattr("pltr.config.aliases.Settings", MockSettings)
+        monkeypatch.setattr("foundry_cli.config.aliases.Settings", MockSettings)
 
         # Create first manager and add aliases
         manager1 = AliasManager()
@@ -209,7 +209,7 @@ class TestAliasManager:
             def __init__(self):
                 self.config_dir = temp_config_dir
 
-        monkeypatch.setattr("pltr.config.aliases.Settings", MockSettings)
+        monkeypatch.setattr("foundry_cli.config.aliases.Settings", MockSettings)
 
         # Create corrupted file
         aliases_file = temp_config_dir / "aliases.json"

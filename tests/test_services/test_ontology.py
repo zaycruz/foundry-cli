@@ -3,13 +3,14 @@ Tests for ontology services.
 """
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 import requests
 from unittest.mock import Mock, patch
 
-from pltr.services.errors import FoundryApiError
-from pltr.services.ontology import (
+from foundry_cli.services.errors import FoundryApiError
+from foundry_cli.services.ontology import (
     OntologyService,
     ObjectTypeService,
     OntologyObjectService,
@@ -28,7 +29,7 @@ def _http_error(status_code: int, message: str) -> requests.HTTPError:
 @pytest.fixture
 def mock_ontology_service():
     """Create a mocked OntologyService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -45,7 +46,7 @@ def mock_ontology_service():
 @pytest.fixture
 def mock_object_type_service():
     """Create a mocked ObjectTypeService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -65,7 +66,7 @@ def mock_object_type_service():
 @pytest.fixture
 def mock_ontology_object_service():
     """Create a mocked OntologyObjectService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -83,7 +84,7 @@ def mock_ontology_object_service():
 @pytest.fixture
 def mock_action_service():
     """Create a mocked ActionService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -100,7 +101,7 @@ def mock_action_service():
 @pytest.fixture
 def mock_query_service():
     """Create a mocked QueryService."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -197,7 +198,7 @@ def sample_query_result():
 # OntologyService Tests
 def test_ontology_service_initialization():
     """Test OntologyService initialization."""
-    with patch("pltr.services.base.AuthManager"):
+    with patch("foundry_cli.services.base.AuthManager"):
         service = OntologyService()
         assert service is not None
         assert service.auth_manager is not None
@@ -331,7 +332,7 @@ def test_upsert_object_type_dry_run_is_the_default(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -350,6 +351,39 @@ def test_upsert_object_type_dry_run_is_the_default(mock_object_type_service):
     assert mock_client.conjure.call_count == 2
     for call in mock_client.conjure.call_args_list:
         assert "/modify/dry-run" in call.args[1]
+
+
+def test_upsert_object_type_maps_primary_key_to_explicit_backing_column(
+    mock_object_type_service,
+):
+    """A normalized primary-key API name may map to a physical source column."""
+    service, _ = mock_object_type_service
+    service.profile = "test-profile"
+    mock_client = Mock()
+    mock_client.conjure.side_effect = [
+        _namespace_probe_response(),
+        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
+    ]
+
+    with patch(
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
+        return_value=mock_client,
+    ):
+        result = service.upsert_object_type(
+            ontology_rid="ri.ontology.main.ontology.test",
+            api_name="ExampleObject",
+            display_name="Example Object",
+            primary_key="facility_id",
+            backing_dataset="ri.foundry.main.dataset.example",
+            primary_key_backing_column="FACILITY_ID",
+        )
+
+    assert result["primaryKeyBackingColumn"] == "FACILITY_ID"
+    request = mock_client.conjure.call_args_list[1].kwargs["json_body"]
+    datasource = request["modificationRequest"]["objectTypeDatasources"]
+    mapping = datasource["ns0abcde.example-object"][0]["create"]
+    mapping = mapping["objectTypeDatasourceDefinition"]["dataset"]["propertyMapping"]
+    assert mapping == {"facility_id": "FACILITY_ID"}
 
 
 def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
@@ -375,7 +409,7 @@ def test_upsert_object_type_apply_verifies_read_back(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -465,7 +499,7 @@ def test_upsert_object_type_apply_reports_unverified_read_back(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -615,7 +649,7 @@ def test_upsert_object_type_dry_run_plans_update_for_existing_type(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -672,7 +706,7 @@ def test_upsert_object_type_apply_updates_existing_type(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -717,7 +751,7 @@ def test_upsert_object_type_update_fails_when_state_cannot_load(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="Could not load the current state"),
@@ -746,7 +780,7 @@ def test_upsert_object_type_update_noop_skips_modify(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -784,7 +818,7 @@ def test_upsert_object_type_update_refuses_backing_dataset_change(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="cannot change the backing dataset"),
@@ -813,7 +847,7 @@ def test_upsert_object_type_update_refuses_primary_key_change(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="cannot change the primary key"),
@@ -841,7 +875,7 @@ def test_upsert_object_type_surfaces_missing_dataset_schema(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(
@@ -884,7 +918,7 @@ def test_delete_object_type_dry_run_is_the_default(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -916,7 +950,7 @@ def test_delete_object_type_apply_verifies_gone(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -950,7 +984,7 @@ def test_delete_object_type_apply_reports_still_present(mock_object_type_service
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -977,7 +1011,7 @@ def test_upsert_link_type_builds_verified_one_to_many_shape(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_link_type(
@@ -1031,7 +1065,7 @@ def test_upsert_link_type_apply_verifies_via_dry_run(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_link_type(
@@ -1060,7 +1094,7 @@ def test_delete_link_type_apply_verifies_gone(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_link_type(
@@ -1092,8 +1126,8 @@ def test_delete_link_type_rejects_api_name(mock_object_type_service):
 # Action type upsert/delete tests
 def _action_type_definition() -> dict:
     return {
-        "apiName": "pltr-test-action",
-        "displayMetadata": {"displayName": "PLTR Test"},
+        "apiName": "foundry-test-action",
+        "displayMetadata": {"displayName": "FOUNDRY Test"},
         "logic": {
             "rules": [
                 {
@@ -1117,7 +1151,7 @@ def test_action_type_create_normalization_rewrites_validation_keys():
     """Non-UUID validations keys are rewritten and ordering kept in sync."""
     create = ActionService._normalize_action_type_create(_action_type_definition())
 
-    assert create["apiName"] == "pltr-test-action"
+    assert create["apiName"] == "foundry-test-action"
     (new_key,) = create["validations"].keys()
     assert new_key != "always"
     uuid.UUID(new_key)  # raises if not a UUID
@@ -1148,7 +1182,7 @@ def test_action_type_create_normalization_requires_fields(missing_key):
 
 
 def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
-    """Action upsert validates with UUID keys and stops before modify."""
+    """Dry-run sends the council-approved create envelope and stops before modify."""
     service, _ = mock_action_service
     service.profile = "test-profile"
     mock_client = Mock()
@@ -1156,9 +1190,17 @@ def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
         (200, {"type": "success", "success": {}}, '{"type":"success"}'),
     ]
 
-    with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
-        return_value=mock_client,
+    validation_id = uuid.UUID("00000000-0000-0000-0000-0000000000d2")
+    request_id = uuid.UUID("00000000-0000-0000-0000-0000000000d3")
+    with (
+        patch(
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
+            return_value=mock_client,
+        ),
+        patch(
+            "foundry_cli.services.ontology.uuid.uuid4",
+            side_effect=[validation_id, request_id],
+        ),
     ):
         result = service.upsert_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
@@ -1166,45 +1208,46 @@ def test_upsert_action_type_dry_run_is_the_default(mock_action_service):
         )
 
     assert result["mode"] == "dry-run"
-    assert result["apiName"] == "pltr-test-action"
-    modification_request = mock_client.conjure.call_args.kwargs["json_body"][
-        "modificationRequest"
-    ]
-    (request_key,) = modification_request["actionTypesToCreate"].keys()
-    uuid.UUID(request_key)  # keys must be UUID strings on the wire
+    assert result["apiName"] == "foundry-test-action"
+    modification_request = mock_client.conjure.call_args.kwargs["json_body"]["modificationRequest"]
+    expected = _action_type_definition()
+    expected.pop("apiName")
+    expected["validations"] = {str(validation_id): expected["validations"].pop("always")}
+    expected["validationsOrdering"] = [str(validation_id)]
+    assert modification_request == {
+        "actionTypesToCreate": {
+            "foundry-test-action": {
+                "id": str(request_id),
+                "definition": expected,
+            }
+        }
+    }
+    assert "apiName" not in modification_request["actionTypesToCreate"][
+        "foundry-test-action"
+    ]["definition"]
     assert mock_client.conjure.call_count == 1
 
 
 def test_upsert_action_type_apply_verifies_read_back(mock_action_service):
-    """An applied action create reads the action type back via the SDK."""
+    """Apply is rejected before the real modify endpoint can be reached."""
     service, _ = mock_action_service
     service.profile = "test-profile"
     mock_client = Mock()
-    mock_client.conjure.side_effect = [
-        (200, {"type": "success", "success": {}}, '{"type":"success"}'),
-        (200, {"createdActionTypeRids": {}}, "{}"),
-    ]
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
-        patch.object(
-            ActionService, "get_action_type", return_value={"rid": "ri.x"}
-        ) as mock_get,
+        pytest.raises(FoundryApiError, match="unverified contract"),
     ):
-        result = service.upsert_action_type(
+        service.upsert_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
             definition=_action_type_definition(),
             apply=True,
         )
 
-    assert result["mode"] == "applied"
-    assert result["verification"]["status"] == "verified"
-    mock_get.assert_called_once_with(
-        "ri.ontology.main.ontology.test", "pltr-test-action"
-    )
+    mock_client.conjure.assert_not_called()
 
 
 def test_delete_action_type_resolves_rid_and_verifies_gone(mock_action_service):
@@ -1221,14 +1264,14 @@ def test_delete_action_type_resolves_rid_and_verifies_gone(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(ActionService, "get_action_type", return_value={"rid": rid}),
     ):
         result = service.delete_action_type(
             ontology_rid="ri.ontology.main.ontology.test",
-            action_type="pltr-test-action",
+            action_type="foundry-test-action",
             apply=True,
         )
 
@@ -1408,7 +1451,7 @@ def test_list_objects(mock_ontology_object_service, sample_object):
 
 def test_get_object():
     """Test getting a specific object."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         # Set up client mock
         mock_client = Mock()
         mock_ontologies = Mock()
@@ -1644,6 +1687,480 @@ def test_apply_batch_actions_exceeds_limit(mock_action_service):
     assert "Maximum 20 actions" in str(excinfo.value)
 
 
+class _FakeObjectNotFound(Exception):
+    """Stand-in for the SDK ObjectNotFound error (matched by error name)."""
+
+    name = "ObjectNotFound"
+
+
+@pytest.fixture
+def mock_composed_action_service():
+    """Mock the ActionService composed inside the object upsert methods."""
+    with patch("foundry_cli.services.ontology.ActionService") as mock_action_cls:
+        yield mock_action_cls.return_value
+
+
+def test_apply_action_with_overrides(mock_action_service, sample_action_result):
+    """Test applying an action with overrides for generated parameters."""
+    service, mock_action_class = mock_action_service
+    mock_action_class.apply_with_overrides.return_value = sample_action_result
+
+    params = {"employee_id": "EMP001"}
+    overrides = {"actionExecutionTime": "2026-09-03T00:00:00Z"}
+    result = service.apply_action_with_overrides(
+        "ri.ontology.main.ontology.test", "transfer_employee", params, overrides
+    )
+
+    assert result["operation_id"] == "ri.action.operation.123"
+    assert result["modified_objects_count"] == 1
+    mock_action_class.apply_with_overrides.assert_called_once()
+    call = mock_action_class.apply_with_overrides.call_args
+    assert call.args == ("ri.ontology.main.ontology.test", "transfer_employee")
+    assert call.kwargs["request"].parameters == params
+    assert call.kwargs["request"].options is None
+    assert call.kwargs["overrides"].action_execution_time == datetime(
+        2026, 9, 3, tzinfo=timezone.utc
+    )
+
+
+def test_apply_action_with_overrides_validate_only(
+    mock_action_service, sample_validation_result
+):
+    """Test validate-only mode wires VALIDATE_ONLY and formats validation."""
+    service, mock_action_class = mock_action_service
+    mock_action_class.apply_with_overrides.return_value = sample_validation_result
+
+    params = {"employee_id": "EMP001"}
+    overrides = {"action_execution_time": "2026-09-03T00:00:00Z"}
+    result = service.apply_action_with_overrides(
+        "ri.ontology.main.ontology.test",
+        "transfer_employee",
+        params,
+        overrides,
+        validate_only=True,
+    )
+
+    assert result["result"] == "VALID"
+    call = mock_action_class.apply_with_overrides.call_args
+    assert call.kwargs["request"].options.mode == "VALIDATE_ONLY"
+    assert call.kwargs["overrides"].action_execution_time == datetime(
+        2026, 9, 3, tzinfo=timezone.utc
+    )
+
+
+def test_apply_batch_with_overrides(mock_action_service, sample_action_result):
+    """Test applying batch actions with per-item overrides."""
+    service, mock_action_class = mock_action_service
+    batch_result = Mock(edits=sample_action_result.edits)
+    mock_action_class.apply_batch_with_overrides.return_value = batch_result
+
+    requests = [
+        {
+            "parameters": {"employee_id": "EMP001"},
+            "overrides": {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+        },
+        {"parameters": {"employee_id": "EMP002"}},
+    ]
+    result = service.apply_batch_with_overrides(
+        "ri.ontology.main.ontology.test", "transfer_employee", requests
+    )
+
+    assert result["modified_objects_count"] == 1
+    mock_action_class.apply_batch_with_overrides.assert_called_once()
+    call = mock_action_class.apply_batch_with_overrides.call_args
+    assert call.args == ("ri.ontology.main.ontology.test", "transfer_employee")
+    items = call.kwargs["requests"]
+    assert len(items) == 2
+    assert items[0].parameters == {"employee_id": "EMP001"}
+    assert items[0].overrides.action_execution_time == datetime(
+        2026, 9, 3, tzinfo=timezone.utc
+    )
+    assert items[1].parameters == {"employee_id": "EMP002"}
+    assert items[1].overrides is None
+
+
+def test_apply_batch_with_overrides_exceeds_limit(mock_action_service):
+    """Test that batch actions with overrides fail when exceeding limit."""
+    service, _ = mock_action_service
+
+    requests = [{"parameters": {"employee_id": f"EMP{i}"}} for i in range(21)]
+
+    with pytest.raises(RuntimeError) as excinfo:
+        service.apply_batch_with_overrides(
+            "ri.ontology.main.ontology.test", "transfer_employee", requests
+        )
+
+    assert "Maximum 20 actions" in str(excinfo.value)
+
+
+def test_prepare_object_upsert_create(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that a missing object plans a create and only validates."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe"},
+        "upsert-employee",
+    )
+
+    assert plan["operation"] == "create"
+    assert plan["parameters"] == {"name": "John Doe", "employee_id": "EMP001"}
+    assert plan["existing_object"] is None
+    assert plan["applied"] is False
+    assert plan["validation"]["result"] == "VALID"
+    # prepare must never mutate: only VALIDATE_ONLY validation runs
+    mock_composed_action_service.validate_action.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        {"name": "John Doe", "employee_id": "EMP001"},
+    )
+    mock_composed_action_service.apply_action.assert_not_called()
+    mock_composed_action_service.apply_action_with_overrides.assert_not_called()
+    mock_composed_action_service.apply_batch_actions.assert_not_called()
+    mock_composed_action_service.apply_batch_with_overrides.assert_not_called()
+
+
+def test_prepare_object_upsert_update(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that an existing object plans an update."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.return_value = sample_object
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"department": "Sales"},
+        "upsert-employee",
+    )
+
+    assert plan["operation"] == "update"
+    assert plan["existing_object"]["name"] == "John Doe"
+    assert plan["parameters"]["employee_id"] == "EMP001"
+
+
+def test_prepare_object_upsert_primary_key_conflict(mock_ontology_object_service):
+    """Test that properties contradicting the primary key are rejected."""
+    service, _ = mock_ontology_object_service
+
+    with pytest.raises(ValueError) as excinfo:
+        service.prepare_object_upsert(
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "employee_id",
+            "EMP001",
+            {"employee_id": "EMP999"},
+            "upsert-employee",
+        )
+
+    assert "contradicts the primary key value" in str(excinfo.value)
+
+
+def test_apply_object_upsert_reads_back(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that apply executes the action and verifies via read-back."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.return_value = sample_object
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_action.return_value = {
+        "operation_id": "ri.action.operation.123"
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe", "department": "Engineering"},
+        "upsert-employee",
+    )
+    result = service.apply_object_upsert(plan)
+
+    assert result["applied"] is True
+    assert result["readback"]["status"] == "verified"
+    assert result["readback"]["object"]["employee_id"] == "EMP001"
+    mock_composed_action_service.apply_action.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        {"name": "John Doe", "department": "Engineering", "employee_id": "EMP001"},
+    )
+    mock_composed_action_service.apply_action_with_overrides.assert_not_called()
+
+
+def test_apply_object_upsert_with_overrides(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that planned overrides route the execution through apply_with_overrides."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.return_value = sample_object
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_action_with_overrides.return_value = {
+        "operation_id": "ri.action.operation.123"
+    }
+
+    overrides = {"actionExecutionTime": "2026-09-03T00:00:00Z"}
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe", "department": "Engineering"},
+        "upsert-employee",
+        overrides=overrides,
+    )
+    result = service.apply_object_upsert(plan)
+
+    assert result["applied"] is True
+    mock_composed_action_service.apply_action_with_overrides.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        {"name": "John Doe", "department": "Engineering", "employee_id": "EMP001"},
+        overrides,
+    )
+    mock_composed_action_service.apply_action.assert_not_called()
+
+
+def test_apply_object_upsert_readback_contradiction(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that a contradicting read-back raises loudly after apply."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = [
+        _FakeObjectNotFound("not found"),
+        {**sample_object, "department": "Marketing"},
+    ]
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_action.return_value = {
+        "operation_id": "ri.action.operation.123"
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"department": "Engineering"},
+        "upsert-employee",
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        service.apply_object_upsert(plan)
+
+    assert "read-back contradicts" in str(excinfo.value)
+    assert "department" in str(excinfo.value)
+
+
+def test_prepare_object_upsert_batch_chunks(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that batch plans chunk rows into groups of at most 20."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+
+    rows = [
+        {"primary_key": f"EMP{i:03d}", "properties": {"name": f"Employee {i}"}}
+        for i in range(21)
+    ]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    assert plan["operation"] == "object-upsert-batch"
+    assert plan["row_count"] == 21
+    assert plan["chunk_count"] == 2
+    assert len(plan["plans"]) == 21
+    assert plan["applied"] is False
+    assert all(p["operation"] == "create" for p in plan["plans"])
+    assert mock_composed_action_service.validate_action.call_count == 21
+    mock_composed_action_service.apply_batch_actions.assert_not_called()
+
+
+def test_prepare_object_upsert_batch_requires_rows(mock_ontology_object_service):
+    """Test that an empty batch is rejected."""
+    service, _ = mock_ontology_object_service
+
+    with pytest.raises(ValueError) as excinfo:
+        service.prepare_object_upsert_batch(
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "employee_id",
+            "upsert-employee",
+            [],
+        )
+
+    assert "at least one row" in str(excinfo.value)
+
+
+def test_apply_object_upsert_batch_chunks_and_reports(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that batch apply chunks into <=20 requests and reports per row."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_batch_actions.return_value = {
+        "edits_type": "objectEdits"
+    }
+
+    rows = [
+        {"primary_key": f"EMP{i:03d}", "properties": {"name": f"Employee {i}"}}
+        for i in range(21)
+    ]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    # Read-back returns an object echoing the requested properties
+    mock_ontology_object_class.get = Mock(
+        side_effect=lambda ontology_rid, object_type, primary_key, select=None: {
+            "employee_id": primary_key,
+            "name": f"Employee {int(primary_key[3:])}",
+        }
+    )
+
+    result = service.apply_object_upsert_batch(plan)
+
+    assert result["applied"] is True
+    assert mock_composed_action_service.apply_batch_actions.call_count == 2
+    first_chunk = mock_composed_action_service.apply_batch_actions.call_args_list[0]
+    second_chunk = mock_composed_action_service.apply_batch_actions.call_args_list[1]
+    assert len(first_chunk.args[2]) == 20
+    assert len(second_chunk.args[2]) == 1
+    mock_composed_action_service.apply_batch_with_overrides.assert_not_called()
+    assert len(result["report"]) == 21
+    assert all(row["status"] == "verified" for row in result["report"])
+
+
+def test_apply_object_upsert_batch_with_overrides(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that chunks containing overrides use apply_batch_with_overrides."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_batch_with_overrides.return_value = {
+        "edits_type": "objectEdits"
+    }
+
+    rows = [
+        {
+            "primary_key": "EMP001",
+            "properties": {"name": "John Doe"},
+            "overrides": {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+        }
+    ]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    mock_ontology_object_class.get = Mock(
+        return_value={"employee_id": "EMP001", "name": "John Doe"}
+    )
+    result = service.apply_object_upsert_batch(plan)
+
+    mock_composed_action_service.apply_batch_with_overrides.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        [
+            {
+                "parameters": {"name": "John Doe", "employee_id": "EMP001"},
+                "overrides": {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+            }
+        ],
+    )
+    mock_composed_action_service.apply_batch_actions.assert_not_called()
+    assert result["report"][0]["status"] == "verified"
+
+
+def test_apply_object_upsert_batch_reports_not_verified(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that a contradicting read-back is reported per row, not hidden."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_batch_actions.return_value = {
+        "edits_type": "objectEdits"
+    }
+
+    rows = [{"primary_key": "EMP001", "properties": {"name": "John Doe"}}]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    mock_ontology_object_class.get = Mock(
+        return_value={"employee_id": "EMP001", "name": "Jane Smith"}
+    )
+    result = service.apply_object_upsert_batch(plan)
+
+    assert result["report"][0]["status"] == "not-verified"
+    assert "name" in result["report"][0]["detail"]
+
+
 # QueryService Tests
 def test_execute_query(mock_query_service, sample_query_result):
     """Test executing a query."""
@@ -1769,7 +2286,7 @@ def test_get_link_type_error(mock_object_type_service):
 @pytest.fixture
 def mock_action_type_full_metadata_service():
     """Create a mocked ActionService with an ActionTypeFullMetadata client."""
-    with patch("pltr.services.base.AuthManager") as mock_auth:
+    with patch("foundry_cli.services.base.AuthManager") as mock_auth:
         mock_client = Mock()
         mock_ontologies = Mock()
         mock_metadata_class = Mock()
@@ -1870,7 +2387,7 @@ def test_upsert_object_type_schema_error_includes_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -1899,7 +2416,7 @@ def test_upsert_object_type_unrelated_error_has_no_hint(mock_object_type_service
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_object_type(
@@ -1929,7 +2446,7 @@ def test_upsert_link_type_missing_object_type_includes_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_link_type(
@@ -1957,7 +2474,7 @@ def test_upsert_action_type_missing_object_type_includes_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.upsert_action_type(
@@ -1984,7 +2501,7 @@ def test_delete_object_type_dependent_link_types_include_reverse_order_hint(
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.delete_object_type(
@@ -2040,7 +2557,7 @@ def test_add_property_dry_run_request_shape(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.add_property_to_object_type(
@@ -2109,7 +2626,7 @@ def test_add_property_apply_verifies_read_back(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.add_property_to_object_type(
@@ -2144,7 +2661,7 @@ def test_add_property_branch_rid_passthrough(mock_object_type_service):
     ]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.add_property_to_object_type(
@@ -2177,7 +2694,7 @@ def test_add_property_branch_unsupported_is_typed(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(FoundryApiError) as exc_info,
@@ -2212,7 +2729,7 @@ def test_add_property_refuses_interfaces(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="implements"),
@@ -2242,7 +2759,7 @@ def test_add_property_refuses_shared_property_types(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="shared property types"),
@@ -2267,7 +2784,7 @@ def test_add_property_refuses_existing_property(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="already has a property"),
@@ -2294,7 +2811,7 @@ def test_resolve_object_type_by_api_name(mock_object_type_service):
     mock_client.conjure.side_effect = [_bulk_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_object_type(
@@ -2327,7 +2844,7 @@ def test_resolve_object_type_by_rid(mock_object_type_service):
     mock_client.conjure.side_effect = [_bulk_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_object_type(
@@ -2356,7 +2873,7 @@ def test_resolve_property(mock_object_type_service):
     mock_client.conjure.side_effect = [_bulk_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_property(
@@ -2388,7 +2905,7 @@ def test_resolve_property_missing(mock_object_type_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         pytest.raises(RuntimeError, match="has no property"),
@@ -2501,7 +3018,7 @@ def test_update_action_type_dry_run_merges_status_and_display(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2576,7 +3093,7 @@ def test_update_action_type_replaces_rules_with_function_rule(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2609,7 +3126,7 @@ def test_update_action_type_function_rule_requires_rid_and_version(
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2665,7 +3182,7 @@ def test_update_action_type_parameter_add(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2720,7 +3237,7 @@ def test_update_action_type_parameter_remove_and_reorder(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2758,7 +3275,7 @@ def test_update_action_type_validations_add_remove(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2807,7 +3324,7 @@ def test_update_action_type_validations_cannot_remove_all(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2850,7 +3367,7 @@ def test_update_action_type_apply_verifies_read_back(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2898,7 +3415,7 @@ def test_update_action_type_dry_run_blocks_apply_on_error(mock_action_service):
 
     with (
         patch(
-            "pltr.services.foundry_internal_client.FoundryInternalClient",
+            "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
             return_value=mock_client,
         ),
         patch.object(
@@ -2932,7 +3449,7 @@ def test_resolve_action_type_by_api_name(mock_action_service):
     mock_client.conjure.side_effect = [_action_type_load_response()]
 
     with patch(
-        "pltr.services.foundry_internal_client.FoundryInternalClient",
+        "foundry_cli.services.foundry_internal_client.FoundryInternalClient",
         return_value=mock_client,
     ):
         result = service.resolve_action_type(

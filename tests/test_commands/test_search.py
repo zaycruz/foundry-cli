@@ -10,8 +10,8 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.services.foundry_internal_client import TokenExpiredError
+from foundry_cli.cli import app
+from foundry_cli.services.foundry_internal_client import TokenExpiredError
 
 
 runner = CliRunner()
@@ -44,7 +44,7 @@ def _ok_payload() -> dict:
 
 
 def test_search_renders_results_table_and_notes_truncation():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         result = runner.invoke(
             app,
@@ -61,7 +61,7 @@ def test_search_renders_results_table_and_notes_truncation():
 
 
 def test_search_limit_option_is_passed_through():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         result = runner.invoke(app, ["search", "Flight", "--limit", "5"])
 
@@ -70,7 +70,7 @@ def test_search_limit_option_is_passed_through():
 
 
 def test_search_json_output_is_machine_readable():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         result = runner.invoke(app, ["search", "Flight", "--format", "json"])
 
@@ -81,7 +81,7 @@ def test_search_json_output_is_machine_readable():
 
 
 def test_search_csv_output_rows():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         result = runner.invoke(app, ["search", "Flight", "--format", "csv"])
 
@@ -106,7 +106,7 @@ def test_search_csv_output_rows():
 def test_empty_results_is_successful_and_plainly_identified():
     payload = _ok_payload()
     payload["results"] = []
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = payload
         result = runner.invoke(app, ["search", "zzz-nothing"])
 
@@ -116,7 +116,7 @@ def test_empty_results_is_successful_and_plainly_identified():
 
 
 def test_inconclusive_exits_nonzero_and_warns_not_empty():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = {
             "status": "inconclusive",
             "reason": "search-null",
@@ -135,7 +135,7 @@ def test_inconclusive_json_and_csv_preserve_machine_format_and_warning():
         "reason": "missing-response-frame",
         "results": None,
     }
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = payload
         json_result = runner.invoke(app, ["search", "Flight", "--format", "json"])
         csv_result = runner.invoke(app, ["search", "Flight", "--format", "csv"])
@@ -150,7 +150,7 @@ def test_inconclusive_json_and_csv_preserve_machine_format_and_warning():
 
 
 def test_token_expired_shows_degraded_banner_and_exits_nonzero():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.side_effect = TokenExpiredError("expired")
         result = runner.invoke(app, ["search", "Flight"])
 
@@ -160,7 +160,7 @@ def test_token_expired_shows_degraded_banner_and_exits_nonzero():
 
 
 def test_invalid_format_and_limit_are_rejected():
-    with patch("pltr.commands.search.SearchService"):
+    with patch("foundry_cli.commands.search.SearchService"):
         bad_format = runner.invoke(app, ["search", "Flight", "--format", "yaml"])
         bad_limit = runner.invoke(app, ["search", "Flight", "--limit", "0"])
 
@@ -169,7 +169,7 @@ def test_invalid_format_and_limit_are_rejected():
 
 
 def test_empty_or_whitespace_text_is_rejected():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         empty = runner.invoke(app, ["search", ""])
         whitespace = runner.invoke(app, ["search", "   "])
 
@@ -179,7 +179,7 @@ def test_empty_or_whitespace_text_is_rejected():
 
 
 def test_limit_gateway_cap_is_enforced():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         accepted = runner.invoke(app, ["search", "Flight", "--limit", "500"])
         rejected = runner.invoke(app, ["search", "Flight", "--limit", "501"])
@@ -191,7 +191,7 @@ def test_limit_gateway_cap_is_enforced():
 
 
 def test_ci_mode_ok_exits_zero_with_machine_block():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         result = runner.invoke(app, ["search", "Flight", "--output-mode", "ci"])
 
@@ -206,7 +206,7 @@ def test_ci_mode_ok_exits_zero_with_machine_block():
 
 
 def test_ci_mode_inconclusive_exits_two():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = {
             "status": "inconclusive",
             "reason": "search-null",
@@ -222,7 +222,7 @@ def test_ci_mode_inconclusive_exits_two():
 
 
 def test_ci_mode_token_expired_stays_fatal():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.side_effect = TokenExpiredError("expired")
         result = runner.invoke(app, ["search", "Flight", "--output-mode", "ci"])
 
@@ -232,7 +232,7 @@ def test_ci_mode_token_expired_stays_fatal():
 
 def test_unwritable_output_path_exits_one_without_traceback(tmp_path):
     unwritable = tmp_path / "missing-dir" / "out.txt"
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = _ok_payload()
         result = runner.invoke(app, ["search", "Flight", "--output", str(unwritable)])
 
@@ -286,7 +286,7 @@ def _filtered_payload() -> dict:
 
 
 def test_path_prefix_activates_filtered_mode_with_local_text_and_type_filters():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = _filtered_payload()
         result = runner.invoke(
             app,
@@ -319,7 +319,7 @@ def test_path_prefix_activates_filtered_mode_with_local_text_and_type_filters():
 
 
 def test_filtered_json_preserves_pagination_and_sanitized_highlights():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = _filtered_payload()
         result = runner.invoke(
             app,
@@ -349,7 +349,7 @@ def test_filtered_mode_passes_optional_page_token_and_repeatable_prefixes():
     payload = _filtered_payload()
     payload["next_page_token"] = None
     payload["coverage"] = "complete"
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = payload
         result = runner.invoke(
             app,
@@ -372,7 +372,7 @@ def test_filtered_mode_passes_optional_page_token_and_repeatable_prefixes():
 
 
 def test_filtered_ci_and_inconclusive_json_preserve_classification():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = _filtered_payload()
         ci_result = runner.invoke(
             app,
@@ -412,7 +412,7 @@ def test_filtered_ci_and_inconclusive_json_preserve_classification():
 
 
 def test_page_token_and_resource_type_require_filtered_mode():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         token_result = runner.invoke(app, ["search", "Flight", "--page-token", "next"])
         type_result = runner.invoke(
             app, ["search", "Flight", "--resource-type", "Notepad"]
@@ -425,7 +425,7 @@ def test_page_token_and_resource_type_require_filtered_mode():
 
 
 def test_search_command_remains_registered_with_legacy_invocation():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = _filtered_payload()
         result = runner.invoke(
             app,
@@ -441,7 +441,7 @@ def test_search_command_remains_registered_with_legacy_invocation():
 
 
 def test_cross_mode_limit_and_page_size_are_rejected():
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         filtered_limit = runner.invoke(
             app,
             ["search", "Flight", "--path-prefix", "/Team", "--limit", "5"],
@@ -461,7 +461,7 @@ def test_cross_mode_limit_and_page_size_are_rejected():
 
 @pytest.mark.parametrize("page_size", [0, 501])
 def test_filtered_page_size_bounds_are_rejected(page_size):
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         result = runner.invoke(
             app,
             [
@@ -499,7 +499,7 @@ def test_filtered_empty_pages_render_coverage_and_continuation(
             "results": [],
         }
     )
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = payload
         result = runner.invoke(
             app,
@@ -525,7 +525,7 @@ def test_table_treats_brackets_as_literal_and_strips_terminal_controls():
             "highlights": [{"field": "path", "matches": ["[literal]"]}],
         }
     ]
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = payload
         result = runner.invoke(
             app,
@@ -553,7 +553,7 @@ def test_csv_neutralizes_formulas_after_optional_leading_whitespace():
             "typename": "ResourceMetadata",
         }
     ]
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search.return_value = payload
         result = runner.invoke(
             app,
@@ -573,7 +573,7 @@ def test_filtered_csv_exposes_headers_coverage_token_and_empty_metadata_row():
     payload = _filtered_payload()
     payload["results"] = []
     payload["server_page_count"] = 0
-    with patch("pltr.commands.search.SearchService") as service:
+    with patch("foundry_cli.commands.search.SearchService") as service:
         service.return_value.search_resources.return_value = payload
         result = runner.invoke(
             app,

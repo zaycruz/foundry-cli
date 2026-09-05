@@ -8,7 +8,7 @@
 
 `preview_transform` (run a Python transform on a sample without committing,
 iterate until green) is the single blocked capability in
-`src/pltr/capabilities.py:917-925`. Two independent investigations have
+`src/foundry_cli/capabilities.py:917-925`. Two independent investigations have
 confirmed there is no implementable contract today.
 
 ## Why it is blocked (evidence recap)
@@ -51,6 +51,6 @@ confirmed there is no implementable contract today.
 
 - This ticket closes when either unblock path yields a captured contract,
   at which point a normal implementation ticket is cut (plan-first command,
-  likely `pltr orchestration transform-preview` per the registry's mapped
+  likely `foundry orchestration transform-preview` per the registry's mapped
   command name, tests, docs, CHANGELOG), or when Palantir publishes the
   endpoint in a stable API and the SDK picks it up.

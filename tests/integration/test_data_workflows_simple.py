@@ -9,10 +9,10 @@ import pytest
 from typer.testing import CliRunner
 from unittest.mock import patch
 
-from pltr.cli import app
-from pltr.config.profiles import ProfileManager
-from pltr.config.settings import Settings
-from pltr.auth.storage import CredentialStorage
+from foundry_cli.cli import app
+from foundry_cli.config.profiles import ProfileManager
+from foundry_cli.config.settings import Settings
+from foundry_cli.auth.storage import CredentialStorage
 
 
 class TestSimpleDataWorkflows:

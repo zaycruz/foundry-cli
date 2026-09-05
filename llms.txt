@@ -1,20 +1,20 @@
 # foundry-cli
 
-> An agent-native command-line interface for Palantir Foundry. Derived from anjor/pltr-cli (https://github.com/anjor/pltr-cli), detached from the fork network and maintained independently. Wraps the official foundry-platform-sdk and adds a stable JSON agent contract (pltr-agent-v1), a read-only dependency / change-impact gate, and a drop-in skill bundle for coding agents.
+> An agent-native command-line interface for Palantir Foundry. Derived from anjor/foundry-cli (https://github.com/anjor/foundry-cli), detached from the fork network and maintained independently. Wraps the official foundry-platform-sdk and adds a stable JSON agent contract (foundry-agent-v1), a read-only dependency / change-impact gate, and a drop-in skill bundle for coding agents.
 
-MIT-licensed. Installs from git only. The installed command is `pltr`.
+MIT-licensed. Installs from git only. The installed command is `foundry`.
 
 ## One-paste install (hand this to your LLM)
 
-Paste the block below into Claude Code, Codex, or any coding agent. It will install and verify pltr for you:
+Paste the block below into Claude Code, Codex, or any coding agent. It will install and verify pfoundry for you:
 
 ```
-Install the pltr CLI (Palantir Foundry) for me, end to end:
+Install the foundry CLI (Palantir Foundry) for me, end to end:
 1. Install from git: `uv pip install "git+https://github.com/zaycruz/foundry-cli"` (fall back to `pip install "git+https://github.com/zaycruz/foundry-cli"` if uv is missing).
-2. Confirm it works: run `pltr --help` and show me the command groups.
-3. Set up auth: ask me for my Foundry host and API token, then export FOUNDRY_HOST and FOUNDRY_TOKEN, or run `pltr configure configure`. I may have more than one Foundry environment — support named profiles.
-4. Verify the connection: run `pltr verify`.
-5. For automation, note that every command accepts `--agent` for a stable JSON envelope; run `pltr --agent agent-manifest` to show the machine-readable command surface.
+2. Confirm it works: run `pfoundry --help` and show me the command groups.
+3. Set up auth: ask me for my Foundry host and API token, then export FOUNDRY_HOST and FOUNDRY_TOKEN, or run `pfoundry configure configure`. I may have more than one Foundry environment — support named profiles.
+4. Verify the connection: run `pfoundry verify`.
+5. For automation, note that every command accepts `--agent` for a stable JSON envelope; run `pfoundry --agent agent-manifest` to show the machine-readable command surface.
 ```
 
 ## Install
@@ -28,34 +28,34 @@ Then authenticate and verify:
 ```
 export FOUNDRY_TOKEN="your-api-token"
 export FOUNDRY_HOST="foundry.company.com"
-pltr verify
+pfoundry verify
 ```
 
 ## Agent usage
 
-Add `--agent` to any command to get one stable JSON envelope (schema_version `pltr-agent-v1`) with fields: `data`, `meta`, `warnings`, `errors`, `pagination`, `artifacts`. Credential-like fields are redacted; pagination cursors are preserved; prompts are disabled, so a mutation needs its explicit confirmation flag (for example `--force`).
+Add `--agent` to any command to get one stable JSON envelope (schema_version `foundry-agent-v1`) with fields: `data`, `meta`, `warnings`, `errors`, `pagination`, `artifacts`. Credential-like fields are redacted; pagination cursors are preserved; prompts are disabled, so a mutation needs its explicit confirmation flag (for example `--force`).
 
 Discover the command surface first:
 
 ```
-pltr --agent agent-manifest
+pfoundry --agent agent-manifest
 ```
 
-That emits every registered command with its path, arguments and flags. `pltr --agent capabilities` is a different thing: a parity scorecard tracking this CLI against Palantir's published MCP tool catalog. Read it to see what is planned or blocked, not to discover commands.
+That emits every registered command with its path, arguments and flags. `pfoundry --agent capabilities` is a different thing: a parity scorecard tracking this CLI against Palantir's published MCP tool catalog. Read it to see what is planned or blocked, not to discover commands.
 
 ## Change-impact gate (run before any Foundry change)
 
 Before modifying a Foundry ontology resource, action, query, dataset, or application, run a read-only assessment and retain the evidence graph:
 
 ```
-pltr dependency resource <RID> --change "<what changes>" --change-type <type> --output-mode agent --graph-output ./before.json
+pfoundry dependency resource <RID> --change "<what changes>" --change-type <type> --output-mode agent --graph-output ./before.json
 ```
 
 For CI gating use `--output-mode ci`: exit 0 is clean, 2 needs verification, 1 is fatal. Never treat a coverage gap as "no impact".
 
 ## Docs
 
-- Skill bundle (how an agent should drive pltr): https://github.com/zaycruz/foundry-cli/blob/main/skills/pltr-cli/SKILL.md
+- Skill bundle (how an agent should drive foundry): https://github.com/zaycruz/foundry-cli/blob/main/skills/foundry-cli/SKILL.md
 - Repository agent rules and the mandatory change-impact gate: https://github.com/zaycruz/foundry-cli/blob/main/AGENTS.md
-- Dependency command reference: https://github.com/zaycruz/foundry-cli/blob/main/skills/pltr-cli/reference/dependency-commands.md
+- Dependency command reference: https://github.com/zaycruz/foundry-cli/blob/main/skills/foundry-cli/reference/dependency-commands.md
 - README: https://github.com/zaycruz/foundry-cli/blob/main/README.md

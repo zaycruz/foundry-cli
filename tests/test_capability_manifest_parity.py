@@ -1,6 +1,6 @@
 """Guard: the capability scorecard cannot drift from the real command surface.
 
-`pltr agent-manifest` emits the commands that exist. `pltr capabilities` scores
+`foundry agent-manifest` emits the commands that exist. `foundry capabilities` scores
 this CLI against Palantir's published MCP tool catalog. They used to be
 maintained independently, so the scorecard claimed 4 tools implemented while
 235 commands actually shipped. Status is now derived from the live command
@@ -15,12 +15,12 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from pltr.capabilities import (
+from foundry_cli.capabilities import (
     VALID_STATUSES,
     capability_manifest,
     registered_command_paths,
 )
-from pltr.cli import app
+from foundry_cli.cli import app
 
 runner = CliRunner()
 
@@ -77,7 +77,7 @@ def test_every_status_is_valid_and_counts_are_exact():
 
 def test_the_two_commands_agree_at_runtime():
     """The binary's own agent-manifest and capabilities must not contradict."""
-    with patch("pltr.auth.storage.CredentialStorage", MagicMock()):
+    with patch("foundry_cli.auth.storage.CredentialStorage", MagicMock()):
         surface = runner.invoke(
             app, ["--agent", "agent-manifest"], catch_exceptions=True
         )

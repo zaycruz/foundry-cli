@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from pltr.capabilities import (
+from foundry_cli.capabilities import (
     CAPABILITIES,
     ManifestValidationError,
     capability_manifest,
@@ -15,12 +15,13 @@ from pltr.capabilities import (
 def test_baseline_contains_all_tools_and_workflows() -> None:
     manifest = capability_manifest()
 
-    assert manifest["catalog"]["tool_count"] == 72
+    assert manifest["catalog"]["tool_count"] == 94
     assert manifest["catalog"]["workflow_count"] == 1
-    assert manifest["counts"]["total"] == 73
+    assert manifest["counts"]["total"] == 95
     assert {item["capability_id"] for item in manifest["capabilities"]} >= {
         "get_resource_graph",
         "preview_transform",
+        "push_code_repository_branch",
     }
 
 
@@ -129,3 +130,19 @@ def test_unverifiable_read_capabilities_stay_blocked() -> None:
     for entry in entries.values():
         assert entry["status"] == "blocked"
         assert entry["blocked_reason"]
+
+
+def test_action_type_create_capability_is_experimental_dry_run_only() -> None:
+    manifest = capability_manifest()
+    entry = next(
+        item
+        for item in manifest["capabilities"]
+        if item["capability_id"] == "create_or_update_foundry_action_type"
+    )
+
+    assert entry["status"] == "blocked"
+    assert entry["api_evidence"] == "official-catalog"
+    assert "experimental" in entry["blocked_reason"]
+    assert "dry-run" in entry["blocked_reason"]
+    assert "UUID map keys" not in entry["api_evidence"]
+    assert "HTTP 200" in entry["blocked_reason"]

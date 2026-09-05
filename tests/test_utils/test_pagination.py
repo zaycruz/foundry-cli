@@ -2,7 +2,7 @@
 Tests for pagination utilities.
 """
 
-from src.pltr.utils.pagination import (
+from src.foundry_cli.utils.pagination import (
     PaginationConfig,
     PaginationMetadata,
     PaginationResult,
@@ -290,6 +290,18 @@ class TestIteratorPaginationHandler:
         assert len(result.data) == 100
         assert result.metadata.items_fetched == 100
         assert result.metadata.has_more is False
+
+    def test_empty_iterator(self):
+        """Test an empty iterator returns an empty pagination result."""
+        mock_iterator = MockIterator([], next_page_token=None)
+
+        handler = IteratorPaginationHandler()
+        config = PaginationConfig(fetch_all=True)
+        result = handler.collect_pages(mock_iterator, config)
+
+        assert result.data == []
+        assert result.metadata.items_fetched == 0
+        assert result.metadata.next_page_token is None
 
     def test_progress_callback_iterator(self):
         """Test progress callback with iterator."""

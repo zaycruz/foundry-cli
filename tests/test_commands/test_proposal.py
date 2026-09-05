@@ -5,8 +5,8 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from pltr.commands.proposal import app as proposal_app
-from pltr.services.proposal import (
+from foundry_cli.commands.proposal import app as proposal_app
+from foundry_cli.services.proposal import (
     ProposalAction,
     ProposalRemoteServiceError,
     ProposalType,
@@ -21,7 +21,7 @@ app.add_typer(proposal_app, name="proposal")
 
 @pytest.fixture
 def proposal_service():
-    with patch("pltr.commands.proposal.ProposalService") as service_class:
+    with patch("foundry_cli.commands.proposal.ProposalService") as service_class:
         yield service_class.return_value, service_class
 
 
@@ -113,7 +113,15 @@ def test_create_defaults_to_dry_run_plan(proposal_service):
             call(ProposalType.GLOBAL_PROPOSAL, "gp-1", parent_rid="ontology"),
         ),
         (
-            ["comment", "code-pr", "12", "Looks good", "--parent-rid", "repo", "--apply"],
+            [
+                "comment",
+                "code-pr",
+                "12",
+                "Looks good",
+                "--parent-rid",
+                "repo",
+                "--apply",
+            ],
             "comment",
             call(ProposalType.CODE_PR, "12", "Looks good", parent_rid="repo"),
         ),

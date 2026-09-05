@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 import typer
 from typer.testing import CliRunner
 
-from pltr.commands.global_proposal import app
-from pltr.services.global_branching import (
+from foundry_cli.commands.global_proposal import app
+from foundry_cli.services.global_branching import (
     GlobalBranchNotFoundError,
     GlobalBranchShapeError,
 )
@@ -29,7 +29,7 @@ class TestGlobalProposalGetCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_get_success(self, mock_service_class):
         """Test loading a global proposal."""
         mock_service = Mock()
@@ -41,7 +41,7 @@ class TestGlobalProposalGetCommand:
         assert result.exit_code == 0
         mock_service.get_proposal.assert_called_once_with(PROPOSAL_RID)
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_get_json_format(self, mock_service_class):
         """Test get with JSON output."""
         mock_service = Mock()
@@ -55,7 +55,7 @@ class TestGlobalProposalGetCommand:
         assert result.exit_code == 0
         assert PROPOSAL_RID in result.stdout
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_get_not_found(self, mock_service_class):
         """Test get when no proposal exists for the RID."""
         mock_service = Mock()
@@ -69,7 +69,7 @@ class TestGlobalProposalGetCommand:
         assert result.exit_code == 1
         assert "No proposal found" in result.stdout
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_get_unverified_shape(self, mock_service_class):
         """Test that unverified response shapes fail loudly."""
         mock_service = Mock()
@@ -83,7 +83,7 @@ class TestGlobalProposalGetCommand:
         assert result.exit_code == 1
         assert "Unverified" in result.stdout
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_get_error(self, mock_service_class):
         """Test get error handling."""
         mock_service = Mock()
@@ -95,7 +95,7 @@ class TestGlobalProposalGetCommand:
         assert result.exit_code == 1
         assert "Error loading global proposal" in result.stdout
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_get_with_profile(self, mock_service_class):
         """Test get with a specific profile."""
         mock_service = Mock()
@@ -120,7 +120,7 @@ class TestGlobalProposalCreateCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_defaults_to_plan(self, mock_service_class):
         """Test that create without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -143,7 +143,7 @@ class TestGlobalProposalCreateCommand:
             BRANCH_RID, "my-proposal", "", merge_to="main"
         )
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_apply_sends(self, mock_service_class):
         """Test that --apply issues the real create."""
         mock_service = Mock()
@@ -170,10 +170,10 @@ class TestGlobalProposalCreateCommand:
             BRANCH_RID, "my-proposal", "", merge_to="main"
         )
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_apply_agent_format(self, mock_service_class):
         """Test the applied create records an agent payload with the new RID."""
-        from pltr.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -207,7 +207,7 @@ class TestGlobalProposalCreateCommand:
         assert envelope["meta"]["proposal_rid"] == PROPOSAL_RID
         assert envelope["meta"]["write_verified"] is True
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_merge_to_branch_rid_plan(self, mock_service_class):
         """Test --merge-to <branch-rid> reaches the plan unchanged."""
         mock_service = Mock()
@@ -233,7 +233,7 @@ class TestGlobalProposalCreateCommand:
             BRANCH_RID, "my-proposal", "", merge_to=target_rid
         )
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_merge_to_branch_rid_apply(self, mock_service_class):
         """Test --apply --merge-to <branch-rid> reaches the create unchanged."""
         mock_service = Mock()
@@ -263,7 +263,7 @@ class TestGlobalProposalCreateCommand:
             BRANCH_RID, "my-proposal", "", merge_to=target_rid
         )
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_invalid_merge_to_fails_loudly(self, mock_service_class):
         """Test an invalid merge target surfaces the validation error."""
         mock_service = Mock()
@@ -288,7 +288,7 @@ class TestGlobalProposalCreateCommand:
         assert result.exit_code == 1
         assert "Invalid merge target" in result.stdout
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_apply_error(self, mock_service_class):
         """Test create error handling on --apply."""
         mock_service = Mock()
@@ -318,7 +318,7 @@ class TestGlobalProposalCloseCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_close_defaults_to_plan(self, mock_service_class):
         """Test that close without --apply prints the plan, no mutation."""
         mock_service = Mock()
@@ -331,7 +331,7 @@ class TestGlobalProposalCloseCommand:
         assert result.exit_code == 0
         mock_service.close_proposal.assert_not_called()
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_close_apply_requires_yes(self, mock_service_class):
         """Test that --apply without --yes asks, and 'n' cancels."""
         mock_service = Mock()
@@ -346,7 +346,7 @@ class TestGlobalProposalCloseCommand:
         assert result.exit_code == 1
         mock_service.close_proposal.assert_not_called()
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_close_apply_yes_sends(self, mock_service_class):
         """Test that --apply --yes issues the close."""
         mock_service = Mock()
@@ -364,7 +364,7 @@ class TestGlobalProposalCloseCommand:
         assert result.exit_code == 0
         mock_service.close_proposal.assert_called_once_with(PROPOSAL_RID)
 
-    @patch("pltr.commands.global_proposal.GlobalProposalService")
+    @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_close_not_found(self, mock_service_class):
         """Test close when no proposal exists for the RID."""
         mock_service = Mock()

@@ -6,8 +6,8 @@ import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
+from foundry_cli.cli import app
+from foundry_cli.auth.base import ProfileNotFoundError, MissingCredentialsError
 
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def runner():
 @pytest.fixture
 def mock_folder_service():
     """Mock the FolderService."""
-    with patch("pltr.commands.folder.FolderService") as MockFolderService:
+    with patch("foundry_cli.commands.folder.FolderService") as MockFolderService:
         mock_service = Mock()
         MockFolderService.return_value = mock_service
         yield mock_service
@@ -188,7 +188,7 @@ def test_move_folder_requires_parent(runner, mock_folder_service):
 
 def test_move_folder_cancelled_before_service_creation(runner):
     """Test declining confirmation does not construct the service."""
-    with patch("pltr.commands.folder.FolderService") as mock_service_class:
+    with patch("foundry_cli.commands.folder.FolderService") as mock_service_class:
         result = runner.invoke(
             app,
             [
@@ -241,7 +241,7 @@ def test_move_folder_caches_returned_rid(runner, mock_folder_service, sample_fol
     """Test move caches the RID returned by the service."""
     mock_folder_service.move_folder.return_value = sample_folder
 
-    with patch("pltr.commands.folder.cache_rid") as mock_cache_rid:
+    with patch("foundry_cli.commands.folder.cache_rid") as mock_cache_rid:
         result = runner.invoke(
             app,
             [
@@ -260,7 +260,7 @@ def test_move_folder_caches_returned_rid(runner, mock_folder_service, sample_fol
 
 def test_move_folder_uses_profile(runner, sample_folder):
     """Test move passes the selected profile to the service."""
-    with patch("pltr.commands.folder.FolderService") as mock_service_class:
+    with patch("foundry_cli.commands.folder.FolderService") as mock_service_class:
         mock_service_class.return_value.move_folder.return_value = sample_folder
         result = runner.invoke(
             app,

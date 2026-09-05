@@ -5,11 +5,12 @@ Tests for the read-only repository (pull-request) service.
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.repository import (
+from foundry_cli.services.repository import (
     PullRequestNotFoundError,
     PullRequestShapeError,
     RepositoryCloneError,
     RepositoryNotFoundError,
+    RepositoryPushError,
     RepositoryService,
     RepositoryShapeError,
 )
@@ -39,7 +40,7 @@ def _sample_pr(rid=PR_RID, repo=REPO_RID):
 class TestListPullRequests:
     """Test cases for read-only pull-request listing."""
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_all_pull_requests(self, mock_client_class):
         """Test listing pull requests without a repository filter."""
         mock_client = Mock()
@@ -61,7 +62,7 @@ class TestListPullRequests:
             request_timeout=RepositoryService.PULL_REQUEST_LIST_TIMEOUT,
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_filters_client_side_by_repository(self, mock_client_class):
         """Test client-side repository filtering (server ignores the param)."""
         mock_client = Mock()
@@ -87,7 +88,7 @@ class TestListPullRequests:
             "ri.pull-request.main.pull-request.aaa"
         ]
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_unverified_shape_fails_loudly(self, mock_client_class):
         """Test that a non-envelope list response fails loudly."""
         mock_client = Mock()
@@ -98,7 +99,256 @@ class TestListPullRequests:
         with pytest.raises(PullRequestShapeError, match="Unverified"):
             service.list_pull_requests()
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+
+class TestPushRepository:
+    """Guarded smart-HTTP push tests; all git and Foundry reads are mocked."""
+
+    TOKEN = "super-secret-token"
+    GIT_URL = f"https://foundry.example.com/stemma/git/{REPO_RID}"
+    LOCAL = "a" * 40
+    REMOTE = "b" * 40
+
+    def _service(self, context=None):
+        service = RepositoryService(profile="test")
+        service.get_repository_context = Mock(
+            return_value=context
+            or {
+                "repository": {"rid": REPO_RID},
+                "default_branch": {"commitish": "refs/heads/master"},
+                "refs": {"branches": [], "tags": []},
+            }
+        )
+        service._git_credentials = Mock(
+            return_value=("https://foundry.example.com", self.TOKEN)
+        )
+        return service
+
+    @staticmethod
+    def _proc(command, stdout="", stderr="", returncode=0):
+        from subprocess import CompletedProcess
+
+        return CompletedProcess(command, returncode, stdout=stdout, stderr=stderr)
+
+    def _git_reads(self, *, remote=None, verification=None):
+        return [
+            self._proc(["git", "remote", "get-url", "origin"], self.GIT_URL + "\n"),
+            self._proc(["git", "rev-parse"], self.LOCAL + "\n"),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{remote}\trefs/heads/review\n" if remote else "",
+            ),
+        ] + ([verification] if verification is not None else [])
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_dry_run_reads_context_and_remote_but_never_pushes(self, run):
+        run.side_effect = self._git_reads(
+            remote=self.REMOTE,
+            verification=self._proc(["git", "merge-base"], returncode=0),
+        )
+        service = self._service()
+
+        result = service.push_repository(
+            REPO_RID, "refs/heads/feature", "refs/heads/review"
+        )
+
+        assert result["status"] == "dry-run"
+        assert result["local_commit"] == self.LOCAL
+        assert result["remote_commit"] == self.REMOTE
+        assert all(call.args[0][1] != "push" for call in run.call_args_list)
+        service.get_repository_context.assert_called_once_with(
+            REPO_RID, include_tree=False
+        )
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_apply_order_and_single_non_force_refspec(self, run):
+        verification = self._proc(["git", "merge-base"], returncode=0)
+        run.side_effect = self._git_reads(
+            remote=self.REMOTE, verification=verification
+        ) + [
+            self._proc(["git", "push"]),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{self.LOCAL}\trefs/heads/review\n",
+            ),
+        ]
+        service = self._service()
+
+        result = service.push_repository(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/review",
+            apply=True,
+        )
+
+        assert result["status"] == "pushed"
+        commands = [call.args[0] for call in run.call_args_list]
+        assert [command[1] for command in commands] == [
+            "remote",
+            "rev-parse",
+            "ls-remote",
+            "merge-base",
+            "push",
+            "ls-remote",
+        ]
+        assert commands[4] == [
+            "git",
+            "push",
+            self.GIT_URL,
+            "refs/heads/feature:refs/heads/review",
+        ]
+        assert "--force" not in commands[4]
+        assert all(
+            call.kwargs["env"]["GIT_CONFIG_VALUE_0"]
+            == "Authorization: Bearer " + self.TOKEN
+            for call in run.call_args_list
+        )
+        assert all(self.TOKEN not in " ".join(command) for command in commands)
+
+    @pytest.mark.parametrize(
+        "local_ref,destination",
+        [
+            ("feature", "refs/heads/review"),
+            ("refs/tags/v1", "refs/heads/review"),
+            ("refs/heads/feature", "refs/tags/review"),
+            ("refs/heads/feature", "refs/heads/review:"),
+            ("refs/heads/feature", "refs/heads/master"),
+        ],
+    )
+    def test_rejects_unsafe_refs_before_git(self, local_ref, destination):
+        service = self._service()
+        with pytest.raises(RepositoryPushError):
+            service.push_repository(REPO_RID, local_ref, destination)
+        if destination == "refs/heads/master":
+            service.get_repository_context.assert_called_once()
+        else:
+            service.get_repository_context.assert_not_called()
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_explicitly_authorizes_fast_forward_default_branch(self, run):
+        run.side_effect = [
+            self._proc(["git", "remote"], self.GIT_URL + "\n"),
+            self._proc(["git", "rev-parse"], self.LOCAL + "\n"),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{self.REMOTE}\trefs/heads/master\n",
+            ),
+            self._proc(["git", "merge-base"], returncode=0),
+        ]
+        service = self._service()
+
+        result = service.push_repository(
+            REPO_RID,
+            "refs/heads/feature",
+            "refs/heads/master",
+            allow_default_branch=True,
+        )
+
+        assert result["status"] == "dry-run"
+        assert result["default_branch_authorized"] is True
+        assert all(call.args[0][1] != "push" for call in run.call_args_list)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_rejects_mismatched_context_rid(self, run):
+        service = self._service(
+            {
+                "repository": {"rid": OTHER_REPO_RID},
+                "default_branch": {"commitish": "refs/heads/master"},
+            }
+        )
+        with pytest.raises(RepositoryPushError, match="does not match"):
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review"
+            )
+        run.assert_not_called()
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_rejects_mismatched_origin(self, run):
+        run.return_value = self._proc(
+            ["git", "remote"], "https://other.example/stemma/git/other\n"
+        )
+        service = self._service()
+        with pytest.raises(RepositoryPushError, match="does not match") as error:
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review"
+            )
+        assert self.TOKEN not in str(error.value)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_accepts_context_verified_repository_name_suffix(self, run):
+        suffixed_url = f"{self.GIT_URL}/demo-functions"
+        run.side_effect = [
+            self._proc(["git", "remote"], suffixed_url + "/\n"),
+            self._proc(["git", "rev-parse"], self.LOCAL + "\n"),
+            self._proc(["git", "ls-remote"], ""),
+        ]
+        service = self._service(
+            {
+                "repository": {
+                    "rid": REPO_RID,
+                    "compass": {"name": "demo-functions"},
+                },
+                "default_branch": {"commitish": "refs/heads/master"},
+            }
+        )
+
+        result = service.push_repository(
+            REPO_RID, "refs/heads/feature", "refs/heads/review"
+        )
+
+        assert result["remote"] == suffixed_url
+        assert run.call_args_list[2].args[0] == [
+            "git",
+            "ls-remote",
+            suffixed_url,
+            "refs/heads/review",
+        ]
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_rejects_non_fast_forward_without_push(self, run):
+        run.side_effect = self._git_reads(
+            remote=self.REMOTE,
+            verification=self._proc(["git", "merge-base"], returncode=1),
+        )
+        service = self._service()
+        with pytest.raises(RepositoryPushError, match="non-fast-forward"):
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review", apply=True
+            )
+        assert all(call.args[0][1] != "push" for call in run.call_args_list)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_redacts_secret_from_git_failure(self, run):
+        run.side_effect = self._git_reads(remote=None) + [
+            self._proc(
+                ["git", "push"],
+                stderr=f"Authorization Bearer {self.TOKEN}",
+                returncode=128,
+            )
+        ]
+        service = self._service()
+        with pytest.raises(RepositoryPushError) as error:
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review", apply=True
+            )
+        assert self.TOKEN not in str(error.value)
+        assert "[REDACTED]" in str(error.value)
+
+    @patch("foundry_cli.services.repository.subprocess.run")
+    def test_fails_when_post_push_tip_does_not_match(self, run):
+        run.side_effect = self._git_reads(remote=None) + [
+            self._proc(["git", "push"]),
+            self._proc(
+                ["git", "ls-remote"],
+                f"{self.REMOTE}\trefs/heads/review\n",
+            ),
+        ]
+        service = self._service()
+        with pytest.raises(RepositoryPushError, match="verification failed"):
+            service.push_repository(
+                REPO_RID, "refs/heads/feature", "refs/heads/review", apply=True
+            )
+
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_entry_without_rid_fails_loudly(self, mock_client_class):
         """Test that a malformed entry fails loudly instead of rendering."""
         mock_client = Mock()
@@ -109,7 +359,7 @@ class TestListPullRequests:
         with pytest.raises(PullRequestShapeError, match="Unverified"):
             service.list_pull_requests()
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_route_not_mounted(self, mock_client_class):
         """Test a clear error when the API is not mounted."""
         mock_client = Mock()
@@ -124,7 +374,7 @@ class TestListPullRequests:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.list_pull_requests()
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_http_error(self, mock_client_class):
         """Test that non-2xx responses fail loudly."""
         mock_client = Mock()
@@ -135,7 +385,7 @@ class TestListPullRequests:
         with pytest.raises(RuntimeError, match="HTTP 500"):
             service.list_pull_requests()
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_list_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -150,7 +400,7 @@ class TestListPullRequests:
 class TestGetPullRequest:
     """Test cases for read-only pull-request get."""
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_get_pull_request_success(self, mock_client_class):
         """Test fetching one pull request by RID."""
         mock_client = Mock()
@@ -166,7 +416,7 @@ class TestGetPullRequest:
             "GET", f"stemma-pull-request/api/pulls/{PR_RID}"
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_get_pull_request_404_is_not_found(self, mock_client_class):
         """Test that a 404 maps to a not-found error."""
         mock_client = Mock()
@@ -177,7 +427,7 @@ class TestGetPullRequest:
         with pytest.raises(PullRequestNotFoundError, match="No pull request found"):
             service.get_pull_request(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_get_pull_request_empty_payload_is_not_found(self, mock_client_class):
         """Test that an empty 2xx payload fails as not found."""
         mock_client = Mock()
@@ -188,7 +438,7 @@ class TestGetPullRequest:
         with pytest.raises(PullRequestNotFoundError, match="No pull request found"):
             service.get_pull_request(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_get_pull_request_unverified_shape(self, mock_client_class):
         """Test that an object without a rid fails loudly."""
         mock_client = Mock()
@@ -199,7 +449,7 @@ class TestGetPullRequest:
         with pytest.raises(PullRequestShapeError, match="Unverified"):
             service.get_pull_request(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_get_pull_request_http_error(self, mock_client_class):
         """Test that non-2xx responses fail loudly."""
         mock_client = Mock()
@@ -212,11 +462,11 @@ class TestGetPullRequest:
 
     def test_without_profile_raises_before_network(self):
         """Test that a missing profile fails before any network call."""
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         service = RepositoryService()
         with patch(
-            "pltr.config.profiles.ProfileManager.get_active_profile",
+            "foundry_cli.config.profiles.ProfileManager.get_active_profile",
             return_value=None,
         ):
             with pytest.raises(ProfileNotFoundError, match="No profile specified"):
@@ -266,7 +516,7 @@ def _context_responses(tree=TREE_GET):
 class TestGetRepositoryContext:
     """Test cases for read-only repository context."""
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_context_success(self, mock_client_class):
         """Test the composed context aggregates all verified reads."""
         mock_client = Mock()
@@ -289,7 +539,7 @@ class TestGetRepositoryContext:
         tree_call = mock_client.conjure.call_args_list[-1]
         assert tree_call.args[1].endswith("paths/tree/?ref=refs/heads/master")
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_context_explicit_ref_and_path(self, mock_client_class):
         """Test that an explicit ref and subtree path reach the endpoint."""
         mock_client = Mock()
@@ -305,7 +555,7 @@ class TestGetRepositoryContext:
         tree_call = mock_client.conjure.call_args_list[-1]
         assert "paths/tree/src?ref=refs/tags/0.3.0" in tree_call.args[1]
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_context_no_tree(self, mock_client_class):
         """Test that include_tree=False skips the tree read."""
         mock_client = Mock()
@@ -318,7 +568,7 @@ class TestGetRepositoryContext:
         assert "tree" not in context
         assert mock_client.conjure.call_count == 5
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_context_repository_404_is_not_found(self, mock_client_class):
         """Test that a 404 on the repository get maps to not-found."""
         mock_client = Mock()
@@ -329,7 +579,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryNotFoundError, match="No repository found"):
             service.get_repository(REPO_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_repository_bad_shape_fails_loudly(self, mock_client_class):
         """Test that a repository object without a rid fails loudly."""
         mock_client = Mock()
@@ -340,7 +590,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.get_repository(REPO_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_head_bad_shape_fails_loudly(self, mock_client_class):
         """Test that a head object without a commitish fails loudly."""
         mock_client = Mock()
@@ -351,7 +601,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.get_head(REPO_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_branches_non_envelope_fails_loudly(self, mock_client_class):
         """Test that a bare-array branches response fails loudly."""
         mock_client = Mock()
@@ -362,7 +612,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.list_branches(REPO_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_tags_non_array_fails_loudly(self, mock_client_class):
         """Test that an enveloped tags response fails loudly (tags is bare)."""
         mock_client = Mock()
@@ -373,7 +623,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.list_tags(REPO_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_tree_entry_without_type_fails_loudly(self, mock_client_class):
         """Test that a tree entry without a type fails loudly."""
         mock_client = Mock()
@@ -388,7 +638,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.get_path_tree(REPO_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_tree_404_is_not_found(self, mock_client_class):
         """Test that a 404 tree read maps to not-found."""
         mock_client = Mock()
@@ -399,7 +649,7 @@ class TestGetRepositoryContext:
         with pytest.raises(RepositoryNotFoundError, match="No path"):
             service.get_path_tree(REPO_RID, path="missing")
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_context_route_not_mounted(self, mock_client_class):
         """Test a clear error when the internal API is not mounted."""
         mock_client = Mock()
@@ -418,7 +668,7 @@ class TestGetRepositoryContext:
 class TestCloneRepository:
     """Test cases for local repository clone."""
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_resolve_clone_plan_verified_url(self, mock_client_class):
         """Test the clone plan uses the verified smart-HTTP URL form."""
         mock_client = Mock()
@@ -442,7 +692,7 @@ class TestCloneRepository:
         assert plan["default_branch"] == "refs/heads/master"
         assert plan["repository_name"] == "example_repo"
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_clone_dry_run_never_touches_subprocess(self, mock_client_class):
         """Test dry-run resolves the plan without running git."""
         mock_client = Mock()
@@ -468,7 +718,7 @@ class TestCloneRepository:
         assert plan["would_overwrite"] is False
         mock_run.assert_not_called()
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_clone_refuses_nonempty_target_without_force(
         self, mock_client_class, tmp_path
     ):
@@ -497,7 +747,7 @@ class TestCloneRepository:
         mock_run.assert_not_called()
         assert (tmp_path / "existing.txt").exists()
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_clone_success_passes_token_via_env_not_argv(
         self, mock_client_class, tmp_path
     ):
@@ -530,10 +780,10 @@ class TestCloneRepository:
         assert "--branch" in cmd and "master" in cmd
         env = kwargs["env"]
         assert env["GIT_CONFIG_KEY_0"] == "http.extraHeader"
-        assert env["GIT_CONFIG_VALUE_0"] == "Authorization: Bearer secret-token"
+        assert env["GIT_CONFIG_VALUE_0"] == "Authorization: Bearer " + "secret-token"
         assert env["GIT_TERMINAL_PROMPT"] == "0"
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_clone_failure_redacts_token(self, mock_client_class, tmp_path):
         """Test git stderr is redacted before surfacing."""
         mock_client = Mock()
@@ -564,7 +814,7 @@ class TestCloneRepository:
         assert "secret-token" not in message
         assert "[REDACTED]" in message
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_clone_requires_git_on_path(self, mock_client_class, tmp_path):
         """Test a missing git binary fails before any clone attempt."""
         mock_client = Mock()
@@ -645,7 +895,7 @@ NEW_TAGS = (
 class TestCreatePythonTransforms:
     """Test cases for Python transforms repository creation (verified)."""
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_plan_runs_read_only_preflight(self, mock_client_class):
         """Test the dry-run plan resolves the exact verified write."""
         mock_client = Mock()
@@ -682,7 +932,7 @@ class TestCreatePythonTransforms:
             "rids": [PROJECT_RID],
         }
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_create_posts_verified_chain_and_verifies_refs(self, mock_client_class):
         """Test --apply posts stemma + bootstrap, then reads the refs back."""
         mock_client = Mock()
@@ -726,7 +976,7 @@ class TestCreatePythonTransforms:
             RepositoryService.PYTHON_TRANSFORMS_BOOTSTRAP_BODY
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_folder_without_enclosing_project_fails_loudly(self, mock_client_class):
         """Test a folder with no project mapping fails before any write."""
         mock_client = Mock()
@@ -737,7 +987,7 @@ class TestCreatePythonTransforms:
         with pytest.raises(RuntimeError, match="No enclosing project"):
             service.create_python_transforms_plan("x", FOLDER_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_resolve_non_mapping_fails_loudly(self, mock_client_class):
         """Test a non-object resolve response fails as unverified shape."""
         mock_client = Mock()
@@ -748,7 +998,7 @@ class TestCreatePythonTransforms:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.resolve_enclosing_project(FOLDER_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_project_v3_without_path_fails_loudly(self, mock_client_class):
         """Test a projects-v3 entry without resource.path fails loudly."""
         mock_client = Mock()
@@ -762,7 +1012,7 @@ class TestCreatePythonTransforms:
         with pytest.raises(RepositoryShapeError, match="Unverified"):
             service.create_python_transforms_plan("x", FOLDER_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_stemma_create_http_error_fails_loudly(self, mock_client_class):
         """Test a non-2xx stemma create surfaces the HTTP status."""
         mock_client = Mock()
@@ -777,7 +1027,7 @@ class TestCreatePythonTransforms:
         with pytest.raises(RuntimeError, match="HTTP 403"):
             service.create_python_transforms_repository("x", FOLDER_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_stemma_create_bad_shape_fails_loudly(self, mock_client_class):
         """Test a create response without a rid fails with reconcile guidance."""
         mock_client = Mock()
@@ -792,7 +1042,7 @@ class TestCreatePythonTransforms:
         with pytest.raises(RepositoryShapeError, match="reconcile"):
             service.create_python_transforms_repository("x", FOLDER_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_bootstrap_failure_reports_created_repo(self, mock_client_class):
         """Test a bootstrap failure names the already-created repository."""
         mock_client = Mock()
@@ -810,7 +1060,7 @@ class TestCreatePythonTransforms:
 
         assert NEW_REPO_RID in str(exc_info.value)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_verification_read_failure_does_not_hide_created_repo(
         self, mock_client_class
     ):
@@ -879,7 +1129,7 @@ class TestCreatePullRequest:
         assert body["baseBranchName"] == "refs/heads/main"
         assert body["description"] == "disposable test"
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_create_posts_plan_body_verbatim(self, mock_client_class):
         """Test the real create posts exactly the dry-run body."""
         mock_client = Mock()
@@ -906,7 +1156,7 @@ class TestCreatePullRequest:
             },
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_create_unverified_shape_fails_loudly(self, mock_client_class):
         """Test a response without a rid fails loudly with reconcile guidance."""
         mock_client = Mock()
@@ -921,7 +1171,7 @@ class TestCreatePullRequest:
                 head_commitish="refs/heads/feat/x",
             )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_create_http_error_fails_loudly(self, mock_client_class):
         """Test a non-2xx create response fails loudly."""
         mock_client = Mock()
@@ -940,7 +1190,7 @@ class TestCreatePullRequest:
                 head_commitish="refs/heads/feat/x",
             )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_create_transport_error_wrapped(self, mock_client_class):
         """Test transport failures are wrapped."""
         mock_client = Mock()
@@ -972,7 +1222,7 @@ class TestCreatePullRequestComment:
         assert plan["contract"] == "VERIFIED"
         assert "against a live deployment" in plan["evidence"]
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_comment_posts_verified_body(self, mock_client_class):
         """Test the real comment create posts {"content": ...} verbatim."""
         mock_client = Mock()
@@ -993,7 +1243,7 @@ class TestCreatePullRequestComment:
             json_body={"content": "hello"},
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_comment_unverified_shape_fails_loudly(self, mock_client_class):
         """Test a response without a rid fails loudly with reconcile guidance."""
         mock_client = Mock()
@@ -1004,7 +1254,7 @@ class TestCreatePullRequestComment:
         with pytest.raises(PullRequestShapeError, match="reconcile"):
             service.create_pull_request_comment(PR_RID, "hello")
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_comment_http_error_fails_loudly(self, mock_client_class):
         """Test a non-2xx comment response fails loudly."""
         mock_client = Mock()
@@ -1019,7 +1269,7 @@ class TestCreatePullRequestComment:
         with pytest.raises(RuntimeError, match="HTTP 403"):
             service.create_pull_request_comment(PR_RID, "hello")
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_comment_transport_error_wrapped(self, mock_client_class):
         """Test transport failures are wrapped."""
         mock_client = Mock()
@@ -1049,7 +1299,7 @@ def _open_pr(rid=PR_RID, title="test-pull-request-1"):
 class TestClosePullRequest:
     """Test cases for pull-request close (verified contract)."""
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_plan_reads_pr_and_shows_verified_body(self, mock_client_class):
         """Test the plan reads the PR for its title and never PUTs."""
         mock_client = Mock()
@@ -1075,7 +1325,7 @@ class TestClosePullRequest:
             "GET", f"stemma-pull-request/api/pulls/{PR_RID}"
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_close_gets_then_puts_exact_body(self, mock_client_class):
         """Test the real close reads the PR, PUTs the verified body, reads back."""
         mock_client = Mock()
@@ -1120,7 +1370,7 @@ class TestClosePullRequest:
             f"stemma-pull-request/api/pulls/{PR_RID}",
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_close_already_closed_never_puts(self, mock_client_class):
         """Test an already-CLOSED pull request is reported, not re-closed."""
         mock_client = Mock()
@@ -1137,7 +1387,7 @@ class TestClosePullRequest:
             "GET", f"stemma-pull-request/api/pulls/{PR_RID}"
         )
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_plan_flags_already_closed(self, mock_client_class):
         """Test the dry-run plan flags an already-CLOSED pull request."""
         mock_client = Mock()
@@ -1154,7 +1404,7 @@ class TestClosePullRequest:
             "status": "CLOSED",
         }
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_missing_title_fails_loudly(self, mock_client_class):
         """Test a PR without currentRecord.title fails as unverified shape."""
         mock_client = Mock()
@@ -1165,7 +1415,7 @@ class TestClosePullRequest:
         with pytest.raises(PullRequestShapeError, match="Unverified"):
             service.close_pull_request_plan(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_close_http_error_fails_loudly(self, mock_client_class):
         """Test a non-2xx close PUT surfaces the HTTP status."""
         mock_client = Mock()
@@ -1179,7 +1429,7 @@ class TestClosePullRequest:
         with pytest.raises(RuntimeError, match="HTTP 400"):
             service.close_pull_request(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_close_unverified_shape_fails_loudly(self, mock_client_class):
         """Test a close response without a rid fails with reconcile guidance."""
         mock_client = Mock()
@@ -1193,7 +1443,7 @@ class TestClosePullRequest:
         with pytest.raises(PullRequestShapeError, match="reconcile"):
             service.close_pull_request(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_close_transport_error_wrapped(self, mock_client_class):
         """Test transport failures on the PUT are wrapped."""
         mock_client = Mock()
@@ -1207,7 +1457,7 @@ class TestClosePullRequest:
         with pytest.raises(RuntimeError, match="Failed to close pull request"):
             service.close_pull_request(PR_RID)
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_read_back_failure_does_not_hide_close(self, mock_client_class):
         """Test a failed read-back still reports the successful close."""
         mock_client = Mock()
@@ -1228,7 +1478,7 @@ class TestClosePullRequest:
         assert verification["close_verified"] is None
         assert "read timed out" in verification["verification_error"]
 
-    @patch("pltr.services.repository.FoundryInternalClient")
+    @patch("foundry_cli.services.repository.FoundryInternalClient")
     def test_close_unknown_pr_is_not_found(self, mock_client_class):
         """Test closing a non-existent pull request maps to not-found."""
         mock_client = Mock()

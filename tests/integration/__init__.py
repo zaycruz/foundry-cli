@@ -1,1 +1,1 @@
-"""Integration tests for pltr-cli."""
+"""Integration tests for foundry-cli."""

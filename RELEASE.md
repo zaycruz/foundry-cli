@@ -1,6 +1,6 @@
 # Release Process
 
-This document describes how to create releases for pltr-cli using the automated release script.
+This document describes how to create releases for foundry-cli using the automated release script.
 
 ## Overview
 
@@ -12,7 +12,7 @@ The release script (`scripts/release.py`) supports both interactive and non-inte
 
 The CLI's native `--agent` output is the supported interface for autonomous agents. Releases must verify the capability manifest and agent-output contract without requiring Node, npm, or an external MCP package.
 
-Removal of `pltr mcp` is a breaking change and must be called out in release notes with native command replacements.
+Removal of `pfoundry mcp` is a breaking change and must be called out in release notes with native command replacements.
 
 ## Release notes for v0.18.0
 
@@ -23,7 +23,7 @@ This release advances the native agent-first Foundry interface with:
 - Bounded RID-stable resource graphs for filesystem hierarchy and project-reference relationships.
 - Stable agent envelopes, redaction, explicit errors, and safety gates across the new workflows.
 
-Migration note: replace `pltr mcp` with native commands such as `pltr capabilities --format agent`, `pltr project search --format agent`, `pltr dataset stats --format agent`, and `pltr lineage graph --format agent`.
+Migration note: replace `pfoundry mcp` with native commands such as `pfoundry capabilities --format agent`, `pfoundry project search --format agent`, `pfoundry dataset stats --format agent`, and `pfoundry lineage graph --format agent`.
 
 Known limitations: project-template listing is explicitly unsupported because no public SDK catalog operation is available; namespace discovery is Space-based rather than a separate Namespace API; and resource graphs are not full transformation lineage and report incomplete coverage where applicable.
 

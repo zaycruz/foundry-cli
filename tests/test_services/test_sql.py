@@ -11,7 +11,7 @@ from foundry_sdk.v2.sql_queries.models import (
     CanceledQueryStatus,
 )
 
-from pltr.services.sql import SqlService
+from foundry_cli.services.sql import SqlService
 
 
 class TestSqlService:
