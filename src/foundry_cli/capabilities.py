@@ -244,6 +244,27 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
         "official-catalog",
     ),
     (
+        "ontology",
+        "apply_foundry_action_with_overrides",
+        "ontology action-apply-with-overrides",
+        "ActionService",
+        "foundry-platform-sdk==1.95.0: ontologies.Action.apply_with_overrides + apply_batch_with_overrides",
+    ),
+    (
+        "ontology",
+        "upsert_foundry_object",
+        "ontology object-upsert",
+        "OntologyObjectService",
+        "foundry-platform-sdk==1.95.0: ontologies.OntologyObject.get + Action.apply/apply_with_overrides",
+    ),
+    (
+        "ontology",
+        "upsert_foundry_objects_batch",
+        "ontology object-upsert-batch",
+        "OntologyObjectService",
+        "foundry-platform-sdk==1.95.0: ontologies.Action.apply_batch/apply_batch_with_overrides (20-request cap, chunked)",
+    ),
+    (
         "object-set",
         "query_ontology_objects",
         "ontology query-execute",
@@ -558,6 +579,132 @@ _TOOL_ROWS: tuple[tuple[str, str, str, str, str], ...] = (
         "DocumentationService",
         "official-catalog",
     ),
+    (
+        "evals",
+        "list_evaluation_suites",
+        "evals suite list",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "get_evaluation_suite",
+        "evals suite get",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "list_evaluators",
+        "evals suite evaluators",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "list_auto_generated_metrics",
+        "evals suite auto-metrics",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "get_evaluation_suggested_scope",
+        "evals suite suggested-scope",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "list_evaluation_runs",
+        "evals run list",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "get_evaluation_run_summary",
+        "evals run summary",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "get_evaluation_run_test_cases",
+        "evals run test-cases",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "evals",
+        "execute_evaluation_run",
+        "evals run trigger",
+        "EvalsService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "list_ai_fde_threads",
+        "ai-fde threads list",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "get_ai_fde_thread",
+        "ai-fde threads get",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "list_ai_fde_thread_items",
+        "ai-fde threads items",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "create_ai_fde_thread",
+        "ai-fde threads create",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "send_ai_fde_message",
+        "ai-fde threads send",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "get_ai_fde_thread_agent_state",
+        "ai-fde threads metadata get",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "update_ai_fde_thread_metadata",
+        "ai-fde threads metadata update",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "get_ai_fde_settings",
+        "ai-fde settings get",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
+    (
+        "ai-fde",
+        "update_ai_fde_settings",
+        "ai-fde settings update",
+        "AiFdeService",
+        "ui-capture-2026-09-04",
+    ),
 )
 
 # Richer evidence for a few implemented capabilities. This no longer drives
@@ -781,6 +928,108 @@ _IMPLEMENTED_EVIDENCE: dict[str, str] = {
         "octet-stream, success shape UNVERIFIED and passed through raw. "
         "Plan-first: dry-run default, execution behind --apply"
     ),
+    "list_evaluation_suites": (
+        "internal foundry-evals (UI capture via CDP 2026-09-04, "
+        "a live Foundry deployment, HTTP 200): PUT "
+        "/foundry-evals/api/evals/config/v2/target/get-evaluation-suites "
+        "{linkedTarget: {function: rid, type: function}}"
+    ),
+    "get_evaluation_suite": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/config/v2/get {requests: [{rid}]} (+ v2 "
+        "and legacy version reads); the suite config-write endpoint was "
+        "never observed and is deliberately not implemented"
+    ),
+    "list_evaluators": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/config/evaluators/get (empty body)"
+    ),
+    "list_auto_generated_metrics": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/config/auto-generated-metric/get "
+        "(empty body)"
+    ),
+    "get_evaluation_suggested_scope": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/execute/v3/{suiteRid}/"
+        "suggestedExecutionScope {executionTargets, extraResources}"
+    ),
+    "list_evaluation_runs": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/execute/v3/{suiteRid}/history "
+        "{executionTarget: null, pageSize}"
+    ),
+    "get_evaluation_run_summary": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/execute/execution/{suiteRid}/summary "
+        "{executionId}"
+    ),
+    "get_evaluation_run_test_cases": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/execute/execution/{suiteRid}/testCases "
+        "(+ /execute/v3 variant) {executionId, pageSize}"
+    ),
+    "execute_evaluation_run": (
+        "internal foundry-evals (UI capture 2026-09-04, HTTP 200): PUT "
+        "/foundry-evals/api/evals/execute/v3/{suiteRid}/run "
+        "{executionTarget, backendParameters, reportMetadata} -> "
+        "{buildRid, jobRid, executionId}; plan-first: dry-run plan plus "
+        "read-only suggestedExecutionScope by default, real PUT behind "
+        "--apply"
+    ),
+    "list_ai_fde_threads": (
+        "internal ai-fde GraphQL gateway (UI capture via CDP 2026-09-04, "
+        "a live Foundry deployment, HTTP 200): pinned "
+        "AvailableThreadsQuery {pageSize} -> aiFdeThreadsV2"
+    ),
+    "get_ai_fde_thread": (
+        "internal ai-fde GraphQL gateway (UI capture 2026-09-04, HTTP 200): "
+        "pinned ThreadMetadataQuery {threadId} -> aiFdeThreadV2.metadataV3 "
+        "(full or redacted)"
+    ),
+    "list_ai_fde_thread_items": (
+        "internal ai-fde GraphQL gateway (UI capture 2026-09-04, HTTP 200): "
+        "pinned ThreadContextItemsPageQuery {threadId, pageSize, pageToken} "
+        "-> aiFdeThreadV2.contextItemsV2.contextItems"
+    ),
+    "create_ai_fde_thread": (
+        "internal ai-fde GraphQL gateway (UI capture 2026-09-04, HTTP 200): "
+        "captured CreateThreadMutation {threadName} with contextItems: [] "
+        "hardcoded -> createAiFdeThread {id, version}; runs through the "
+        "scoped mutation exception (VERIFIED_GRAPHQL_MUTATION_NAMES "
+        "registry + per-call allow_mutation_names); the general GraphQL "
+        "mutation ban stands for everything else"
+    ),
+    "send_ai_fde_message": (
+        "internal ai-fde Conjure (UI capture 2026-09-04, HTTP 200): PUT "
+        "/ai-fde/api/threads/{threadId}/update {currentVersion, "
+        "itemIdsInOrder, itemsToWrite} appending one captured-shape "
+        "user-message context item -> {metadata: {threadVersion, ...}}; "
+        "itemsToWrite delta behavior is partially-derived (only a "
+        "full-thread write was captured)"
+    ),
+    "get_ai_fde_thread_agent_state": (
+        "internal ai-fde GraphQL gateway (UI capture 2026-09-04, HTTP 200): "
+        "agentState from the pinned ThreadMetadataQuery"
+    ),
+    "update_ai_fde_thread_metadata": (
+        "internal ai-fde Conjure (UI capture 2026-09-04, HTTP 200): PUT "
+        "/ai-fde/api/threads/{threadId}/metadata {currentVersion, "
+        "agentStateModification} (caller body verbatim) -> "
+        "{metadata: {threadVersion, agentState, ...}}"
+    ),
+    "get_ai_fde_settings": (
+        "internal ai-fde Conjure (UI capture 2026-09-04, HTTP 200): GET "
+        "/ai-fde/api/settings -> {attributionSettings, "
+        "skillEnablementSettings, bulkToolApprovalSettings, "
+        "modelSelectionSettings}"
+    ),
+    "update_ai_fde_settings": (
+        "internal ai-fde Conjure (UI capture 2026-09-04, HTTP 200): POST "
+        "/ai-fde/api/settings with a caller-supplied modification document "
+        "sent verbatim (sections wrapped in unchanged/modification unions) "
+        "-> {}"
+    ),
     # Documentation: verbatim Palantir-authored content proxied from the
     # public docs site (stack-side /documentation API is NOT VERIFIED, so it
     # is not guessed). Pages embed raw markdown in __NEXT_DATA__; the corpus
@@ -885,6 +1134,9 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "delete_foundry_link_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "create_or_update_foundry_action_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "delete_foundry_action_type": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "apply_foundry_action_with_overrides": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "upsert_foundry_object": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
+    "upsert_foundry_objects_batch": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "view_foundry_rest_api_data_source_webhook": "tests/test_services/test_connectivity.py;tests/test_commands/test_connectivity.py",
     "get_foundry_ontology_rid": "tests/test_services/test_ontology.py;tests/test_commands/test_ontology.py",
     "search_foundry_functions": "tests/test_services/test_functions.py;tests/test_commands/test_functions.py",
@@ -927,6 +1179,24 @@ _U3_TEST_REFERENCES: dict[str, str] = {
     "get_compute_modules_logs": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
     "manage_compute_modules": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
     "execute_compute_modules_function": "tests/test_services/test_compute.py;tests/test_commands/test_compute.py",
+    "list_evaluation_suites": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "get_evaluation_suite": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "list_evaluators": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "list_auto_generated_metrics": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "get_evaluation_suggested_scope": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "list_evaluation_runs": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "get_evaluation_run_summary": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "get_evaluation_run_test_cases": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "execute_evaluation_run": "tests/test_services/test_evals.py;tests/test_commands/test_evals.py",
+    "list_ai_fde_threads": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "get_ai_fde_thread": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "list_ai_fde_thread_items": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "create_ai_fde_thread": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "send_ai_fde_message": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "get_ai_fde_thread_agent_state": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "update_ai_fde_thread_metadata": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "get_ai_fde_settings": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
+    "update_ai_fde_settings": "tests/test_services/test_ai_fde.py;tests/test_commands/test_ai_fde.py",
 }
 
 _U3_BLOCKED: dict[str, str] = {
@@ -1006,7 +1276,7 @@ def _build_specs(
     ):
         mutation_risk = "read"
         if capability_id.startswith(
-            ("create_", "update_", "manage_", "execute_", "generate_", "push_")
+            ("create_", "update_", "upsert_", "apply_", "manage_", "execute_", "generate_", "push_", "send_")
         ):
             mutation_risk = "write"
         if capability_id.startswith(("delete_", "close_")):

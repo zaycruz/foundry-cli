@@ -60,6 +60,8 @@ from foundry_cli.commands import (
     docs,
     osdk,
     platform_sdk,
+    evals,
+    ai_fde,
 )
 from foundry_cli.commands.cp import cp_command
 from foundry_cli.commands.search import search_command
@@ -200,6 +202,16 @@ app.add_typer(
     platform_sdk.app,
     name="platform-sdk",
     help="Inspect the installed foundry-platform-sdk API surface",
+)
+app.add_typer(
+    evals.app,
+    name="evals",
+    help="Inspect and run AIP evaluation suites",
+)
+app.add_typer(
+    ai_fde.app,
+    name="ai-fde",
+    help="Inspect and drive AI FDE threads and settings",
 )
 app.command("search", help="Search Foundry resources by title (read-only)")(
     search_command

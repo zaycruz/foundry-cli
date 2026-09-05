@@ -8,7 +8,12 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 from urllib.parse import quote
 
 import requests
-from foundry_sdk.v2.ontologies.models import ApplyActionRequestOptions
+from foundry_sdk.v2.ontologies.models import (
+    ApplyActionOverrides,
+    ApplyActionRequestOptions,
+    ApplyActionRequestV2,
+    BatchApplyActionRequestItemWithOverrides,
+)
 
 from ..config.settings import Settings
 from ..utils.pagination import PaginationConfig, PaginationResult
@@ -55,6 +60,71 @@ _OBJECT_TYPE_ALREADY_EXISTS_NAMES = {
     "ObjectTypesAlreadyExist",
     "objectTypesAlreadyExist",
 }
+
+# The applyBatch endpoints accept at most 20 action requests per call.
+_ACTION_BATCH_LIMIT = 20
+
+
+def _is_object_not_found(error: BaseException) -> bool:
+    """Return whether the wrapped failure is the SDK ObjectNotFound error.
+
+    ``OntologyObjectService.get_object`` wraps SDK failures in RuntimeError,
+    so walk the cause/context chain and match the typed SDK error (with a
+    class-name fallback for SDK variants).
+    """
+    seen: set[int] = set()
+    current: Optional[BaseException] = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        error_name = getattr(current, "name", None) or getattr(
+            current, "error_name", None
+        )
+        if type(current).__name__ == "ObjectNotFound" or error_name == "ObjectNotFound":
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _action_overrides_model(overrides: Dict[str, Any]) -> ApplyActionOverrides:
+    """Build an SDK ApplyActionOverrides from a plain mapping.
+
+    ``uniqueIdentifierLinkIdValues`` is required by the SDK model even when
+    only ``actionExecutionTime`` is overridden, so it defaults to an empty
+    mapping. Both the camelCase wire keys and the snake_case field names
+    are accepted.
+    """
+    if (
+        "uniqueIdentifierLinkIdValues" not in overrides
+        and "unique_identifier_link_id_values" not in overrides
+    ):
+        overrides = {"uniqueIdentifierLinkIdValues": {}, **overrides}
+    return ApplyActionOverrides(**overrides)
+
+
+def _object_readback_contradictions(
+    parameters: Mapping[str, Any],
+    readback: Mapping[str, Any],
+    primary_key_property: str,
+    primary_key_value: Any,
+) -> List[str]:
+    """Compare a post-apply read-back against the applied action parameters.
+
+    A 200 from the action endpoint is not proof of effect; every parameter
+    that surfaced as an object property must match what was applied.
+    """
+    contradictions: List[str] = []
+    readback_pk = readback.get(primary_key_property, readback.get("__primaryKey"))
+    if readback_pk is not None and str(readback_pk) != str(primary_key_value):
+        contradictions.append(
+            f"primary key: expected {primary_key_value!r}, read back {readback_pk!r}"
+        )
+    for key, expected in parameters.items():
+        if key not in readback:
+            continue
+        actual = readback[key]
+        if actual != expected and str(actual) != str(expected):
+            contradictions.append(f"{key}: expected {expected!r}, read back {actual!r}")
+    return contradictions
 
 
 class ObjectTypeNotFoundError(RuntimeError):
@@ -2722,6 +2792,234 @@ class OntologyObjectService(BaseService):
         except Exception as e:
             raise RuntimeError(f"Failed to search objects: {self._describe_error(e)}")
 
+    def prepare_object_upsert(
+        self,
+        ontology_rid: str,
+        object_type: str,
+        primary_key_property: str,
+        primary_key_value: Any,
+        properties: Dict[str, Any],
+        action_type: str,
+        overrides: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build the create-or-update plan for one object without mutating.
+
+        Object instances have no direct write endpoint; the write goes
+        through ``action_type``. Reads the object by primary key to decide
+        create vs update semantics, resolves the action parameters from the
+        caller-supplied property mapping (the primary key property is pinned
+        to ``primary_key_value``), and validates them through the action in
+        VALIDATE_ONLY mode. Never mutates.
+        """
+        parameters = dict(properties)
+        if (
+            primary_key_property in parameters
+            and str(parameters[primary_key_property]) != str(primary_key_value)
+        ):
+            raise ValueError(
+                f"properties set {primary_key_property}="
+                f"{parameters[primary_key_property]!r}, which contradicts the "
+                f"primary key value {primary_key_value!r}"
+            )
+        parameters[primary_key_property] = primary_key_value
+
+        try:
+            existing: Optional[Dict[str, Any]] = self.get_object(
+                ontology_rid, object_type, str(primary_key_value)
+            )
+        except RuntimeError as e:
+            if not _is_object_not_found(e):
+                raise
+            existing = None
+
+        actions = ActionService(profile=self.profile)
+        validation = actions.validate_action(ontology_rid, action_type, parameters)
+
+        return {
+            "operation": "update" if existing is not None else "create",
+            "ontology_rid": ontology_rid,
+            "object_type": object_type,
+            "primary_key_property": primary_key_property,
+            "primary_key_value": primary_key_value,
+            "action_type": action_type,
+            "parameters": parameters,
+            "overrides": overrides,
+            "existing_object": existing,
+            "validation": validation,
+            "applied": False,
+            "readback": None,
+        }
+
+    def apply_object_upsert(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a prepared object upsert, then verify by read-back.
+
+        ``prepared`` must come from :meth:`prepare_object_upsert`. Executes
+        the action (apply_with_overrides when the plan carries overrides,
+        plain apply otherwise), then reads the object back; a failed or
+        contradicting read-back raises loudly.
+        """
+        ontology_rid = prepared["ontology_rid"]
+        object_type = prepared["object_type"]
+        primary_key_property = prepared["primary_key_property"]
+        primary_key_value = prepared["primary_key_value"]
+        parameters = prepared["parameters"]
+        overrides = prepared.get("overrides")
+
+        actions = ActionService(profile=self.profile)
+        if overrides:
+            action_result = actions.apply_action_with_overrides(
+                ontology_rid,
+                prepared["action_type"],
+                parameters,
+                overrides,
+            )
+        else:
+            action_result = actions.apply_action(
+                ontology_rid, prepared["action_type"], parameters
+            )
+
+        readback = self.get_object(ontology_rid, object_type, str(primary_key_value))
+        contradictions = _object_readback_contradictions(
+            parameters, readback, primary_key_property, primary_key_value
+        )
+        if contradictions:
+            raise RuntimeError(
+                "Object upsert read-back contradicts the applied action: "
+                + "; ".join(contradictions)
+            )
+
+        return {
+            **prepared,
+            "applied": True,
+            "action_result": action_result,
+            "readback": {"status": "verified", "object": readback},
+        }
+
+    def prepare_object_upsert_batch(
+        self,
+        ontology_rid: str,
+        object_type: str,
+        primary_key_property: str,
+        action_type: str,
+        rows: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Build per-row upsert plans without mutating anything.
+
+        Each row carries ``primary_key``, ``properties``, and optional
+        ``overrides``. Rows are grouped into chunks of at most 20 (the
+        applyBatch request cap) for the apply phase.
+        """
+        if not rows:
+            raise ValueError("object upsert batch requires at least one row")
+
+        plans = [
+            self.prepare_object_upsert(
+                ontology_rid,
+                object_type,
+                primary_key_property,
+                row["primary_key"],
+                row.get("properties", {}),
+                action_type,
+                overrides=row.get("overrides"),
+            )
+            for row in rows
+        ]
+        return {
+            "operation": "object-upsert-batch",
+            "ontology_rid": ontology_rid,
+            "object_type": object_type,
+            "primary_key_property": primary_key_property,
+            "action_type": action_type,
+            "row_count": len(rows),
+            "chunk_count": -(-len(plans) // _ACTION_BATCH_LIMIT),
+            "plans": plans,
+            "applied": False,
+        }
+
+    def apply_object_upsert_batch(self, prepared: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a prepared batch upsert in chunks of at most 20 requests.
+
+        Each chunk goes through apply_batch_with_overrides when any row in it
+        carries overrides, else plain apply_batch. Every row is read back
+        afterwards; a row whose read-back fails or contradicts the applied
+        parameters is reported ``not-verified`` in the per-row report.
+        """
+        ontology_rid = prepared["ontology_rid"]
+        object_type = prepared["object_type"]
+        plans = prepared["plans"]
+
+        actions = ActionService(profile=self.profile)
+        chunk_results = []
+        for index in range(0, len(plans), _ACTION_BATCH_LIMIT):
+            chunk = plans[index : index + _ACTION_BATCH_LIMIT]
+            if any(plan.get("overrides") for plan in chunk):
+                chunk_results.append(
+                    actions.apply_batch_with_overrides(
+                        ontology_rid,
+                        prepared["action_type"],
+                        [
+                            {
+                                "parameters": plan["parameters"],
+                                "overrides": plan.get("overrides"),
+                            }
+                            for plan in chunk
+                        ],
+                    )
+                )
+            else:
+                chunk_results.append(
+                    actions.apply_batch_actions(
+                        ontology_rid,
+                        prepared["action_type"],
+                        [plan["parameters"] for plan in chunk],
+                    )
+                )
+
+        report = []
+        for plan in plans:
+            primary_key_value = plan["primary_key_value"]
+            try:
+                readback = self.get_object(
+                    ontology_rid, object_type, str(primary_key_value)
+                )
+                contradictions = _object_readback_contradictions(
+                    plan["parameters"],
+                    readback,
+                    plan["primary_key_property"],
+                    primary_key_value,
+                )
+                if contradictions:
+                    report.append(
+                        {
+                            "primary_key": primary_key_value,
+                            "status": "not-verified",
+                            "detail": "; ".join(contradictions),
+                        }
+                    )
+                else:
+                    report.append(
+                        {
+                            "primary_key": primary_key_value,
+                            "status": "verified",
+                            "object": readback,
+                        }
+                    )
+            except Exception as e:
+                report.append(
+                    {
+                        "primary_key": primary_key_value,
+                        "status": "not-verified",
+                        "detail": f"read-back failed: {self._describe_error(e)}",
+                    }
+                )
+
+        return {
+            **prepared,
+            "applied": True,
+            "chunk_results": chunk_results,
+            "report": report,
+        }
+
     def _format_object(self, obj: Any) -> Dict[str, Any]:
         """Format object for consistent output."""
         if isinstance(obj, dict):
@@ -2832,6 +3130,96 @@ class ActionService(BaseService):
             return self._format_batch_action_result(result)
         except Exception as e:
             raise RuntimeError(f"Failed to apply batch actions: {self._describe_error(e)}")
+
+    def apply_action_with_overrides(
+        self,
+        ontology_rid: str,
+        action_type: str,
+        parameters: Dict[str, Any],
+        overrides: Dict[str, Any],
+        validate_only: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Apply an action with overrides for generated parameters.
+
+        Wraps the SDK Action.apply_with_overrides endpoint (POST
+        /v2/ontologies/{ontology}/actions/{action}/applyWithOverrides),
+        which allows specifying values for UniqueIdentifier and CurrentTime
+        generated action parameters.
+
+        Args:
+            ontology_rid: Ontology Resource Identifier
+            action_type: Action type API name
+            parameters: Action parameters
+            overrides: ApplyActionOverrides fields
+                (uniqueIdentifierLinkIdValues, actionExecutionTime; the
+                snake_case field names are also accepted)
+            validate_only: Validate without executing
+
+        Returns:
+            Action result, or validation result when validate_only is set
+        """
+        try:
+            options = (
+                ApplyActionRequestOptions(mode="VALIDATE_ONLY")
+                if validate_only
+                else None
+            )
+            result = self.service.Action.apply_with_overrides(
+                ontology_rid,
+                action_type,
+                request=ApplyActionRequestV2(parameters=parameters, options=options),
+                overrides=_action_overrides_model(overrides),
+            )
+            if validate_only:
+                return self._format_validation_result(result)
+            return self._format_action_result(result)
+        except Exception as e:
+            raise RuntimeError(f"Failed to apply action {action_type} with overrides: {self._describe_error(e)}")
+
+    def apply_batch_with_overrides(
+        self,
+        ontology_rid: str,
+        action_type: str,
+        requests: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Apply multiple actions of the same type with per-item overrides.
+
+        Wraps the SDK Action.apply_batch_with_overrides endpoint (POST
+        /v2/ontologies/{ontology}/actions/{action}/applyBatchWithOverrides).
+        Each request carries ``parameters`` and optional ``overrides``.
+
+        Args:
+            ontology_rid: Ontology Resource Identifier
+            action_type: Action type API name
+            requests: List of action requests (max 20)
+
+        Returns:
+            Combined batch action result
+        """
+        try:
+            if len(requests) > _ACTION_BATCH_LIMIT:
+                raise ValueError("Maximum 20 actions can be applied in a batch")
+
+            result = self.service.Action.apply_batch_with_overrides(
+                ontology_rid,
+                action_type,
+                requests=[
+                    BatchApplyActionRequestItemWithOverrides(
+                        parameters=request["parameters"],
+                        overrides=(
+                            _action_overrides_model(request["overrides"])
+                            if request.get("overrides") is not None
+                            else None
+                        ),
+                    )
+                    for request in requests
+                ],
+            )
+            return self._format_batch_action_result(result)
+        except Exception as e:
+            raise RuntimeError(f"Failed to apply batch actions with overrides: {self._describe_error(e)}")
 
     def get_action_type(
         self,

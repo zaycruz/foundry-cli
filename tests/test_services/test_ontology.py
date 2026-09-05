@@ -3,6 +3,7 @@ Tests for ontology services.
 """
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 import requests
@@ -1684,6 +1685,480 @@ def test_apply_batch_actions_exceeds_limit(mock_action_service):
         )
 
     assert "Maximum 20 actions" in str(excinfo.value)
+
+
+class _FakeObjectNotFound(Exception):
+    """Stand-in for the SDK ObjectNotFound error (matched by error name)."""
+
+    name = "ObjectNotFound"
+
+
+@pytest.fixture
+def mock_composed_action_service():
+    """Mock the ActionService composed inside the object upsert methods."""
+    with patch("foundry_cli.services.ontology.ActionService") as mock_action_cls:
+        yield mock_action_cls.return_value
+
+
+def test_apply_action_with_overrides(mock_action_service, sample_action_result):
+    """Test applying an action with overrides for generated parameters."""
+    service, mock_action_class = mock_action_service
+    mock_action_class.apply_with_overrides.return_value = sample_action_result
+
+    params = {"employee_id": "EMP001"}
+    overrides = {"actionExecutionTime": "2026-09-03T00:00:00Z"}
+    result = service.apply_action_with_overrides(
+        "ri.ontology.main.ontology.test", "transfer_employee", params, overrides
+    )
+
+    assert result["operation_id"] == "ri.action.operation.123"
+    assert result["modified_objects_count"] == 1
+    mock_action_class.apply_with_overrides.assert_called_once()
+    call = mock_action_class.apply_with_overrides.call_args
+    assert call.args == ("ri.ontology.main.ontology.test", "transfer_employee")
+    assert call.kwargs["request"].parameters == params
+    assert call.kwargs["request"].options is None
+    assert call.kwargs["overrides"].action_execution_time == datetime(
+        2026, 9, 3, tzinfo=timezone.utc
+    )
+
+
+def test_apply_action_with_overrides_validate_only(
+    mock_action_service, sample_validation_result
+):
+    """Test validate-only mode wires VALIDATE_ONLY and formats validation."""
+    service, mock_action_class = mock_action_service
+    mock_action_class.apply_with_overrides.return_value = sample_validation_result
+
+    params = {"employee_id": "EMP001"}
+    overrides = {"action_execution_time": "2026-09-03T00:00:00Z"}
+    result = service.apply_action_with_overrides(
+        "ri.ontology.main.ontology.test",
+        "transfer_employee",
+        params,
+        overrides,
+        validate_only=True,
+    )
+
+    assert result["result"] == "VALID"
+    call = mock_action_class.apply_with_overrides.call_args
+    assert call.kwargs["request"].options.mode == "VALIDATE_ONLY"
+    assert call.kwargs["overrides"].action_execution_time == datetime(
+        2026, 9, 3, tzinfo=timezone.utc
+    )
+
+
+def test_apply_batch_with_overrides(mock_action_service, sample_action_result):
+    """Test applying batch actions with per-item overrides."""
+    service, mock_action_class = mock_action_service
+    batch_result = Mock(edits=sample_action_result.edits)
+    mock_action_class.apply_batch_with_overrides.return_value = batch_result
+
+    requests = [
+        {
+            "parameters": {"employee_id": "EMP001"},
+            "overrides": {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+        },
+        {"parameters": {"employee_id": "EMP002"}},
+    ]
+    result = service.apply_batch_with_overrides(
+        "ri.ontology.main.ontology.test", "transfer_employee", requests
+    )
+
+    assert result["modified_objects_count"] == 1
+    mock_action_class.apply_batch_with_overrides.assert_called_once()
+    call = mock_action_class.apply_batch_with_overrides.call_args
+    assert call.args == ("ri.ontology.main.ontology.test", "transfer_employee")
+    items = call.kwargs["requests"]
+    assert len(items) == 2
+    assert items[0].parameters == {"employee_id": "EMP001"}
+    assert items[0].overrides.action_execution_time == datetime(
+        2026, 9, 3, tzinfo=timezone.utc
+    )
+    assert items[1].parameters == {"employee_id": "EMP002"}
+    assert items[1].overrides is None
+
+
+def test_apply_batch_with_overrides_exceeds_limit(mock_action_service):
+    """Test that batch actions with overrides fail when exceeding limit."""
+    service, _ = mock_action_service
+
+    requests = [{"parameters": {"employee_id": f"EMP{i}"}} for i in range(21)]
+
+    with pytest.raises(RuntimeError) as excinfo:
+        service.apply_batch_with_overrides(
+            "ri.ontology.main.ontology.test", "transfer_employee", requests
+        )
+
+    assert "Maximum 20 actions" in str(excinfo.value)
+
+
+def test_prepare_object_upsert_create(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that a missing object plans a create and only validates."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe"},
+        "upsert-employee",
+    )
+
+    assert plan["operation"] == "create"
+    assert plan["parameters"] == {"name": "John Doe", "employee_id": "EMP001"}
+    assert plan["existing_object"] is None
+    assert plan["applied"] is False
+    assert plan["validation"]["result"] == "VALID"
+    # prepare must never mutate: only VALIDATE_ONLY validation runs
+    mock_composed_action_service.validate_action.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        {"name": "John Doe", "employee_id": "EMP001"},
+    )
+    mock_composed_action_service.apply_action.assert_not_called()
+    mock_composed_action_service.apply_action_with_overrides.assert_not_called()
+    mock_composed_action_service.apply_batch_actions.assert_not_called()
+    mock_composed_action_service.apply_batch_with_overrides.assert_not_called()
+
+
+def test_prepare_object_upsert_update(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that an existing object plans an update."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.return_value = sample_object
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"department": "Sales"},
+        "upsert-employee",
+    )
+
+    assert plan["operation"] == "update"
+    assert plan["existing_object"]["name"] == "John Doe"
+    assert plan["parameters"]["employee_id"] == "EMP001"
+
+
+def test_prepare_object_upsert_primary_key_conflict(mock_ontology_object_service):
+    """Test that properties contradicting the primary key are rejected."""
+    service, _ = mock_ontology_object_service
+
+    with pytest.raises(ValueError) as excinfo:
+        service.prepare_object_upsert(
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "employee_id",
+            "EMP001",
+            {"employee_id": "EMP999"},
+            "upsert-employee",
+        )
+
+    assert "contradicts the primary key value" in str(excinfo.value)
+
+
+def test_apply_object_upsert_reads_back(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that apply executes the action and verifies via read-back."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.return_value = sample_object
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_action.return_value = {
+        "operation_id": "ri.action.operation.123"
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe", "department": "Engineering"},
+        "upsert-employee",
+    )
+    result = service.apply_object_upsert(plan)
+
+    assert result["applied"] is True
+    assert result["readback"]["status"] == "verified"
+    assert result["readback"]["object"]["employee_id"] == "EMP001"
+    mock_composed_action_service.apply_action.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        {"name": "John Doe", "department": "Engineering", "employee_id": "EMP001"},
+    )
+    mock_composed_action_service.apply_action_with_overrides.assert_not_called()
+
+
+def test_apply_object_upsert_with_overrides(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that planned overrides route the execution through apply_with_overrides."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.return_value = sample_object
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_action_with_overrides.return_value = {
+        "operation_id": "ri.action.operation.123"
+    }
+
+    overrides = {"actionExecutionTime": "2026-09-03T00:00:00Z"}
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe", "department": "Engineering"},
+        "upsert-employee",
+        overrides=overrides,
+    )
+    result = service.apply_object_upsert(plan)
+
+    assert result["applied"] is True
+    mock_composed_action_service.apply_action_with_overrides.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        {"name": "John Doe", "department": "Engineering", "employee_id": "EMP001"},
+        overrides,
+    )
+    mock_composed_action_service.apply_action.assert_not_called()
+
+
+def test_apply_object_upsert_readback_contradiction(
+    mock_ontology_object_service, mock_composed_action_service, sample_object
+):
+    """Test that a contradicting read-back raises loudly after apply."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = [
+        _FakeObjectNotFound("not found"),
+        {**sample_object, "department": "Marketing"},
+    ]
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_action.return_value = {
+        "operation_id": "ri.action.operation.123"
+    }
+
+    plan = service.prepare_object_upsert(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"department": "Engineering"},
+        "upsert-employee",
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        service.apply_object_upsert(plan)
+
+    assert "read-back contradicts" in str(excinfo.value)
+    assert "department" in str(excinfo.value)
+
+
+def test_prepare_object_upsert_batch_chunks(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that batch plans chunk rows into groups of at most 20."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+
+    rows = [
+        {"primary_key": f"EMP{i:03d}", "properties": {"name": f"Employee {i}"}}
+        for i in range(21)
+    ]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    assert plan["operation"] == "object-upsert-batch"
+    assert plan["row_count"] == 21
+    assert plan["chunk_count"] == 2
+    assert len(plan["plans"]) == 21
+    assert plan["applied"] is False
+    assert all(p["operation"] == "create" for p in plan["plans"])
+    assert mock_composed_action_service.validate_action.call_count == 21
+    mock_composed_action_service.apply_batch_actions.assert_not_called()
+
+
+def test_prepare_object_upsert_batch_requires_rows(mock_ontology_object_service):
+    """Test that an empty batch is rejected."""
+    service, _ = mock_ontology_object_service
+
+    with pytest.raises(ValueError) as excinfo:
+        service.prepare_object_upsert_batch(
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "employee_id",
+            "upsert-employee",
+            [],
+        )
+
+    assert "at least one row" in str(excinfo.value)
+
+
+def test_apply_object_upsert_batch_chunks_and_reports(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that batch apply chunks into <=20 requests and reports per row."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_batch_actions.return_value = {
+        "edits_type": "objectEdits"
+    }
+
+    rows = [
+        {"primary_key": f"EMP{i:03d}", "properties": {"name": f"Employee {i}"}}
+        for i in range(21)
+    ]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    # Read-back returns an object echoing the requested properties
+    mock_ontology_object_class.get = Mock(
+        side_effect=lambda ontology_rid, object_type, primary_key, select=None: {
+            "employee_id": primary_key,
+            "name": f"Employee {int(primary_key[3:])}",
+        }
+    )
+
+    result = service.apply_object_upsert_batch(plan)
+
+    assert result["applied"] is True
+    assert mock_composed_action_service.apply_batch_actions.call_count == 2
+    first_chunk = mock_composed_action_service.apply_batch_actions.call_args_list[0]
+    second_chunk = mock_composed_action_service.apply_batch_actions.call_args_list[1]
+    assert len(first_chunk.args[2]) == 20
+    assert len(second_chunk.args[2]) == 1
+    mock_composed_action_service.apply_batch_with_overrides.assert_not_called()
+    assert len(result["report"]) == 21
+    assert all(row["status"] == "verified" for row in result["report"])
+
+
+def test_apply_object_upsert_batch_with_overrides(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that chunks containing overrides use apply_batch_with_overrides."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_batch_with_overrides.return_value = {
+        "edits_type": "objectEdits"
+    }
+
+    rows = [
+        {
+            "primary_key": "EMP001",
+            "properties": {"name": "John Doe"},
+            "overrides": {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+        }
+    ]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    mock_ontology_object_class.get = Mock(
+        return_value={"employee_id": "EMP001", "name": "John Doe"}
+    )
+    result = service.apply_object_upsert_batch(plan)
+
+    mock_composed_action_service.apply_batch_with_overrides.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "upsert-employee",
+        [
+            {
+                "parameters": {"name": "John Doe", "employee_id": "EMP001"},
+                "overrides": {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+            }
+        ],
+    )
+    mock_composed_action_service.apply_batch_actions.assert_not_called()
+    assert result["report"][0]["status"] == "verified"
+
+
+def test_apply_object_upsert_batch_reports_not_verified(
+    mock_ontology_object_service, mock_composed_action_service
+):
+    """Test that a contradicting read-back is reported per row, not hidden."""
+    service, mock_ontology_object_class = mock_ontology_object_service
+    mock_ontology_object_class.get.side_effect = _FakeObjectNotFound("not found")
+    mock_composed_action_service.validate_action.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_composed_action_service.apply_batch_actions.return_value = {
+        "edits_type": "objectEdits"
+    }
+
+    rows = [{"primary_key": "EMP001", "properties": {"name": "John Doe"}}]
+    plan = service.prepare_object_upsert_batch(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        rows,
+    )
+
+    mock_ontology_object_class.get = Mock(
+        return_value={"employee_id": "EMP001", "name": "Jane Smith"}
+    )
+    result = service.apply_object_upsert_batch(plan)
+
+    assert result["report"][0]["status"] == "not-verified"
+    assert "name" in result["report"][0]["detail"]
 
 
 # QueryService Tests

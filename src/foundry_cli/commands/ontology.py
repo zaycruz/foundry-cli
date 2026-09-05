@@ -1748,6 +1748,251 @@ def validate_action(
         raise typer.Exit(1)
 
 
+@app.command("action-apply-with-overrides")
+def apply_action_with_overrides(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    action_type: str = typer.Argument(..., help="Action type API name"),
+    parameters: str = typer.Argument(..., help="JSON string of action parameters"),
+    overrides: str = typer.Option(
+        ...,
+        "--overrides",
+        help="JSON string of ApplyActionOverrides "
+        "(uniqueIdentifierLinkIdValues, actionExecutionTime)",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Execute the action (default: validate-only plan)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Apply an action with overrides for generated parameters (validate-only unless --apply).
+
+    Overrides specify values for UniqueIdentifier and CurrentTime generated
+    action parameters via the SDK applyWithOverrides endpoint. The default
+    prints the VALIDATE_ONLY validation result; nothing is written without
+    --apply.
+    """
+    try:
+        service = ActionService(profile=profile)
+
+        # Parse JSON parameters and overrides
+        params = json.loads(parameters)
+        parsed_overrides = json.loads(overrides)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Applying action {action_type} with overrides..."
+        ):
+            result = service.apply_action_with_overrides(
+                ontology_rid,
+                action_type,
+                params,
+                parsed_overrides,
+                validate_only=not apply,
+            )
+
+        formatter.format_dict(result, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Action result saved to {output}")
+
+    except json.JSONDecodeError as e:
+        formatter.print_error(f"Invalid JSON: {e}")
+        raise typer.Exit(1)
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        formatter.print_error(f"Failed to apply action with overrides: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("object-upsert")
+def upsert_object(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    object_type: str = typer.Argument(..., help="Object type API name"),
+    primary_key_property: str = typer.Option(
+        ..., "--primary-key-property", help="Primary key property API name"
+    ),
+    primary_key_value: str = typer.Option(
+        ..., "--primary-key-value", help="Primary key value"
+    ),
+    properties: str = typer.Option(
+        ..., "--properties", help="JSON string of property values"
+    ),
+    action_type: str = typer.Option(
+        ..., "--action-type", help="Action type API name that performs the write"
+    ),
+    overrides: Optional[str] = typer.Option(
+        None,
+        "--overrides",
+        help="JSON string of ApplyActionOverrides for generated action parameters",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Execute the action (default: plan only)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create or update one object by primary key via an action (plan unless --apply).
+
+    Object instances have no direct write endpoint; the write goes through
+    the named action. The default prints the plan: the create-vs-update
+    decision from reading the object by primary key, the resolved action
+    parameters, and the VALIDATE_ONLY validation result. --apply executes
+    the action (with overrides when --overrides is given) and reads the
+    object back; a failed or contradicting read-back is an error.
+    """
+    try:
+        service = OntologyObjectService(profile=profile)
+
+        parsed_properties = json.loads(properties)
+        parsed_overrides = json.loads(overrides) if overrides else None
+
+        with SpinnerProgressTracker().track_spinner("Preparing object upsert..."):
+            plan = service.prepare_object_upsert(
+                ontology_rid,
+                object_type,
+                primary_key_property,
+                primary_key_value,
+                parsed_properties,
+                action_type,
+                overrides=parsed_overrides,
+            )
+
+        result = plan
+        if apply:
+            with SpinnerProgressTracker().track_spinner("Applying object upsert..."):
+                result = service.apply_object_upsert(plan)
+
+        formatter.format_dict(result, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Object upsert result saved to {output}")
+
+    except json.JSONDecodeError as e:
+        formatter.print_error(f"Invalid JSON: {e}")
+        raise typer.Exit(1)
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        if agent_mode_enabled():
+            buffer_agent_exception(e, context="object-upsert")
+        formatter.print_error(f"Failed to upsert object: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("object-upsert-batch")
+def upsert_object_batch(
+    ontology_rid: str = typer.Argument(..., help="Ontology Resource Identifier"),
+    object_type: str = typer.Argument(..., help="Object type API name"),
+    rows: str = typer.Option(
+        ...,
+        "--rows",
+        help="Path to a JSON file with upsert rows ('-' reads stdin)",
+    ),
+    primary_key_property: str = typer.Option(
+        ..., "--primary-key-property", help="Primary key property API name"
+    ),
+    action_type: str = typer.Option(
+        ..., "--action-type", help="Action type API name that performs the write"
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Execute the actions (default: plan only)",
+    ),
+    profile: Optional[str] = typer.Option(None, "--profile", "-p", help="Profile name"),
+    format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table, json, csv)"
+    ),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file path"
+    ),
+):
+    """Create or update many objects by primary key via an action (plan unless --apply).
+
+    Each row is {"primary_key": value, "properties": {...}} with an optional
+    "overrides" object. Rows are chunked into groups of at most 20 per
+    applyBatch request. --apply executes the chunks and reports a per-row
+    read-back status; any row that cannot be verified fails the command.
+    """
+    try:
+        if rows == "-":
+            raw_rows = sys.stdin.read()
+        else:
+            raw_rows = Path(rows).read_text()
+        try:
+            parsed_rows = json.loads(raw_rows)
+        except json.JSONDecodeError as e:
+            formatter.print_error(f"Invalid JSON in upsert rows: {e}")
+            raise typer.Exit(1) from e
+        if not isinstance(parsed_rows, list):
+            formatter.print_error("Upsert rows must be a JSON array")
+            raise typer.Exit(1)
+
+        service = OntologyObjectService(profile=profile)
+
+        with SpinnerProgressTracker().track_spinner(
+            f"Preparing upsert of {len(parsed_rows)} object(s)..."
+        ):
+            plan = service.prepare_object_upsert_batch(
+                ontology_rid,
+                object_type,
+                primary_key_property,
+                action_type,
+                parsed_rows,
+            )
+
+        result = plan
+        if apply:
+            with SpinnerProgressTracker().track_spinner(
+                "Applying object upsert batch..."
+            ):
+                result = service.apply_object_upsert_batch(plan)
+
+        formatter.format_dict(result, format=format, output=output)
+
+        if output:
+            formatter.print_success(f"Object upsert batch result saved to {output}")
+
+        failures = [
+            row
+            for row in result.get("report", [])
+            if row.get("status") != "verified"
+        ]
+        if failures:
+            formatter.print_error(
+                f"{len(failures)} row(s) could not be verified by read-back"
+            )
+            raise typer.Exit(1)
+
+    except (typer.Exit, typer.Abort):
+        raise
+    except (ProfileNotFoundError, MissingCredentialsError) as e:
+        formatter.print_error(f"Authentication error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        if agent_mode_enabled():
+            buffer_agent_exception(e, context="object-upsert-batch")
+        formatter.print_error(f"Failed to upsert objects: {e}")
+        raise typer.Exit(1)
+
+
 # Query commands
 @app.command("query-execute")
 def execute_query(
