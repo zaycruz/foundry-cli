@@ -193,6 +193,30 @@ the request context budget rises to ~280k estimated tokens (captured
 instructions: 1,050,000-token window, 300,000 recommended) so the full
 catalog fits without truncating tool outputs.
 
+## Implemented: CLI extension tools (beyond the captured catalog)
+
+Live runs proved the captured 72-tool catalog cannot answer "show me the
+most recent runs of the <name> pipeline": the catalog has no name-search
+tool (Palantir's design relies on UI @-mentions) and no
+build-history/dataset-transaction tool at all. The loop therefore
+registers four CLI-native extension tools (`services/
+ai_fde_extension_tools.py`; `pfoundry_`-prefixed, `cliExtension: true`,
+always exposed, all read-risk) that wrap already-verified pfoundry
+surfaces — public SDK / existing service contracts, NOT captured AI FDE
+contracts:
+
+- `pfoundry_search_resources` → `SearchService.search` (the pinned
+  `SearchTitles` GraphQL query behind `pfoundry search`).
+- `pfoundry_search_builds` → `OrchestrationService.search_builds` /
+  `get_build_jobs` (SDK `Build.search` / `Build.jobs`). SDK constraints:
+  `where` is required (no-filter searches use `gte STARTED_TIME epoch`)
+  and the filter vocabulary has no dataset member, so `datasetRid`
+  filtering scans recent builds newest-first and keeps those whose job
+  outputs include the dataset RID; the result reports the scan count.
+- `pfoundry_get_dataset_transactions` → `DatasetService.get_transactions`
+  / `get_branch_transactions` (client-side `limit`).
+- `pfoundry_get_resource` → `ResourceService.get_resource`.
+
 ## Remaining gaps (deliberately not built — never captured)
 - **Stop/cancel mid-run**: no cancel call was observed. Capture guidance:
   start a long-running agent task in the UI, press stop, and record the

@@ -19,6 +19,7 @@ from foundry_cli.services.ai_fde_loop import (
     LATEST_FUNCTION_VERSION_QUERY,
     LINK_TYPE_MAIN_QUERY,
     MODE_TOOL_SETS,
+    EXTENSION_TOOL_REGISTRY,
     TOOL_REGISTRY,
     AgentLoop,
     CompletedResponse,
@@ -29,6 +30,7 @@ from foundry_cli.services.ai_fde_loop import (
     hidden_item_output,
     wrap_context_item,
 )
+from foundry_cli.services.ai_fde_extension_tools import ExtensionToolExecutor
 from foundry_cli.services.ai_fde_tool_specs import TOOL_SPECS, TOOL_SPECS_JSON
 from foundry_cli.services.errors import FoundryApiError
 
@@ -297,7 +299,14 @@ class TestAgentLoopBasics:
         )
         loop.run("hello")
         tools = llm.complete.call_args.kwargs["tools"]
-        assert [t["function"]["name"] for t in tools] == ["list_evaluation_runs"]
+        # The captured subset plus the always-on CLI extension tools.
+        assert [t["function"]["name"] for t in tools] == [
+            "list_evaluation_runs",
+            "pfoundry_search_resources",
+            "pfoundry_search_builds",
+            "pfoundry_get_dataset_transactions",
+            "pfoundry_get_resource",
+        ]
 
     def test_unknown_tool_name_rejected(self):
         with pytest.raises(ValueError, match="unknown tools"):
@@ -941,14 +950,14 @@ class TestStateTools:
         loop.run("switch mode")
         # The first request exposes the captured 8-tool base set...
         first_tools = llm.complete.call_args_list[0].kwargs["tools"]
-        assert len(first_tools) == 8
+        assert len(first_tools) == 12  # 8 captured base + 4 CLI extensions
         # ...and after change_mode the next request exposes the captured
         # 51-tool functionsEditing set.
         second_tools = llm.complete.call_args_list[1].kwargs["tools"]
-        assert len(second_tools) == 51
-        assert {t["function"]["name"] for t in second_tools} == set(
-            MODE_TOOL_SETS["functionsEditing"]
-        )
+        assert len(second_tools) == 55  # 51 captured + 4 CLI extensions
+        names = {t["function"]["name"] for t in second_tools}
+        assert set(MODE_TOOL_SETS["functionsEditing"]) <= names
+        assert set(EXTENSION_TOOL_REGISTRY) <= names
 
     def test_change_mode_uncaptured_mode_keeps_current_set(self):
         loop, _, _ = make_loop([_text_output("x")])
@@ -1310,14 +1319,16 @@ class TestAllToolsExposure:
         loop, _, llm = make_loop([_text_output("done")], all_tools=True)
         loop.run("hello")
         tools = llm.complete.call_args.kwargs["tools"]
-        assert len(tools) == 72
-        assert {t["function"]["name"] for t in tools} == set(ALL_TOOL_NAMES)
+        assert len(tools) == 76  # 72 captured + 4 CLI extensions
+        names = {t["function"]["name"] for t in tools}
+        assert set(ALL_TOOL_NAMES) <= names
+        assert set(EXTENSION_TOOL_REGISTRY) <= names
 
     def test_default_exposes_captured_base_set(self):
         loop, _, llm = make_loop([_text_output("done")])
         loop.run("hello")
         tools = llm.complete.call_args.kwargs["tools"]
-        assert len(tools) == 8
+        assert len(tools) == 12  # 8 captured base + 4 CLI extensions
 
     def test_fail_closed_result_is_fed_back_to_model(self):
         loop, _, llm = make_loop(
@@ -1931,3 +1942,238 @@ class TestFailClosedFamilies:
         with pytest.raises(UnverifiedContract) as exc_info:
             loop._exec_fail_closed(tool, {})
         assert exc_info.value.tool == tool
+
+
+class TestExtensionToolRegistration:
+    def test_captured_catalog_and_extensions_coexist(self):
+        from foundry_cli.services.ai_fde_extension_tools import EXTENSION_TOOL_SPECS
+
+        assert len(TOOL_REGISTRY) == 72
+        assert len(EXTENSION_TOOL_REGISTRY) == 4
+        assert not (set(TOOL_REGISTRY) & set(EXTENSION_TOOL_SPECS))
+        for registration in EXTENSION_TOOL_REGISTRY.values():
+            assert registration.cli_extension is True
+            assert registration.risk == "read"
+            assert registration.live is True
+        for registration in TOOL_REGISTRY.values():
+            assert registration.cli_extension is False
+
+    def test_extensions_always_exposed(self):
+        # Default base set: 8 captured + 4 extensions.
+        loop, _, llm = make_loop([_text_output("done")])
+        loop.run("hello")
+        names = {t["function"]["name"] for t in llm.complete.call_args.kwargs["tools"]}
+        assert len(names) == 12
+        assert {
+            "pfoundry_search_resources",
+            "pfoundry_search_builds",
+            "pfoundry_get_dataset_transactions",
+            "pfoundry_get_resource",
+        } <= names
+
+    def test_extensions_exposed_with_tool_subset_and_all_tools(self):
+        loop, _, llm = make_loop(
+            [_text_output("done")], tool_names=["list_evaluation_runs"]
+        )
+        loop.run("hello")
+        names = {t["function"]["name"] for t in llm.complete.call_args.kwargs["tools"]}
+        assert len(names) == 5  # 1 captured + 4 extensions
+
+        loop2, _, llm2 = make_loop([_text_output("done")], all_tools=True)
+        loop2.run("hello")
+        names2 = {
+            t["function"]["name"] for t in llm2.complete.call_args.kwargs["tools"]
+        }
+        assert len(names2) == 76  # 72 captured + 4 extensions
+
+    def test_extension_calls_count_in_report(self):
+        search = Mock()
+        search.search.return_value = {"status": "ok", "results": []}
+        extensions = ExtensionToolExecutor(profile="test", search_service=search)
+        loop, _, _ = make_loop(
+            [
+                _call_output(
+                    "pfoundry_search_resources",
+                    json.dumps({"query": "otc pipeline", "limit": 5}),
+                ),
+                _text_output("found it"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("find the pipeline")
+        assert report["toolsCalled"] == 1
+        assert report["toolCalls"][0]["name"] == "pfoundry_search_resources"
+        assert report["toolCalls"][0]["state"] == "completed"
+        search.search.assert_called_once_with("otc pipeline", limit=5)
+
+    def test_extension_error_comes_back_as_tool_output(self):
+        resource = Mock()
+        resource.get_resource.side_effect = RuntimeError("compass exploded")
+        extensions = ExtensionToolExecutor(profile="test", resource_service=resource)
+        loop, _, llm = make_loop(
+            [
+                _call_output("pfoundry_get_resource", json.dumps({"rid": "ri.x.y.z"})),
+                _text_output("recovered"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("get the thing")
+        assert report["status"] == "completed"  # no loop crash
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        output_text = output_item["item"]["functionToolCallOutput"]["output"]
+        assert "pfoundry_get_resource" in output_text
+        assert "compass exploded" in output_text
+
+
+class TestExtensionExecutors:
+    def _executor(self, **services):
+        return ExtensionToolExecutor(profile="test", **services)
+
+    def test_search_resources_delegates(self):
+        search = Mock()
+        search.search.return_value = {
+            "status": "ok",
+            "results": [
+                {"rid": "ri.foundry.main.dataset.00000000-0000-0000-0000-000000000020"}
+            ],
+        }
+        executor = self._executor(search_service=search)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_resources", {"query": "otc", "limit": None}
+            )
+        )
+        search.search.assert_called_once_with("otc", limit=25)  # default
+        assert payload["status"] == "ok"
+
+    def test_search_builds_without_dataset_filter(self):
+        orchestration = Mock()
+        orchestration.search_builds.return_value = {
+            "builds": [
+                {"rid": "ri.foundry.main.build.00000000-0000-0000-0000-000000000021"}
+            ],
+            "next_page_token": None,
+        }
+        executor = self._executor(orchestration_service=orchestration)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_builds",
+                {
+                    "datasetRid": None,
+                    "branch": "master",
+                    "createdAfter": "2026-09-01T00:00:00Z",
+                    "limit": 5,
+                },
+            )
+        )
+        kwargs = orchestration.search_builds.call_args.kwargs
+        assert kwargs["page_size"] == 5
+        assert kwargs["where"] == {
+            "type": "and",
+            "items": [
+                {
+                    "type": "gte",
+                    "field": "STARTED_TIME",
+                    "value": "2026-09-01T00:00:00Z",
+                },
+                {"type": "eq", "field": "BRANCH_NAME", "value": "master"},
+            ],
+        }
+        assert kwargs["order_by"] == {
+            "fields": [{"field": "STARTED_TIME", "direction": "DESC"}]
+        }
+        assert len(payload["builds"]) == 1
+
+    def test_search_builds_dataset_filter_scans_job_outputs(self):
+        dataset_rid = "ri.foundry.main.dataset.00000000-0000-0000-0000-000000000022"
+        orchestration = Mock()
+        orchestration.search_builds.return_value = {
+            "builds": [
+                {"rid": "ri.foundry.main.build.00000000-0000-0000-0000-000000000023"},
+                {"rid": "ri.foundry.main.build.00000000-0000-0000-0000-000000000024"},
+            ],
+            "next_page_token": None,
+        }
+        orchestration.get_build_jobs.side_effect = [
+            {"jobs": [{"rid": "job-1", "outputs": [{"dataset_rid": dataset_rid}]}]},
+            {"jobs": [{"rid": "job-2", "outputs": [{"dataset_rid": "ri.other"}]}]},
+        ]
+        executor = self._executor(orchestration_service=orchestration)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_builds",
+                {
+                    "datasetRid": dataset_rid,
+                    "branch": None,
+                    "createdAfter": None,
+                    "limit": 5,
+                },
+            )
+        )
+        assert len(payload["builds"]) == 1
+        assert payload["builds"][0]["matching_dataset_outputs"][0]["job_rid"] == "job-1"
+        assert payload["builds_scanned"] == 2
+
+    def test_get_dataset_transactions_limits_client_side(self):
+        dataset = Mock()
+        dataset.get_transactions.return_value = [
+            {"transaction_rid": f"t-{i}"} for i in range(3)
+        ]
+        executor = self._executor(dataset_service=dataset)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_get_dataset_transactions",
+                {"datasetRid": "ri.foundry.main.dataset.x", "branch": None, "limit": 2},
+            )
+        )
+        assert payload["total_count"] == 3
+        assert payload["returned_count"] == 2
+        assert len(payload["transactions"]) == 2
+
+    def test_get_dataset_transactions_branch_path(self):
+        dataset = Mock()
+        dataset.get_branch_transactions.return_value = [{"transaction_rid": "t-1"}]
+        executor = self._executor(dataset_service=dataset)
+        executor.execute(
+            "pfoundry_get_dataset_transactions",
+            {"datasetRid": "ri.foundry.main.dataset.x", "branch": "dev", "limit": None},
+        )
+        dataset.get_branch_transactions.assert_called_once_with(
+            "ri.foundry.main.dataset.x", "dev"
+        )
+
+    def test_get_resource_delegates(self):
+        resource = Mock()
+        resource.get_resource.return_value = {"rid": "ri.x", "name": "thing"}
+        executor = self._executor(resource_service=resource)
+        payload = json.loads(executor.execute("pfoundry_get_resource", {"rid": "ri.x"}))
+        resource.get_resource.assert_called_once_with("ri.x")
+        assert payload["name"] == "thing"
+
+    def test_invalid_limit_is_a_tool_error_not_a_crash(self):
+        search = Mock()
+        extensions = ExtensionToolExecutor(profile="test", search_service=search)
+        loop, _, llm = make_loop(
+            [
+                _call_output(
+                    "pfoundry_search_resources",
+                    json.dumps({"query": "x", "limit": -3}),
+                ),
+                _text_output("ok"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("search")
+        assert report["status"] == "completed"
+        search.search.assert_not_called()
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        assert (
+            "positive integer"
+            in (output_item["item"]["functionToolCallOutput"]["output"])
+        )

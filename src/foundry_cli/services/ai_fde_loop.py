@@ -246,6 +246,18 @@ written to thread metadata at each transition):
   tool sets are unknown: ``change_mode`` to one keeps the current set
   and says so in the tool output.
 
+CLI-native extension tools (NOT part of the captured catalog): the
+``pfoundry_*`` tools in ``EXTENSION_TOOL_REGISTRY`` are synthetic tools
+this CLI adds beyond the captured 72, because live runs proved the
+catalog alone cannot answer "show me the most recent runs of the <name>
+pipeline" (no name-search tool exists even in the full catalog, and no
+build-history/dataset-transaction tool exists at all). They wrap
+pfoundry's already-verified surfaces — public SDK / existing service
+contracts, no captured-contract claims — and are always exposed (not
+mode-gated), all read-risk, executed through the same
+approval/write-back machinery. See ``ai_fde_extension_tools.py`` for the
+per-tool wrapper mapping.
+
 Write-back shapes (captured, ``/tmp/ai-fde-item-shapes.json``): tool
 results are written as ``tool-usage`` items ``{contextItemId,
 typeAndVersion: {contextItemType: "tool-usage", contextItemVersion: 0},
@@ -288,6 +300,7 @@ import requests
 from ..auth.base import MissingCredentialsError
 from ..auth.storage import CredentialStorage
 from .ai_fde import AiFdeService
+from .ai_fde_extension_tools import EXTENSION_TOOL_SPECS, ExtensionToolExecutor
 from .ai_fde_tool_specs import CAPTURED_INSTRUCTIONS_PREFIX, TOOL_SPECS
 from .errors import FoundryApiError, foundry_error_from_conjure
 from .evals import EvalsService
@@ -347,6 +360,13 @@ You are running inside the pfoundry CLI agent loop, not the Foundry UI.
   schedules family, ci_checks, and the logic family). Do not retry a
   fail-closed tool with the same contract; use change_mode or ask the
   operator instead.
+- Tools named pfoundry_* are CLI-provided extension tools (NOT part of
+  the captured AI FDE catalog): pfoundry_search_resources resolves
+  resource NAMES to RIDs, pfoundry_search_builds lists recent pipeline
+  runs (optionally filtered to the builds that produced a dataset),
+  pfoundry_get_dataset_transactions lists a dataset's transaction
+  history, and pfoundry_get_resource loads resource metadata by RID.
+  Prefer them for resource discovery and build observability questions.
 </cliNotes>
 """
 
@@ -844,6 +864,7 @@ class ToolRegistration:
     executor: str  # AgentLoop method name
     live: bool
     note: str = ""
+    cli_extension: bool = False  # CLI-native tool, not part of the captured 72
 
 
 _NO_SCHEDULE_ENDPOINT = (
@@ -1146,6 +1167,31 @@ CAPABILITY_TOOL_MAP: Dict[str, Tuple[str, ...]] = {
 DEFAULT_TOOL_NAMES: Tuple[str, ...] = BASE_TOOL_NAMES
 
 ALL_TOOL_NAMES: Tuple[str, ...] = tuple(sorted(TOOL_REGISTRY))
+
+# CLI-native extension tools (see ai_fde_extension_tools.py): pfoundry's
+# own synthetic tools BEYOND the captured 72, wrapping already-verified
+# services (compass title search, SDK Build.search/Build.jobs, dataset
+# transactions, resource get) because the captured catalog has no
+# name-search or build-history tool. Always exposed, never mode-gated,
+# all read-risk.
+EXTENSION_TOOL_REGISTRY: Dict[str, ToolRegistration] = {
+    name: ToolRegistration(
+        name,
+        "read",
+        "_exec_extension",
+        live=True,
+        note="CLI extension (public SDK / existing service contract)",
+        cli_extension=True,
+    )
+    for name in EXTENSION_TOOL_SPECS
+}
+
+_extension_collisions = set(EXTENSION_TOOL_SPECS) & set(TOOL_SPECS)
+if _extension_collisions:
+    raise RuntimeError(
+        f"extension tools collide with the captured catalog: "
+        f"{sorted(_extension_collisions)}"
+    )
 
 
 def estimate_tokens(text: str) -> int:
@@ -1480,6 +1526,7 @@ class AgentLoop:
         service: Optional[AiFdeService] = None,
         evals_service: Optional[EvalsService] = None,
         repository_service: Optional[Any] = None,
+        extension_executor: Optional[ExtensionToolExecutor] = None,
         llm_session: Optional[LlmSession] = None,
         internal_client: Optional[FoundryInternalClient] = None,
         progress: Optional[Callable[[str], None]] = None,
@@ -1510,6 +1557,7 @@ class AgentLoop:
         self._service = service
         self._evals_service = evals_service
         self._repository_service = repository_service
+        self._extension_executor = extension_executor
         self._llm_session = llm_session
         self._internal_client = internal_client
         self._progress = progress or (lambda _msg: None)
@@ -1549,6 +1597,11 @@ class AgentLoop:
 
             self._repository_service = RepositoryService(profile=self.profile)
         return self._repository_service
+
+    def _extensions(self) -> ExtensionToolExecutor:
+        if self._extension_executor is None:
+            self._extension_executor = ExtensionToolExecutor(profile=self.profile)
+        return self._extension_executor
 
     def _llm(self) -> LlmSession:
         if self._llm_session is None:
@@ -1593,7 +1646,9 @@ class AgentLoop:
         )
 
     def _active_tool_specs(self) -> List[Mapping[str, Any]]:
-        return [TOOL_SPECS[name] for name in sorted(self._active_tools)]
+        captured = [TOOL_SPECS[name] for name in sorted(self._active_tools)]
+        extensions = [EXTENSION_TOOL_SPECS[name] for name in EXTENSION_TOOL_REGISTRY]
+        return captured + extensions
 
     # --- approval gate ---------------------------------------------------
 
@@ -1621,11 +1676,12 @@ class AgentLoop:
 
     def _execute_tool(self, name: str, raw_arguments: str) -> Tuple[str, str, Any]:
         """Run one tool call; return (payload, state, parsed_request)."""
-        registration = TOOL_REGISTRY.get(name)
+        registration = TOOL_REGISTRY.get(name) or EXTENSION_TOOL_REGISTRY.get(name)
         if registration is None:
             return (
                 f"Unknown tool '{name}'. It is not registered in this CLI loop; "
-                f"registered tools: {', '.join(TOOL_REGISTRY)}.",
+                f"registered tools: {', '.join(TOOL_REGISTRY)}; CLI extension "
+                f"tools: {', '.join(EXTENSION_TOOL_REGISTRY)}.",
                 "completed",
                 {"_rawArguments": raw_arguments},
             )
@@ -1668,6 +1724,9 @@ class AgentLoop:
     def _exec_fail_closed(self, name: str, args: Mapping[str, Any]) -> str:
         note = TOOL_REGISTRY[name].note or "no endpoint contract was captured"
         raise UnverifiedContract(name, note)
+
+    def _exec_extension(self, name: str, args: Mapping[str, Any]) -> str:
+        return self._extensions().execute(name, args)
 
     def _object_type_id_for_rid(self, rid: str) -> str:
         if rid in self._object_type_id_cache:
@@ -3246,6 +3305,7 @@ __all__ = [
     "DEFAULT_MAX_TURNS",
     "DEFAULT_MODEL",
     "DEFAULT_TOOL_NAMES",
+    "EXTENSION_TOOL_REGISTRY",
     "GET_CONTAINERS_FOR_REPOSITORY_QUERY",
     "LATEST_FUNCTION_VERSION_QUERY",
     "LINK_TYPE_MAIN_QUERY",

@@ -165,10 +165,31 @@ pfoundry ai-fde run "INSTRUCTION" [--thread THREAD_ID] [--name NAME]
 # -f json for the structured run report {threadId, status, turns,
 # toolsCalled, toolCalls, finalText, usage, model}.
 #
-# IDENTIFYING RESOURCES: AI FDE has NO resource-search tool — not even in
-# the full 72-tool catalog (the UI identifies resources via user
-# @-mentions, which this loop cannot do). Name RIDs explicitly in the
-# instruction whenever known, or the agent will have to ask.
+# IDENTIFYING RESOURCES: the captured AI FDE catalog has NO
+# resource-search tool — not even the full 72 (the UI identifies
+# resources via user @-mentions, which this loop cannot do). The CLI
+# therefore adds pfoundry_* extension tools (below) so the agent can
+# resolve names to RIDs itself; naming RIDs explicitly in the
+# instruction is still the most reliable path.
+#
+# CLI EXTENSION TOOLS (pfoundry-native, NOT captured AI FDE tools —
+# marked cliExtension in the registry and advertised as CLI-provided in
+# the instructions): always exposed, never mode-gated, all read-risk.
+# - pfoundry_search_resources {query, limit?} — title search -> RID
+#   (wraps the same SearchService as `pfoundry search`).
+# - pfoundry_search_builds {datasetRid?, branch?, createdAfter?, limit?}
+#   — recent builds newest-first (wraps OrchestrationService around SDK
+#   Build.search/Build.jobs); datasetRid filtering is client-side over
+#   job outputs (the SDK filter vocabulary has no dataset member) and
+#   the result reports how many builds were scanned.
+# - pfoundry_get_dataset_transactions {datasetRid, branch?, limit?} —
+#   dataset transaction history (wraps DatasetService.get_transactions /
+#   get_branch_transactions).
+# - pfoundry_get_resource {rid} — Compass resource metadata (wraps
+#   ResourceService.get_resource).
+# Extension calls flow through the same write-back/report machinery as
+# captured tools, and executor errors come back as tool output (the loop
+# never crashes on a failing extension call).
 #
 # Tool exposure: the full captured 72-tool catalog is registered verbatim.
 # By default the model sees the captured 8-tool base set (no mode
