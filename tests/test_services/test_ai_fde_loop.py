@@ -306,6 +306,7 @@ class TestAgentLoopBasics:
             "pfoundry_search_builds",
             "pfoundry_get_dataset_transactions",
             "pfoundry_get_resource",
+            "pfoundry_search_object_types",
         ]
 
     def test_unknown_tool_name_rejected(self):
@@ -950,11 +951,11 @@ class TestStateTools:
         loop.run("switch mode")
         # The first request exposes the captured 8-tool base set...
         first_tools = llm.complete.call_args_list[0].kwargs["tools"]
-        assert len(first_tools) == 12  # 8 captured base + 4 CLI extensions
+        assert len(first_tools) == 13  # 8 captured base + 5 CLI extensions
         # ...and after change_mode the next request exposes the captured
         # 51-tool functionsEditing set.
         second_tools = llm.complete.call_args_list[1].kwargs["tools"]
-        assert len(second_tools) == 55  # 51 captured + 4 CLI extensions
+        assert len(second_tools) == 56  # 51 captured + 5 CLI extensions
         names = {t["function"]["name"] for t in second_tools}
         assert set(MODE_TOOL_SETS["functionsEditing"]) <= names
         assert set(EXTENSION_TOOL_REGISTRY) <= names
@@ -1319,7 +1320,7 @@ class TestAllToolsExposure:
         loop, _, llm = make_loop([_text_output("done")], all_tools=True)
         loop.run("hello")
         tools = llm.complete.call_args.kwargs["tools"]
-        assert len(tools) == 76  # 72 captured + 4 CLI extensions
+        assert len(tools) == 77  # 72 captured + 5 CLI extensions
         names = {t["function"]["name"] for t in tools}
         assert set(ALL_TOOL_NAMES) <= names
         assert set(EXTENSION_TOOL_REGISTRY) <= names
@@ -1328,7 +1329,7 @@ class TestAllToolsExposure:
         loop, _, llm = make_loop([_text_output("done")])
         loop.run("hello")
         tools = llm.complete.call_args.kwargs["tools"]
-        assert len(tools) == 12  # 8 captured base + 4 CLI extensions
+        assert len(tools) == 13  # 8 captured base + 5 CLI extensions
 
     def test_fail_closed_result_is_fed_back_to_model(self):
         loop, _, llm = make_loop(
@@ -1949,7 +1950,7 @@ class TestExtensionToolRegistration:
         from foundry_cli.services.ai_fde_extension_tools import EXTENSION_TOOL_SPECS
 
         assert len(TOOL_REGISTRY) == 72
-        assert len(EXTENSION_TOOL_REGISTRY) == 4
+        assert len(EXTENSION_TOOL_REGISTRY) == 5
         assert not (set(TOOL_REGISTRY) & set(EXTENSION_TOOL_SPECS))
         for registration in EXTENSION_TOOL_REGISTRY.values():
             assert registration.cli_extension is True
@@ -1963,12 +1964,13 @@ class TestExtensionToolRegistration:
         loop, _, llm = make_loop([_text_output("done")])
         loop.run("hello")
         names = {t["function"]["name"] for t in llm.complete.call_args.kwargs["tools"]}
-        assert len(names) == 12
+        assert len(names) == 13
         assert {
             "pfoundry_search_resources",
             "pfoundry_search_builds",
             "pfoundry_get_dataset_transactions",
             "pfoundry_get_resource",
+            "pfoundry_search_object_types",
         } <= names
 
     def test_extensions_exposed_with_tool_subset_and_all_tools(self):
@@ -1977,14 +1979,14 @@ class TestExtensionToolRegistration:
         )
         loop.run("hello")
         names = {t["function"]["name"] for t in llm.complete.call_args.kwargs["tools"]}
-        assert len(names) == 5  # 1 captured + 4 extensions
+        assert len(names) == 6  # 1 captured + 5 extensions
 
         loop2, _, llm2 = make_loop([_text_output("done")], all_tools=True)
         loop2.run("hello")
         names2 = {
             t["function"]["name"] for t in llm2.complete.call_args.kwargs["tools"]
         }
-        assert len(names2) == 76  # 72 captured + 4 extensions
+        assert len(names2) == 77  # 72 captured + 5 extensions
 
     def test_extension_calls_count_in_report(self):
         search = Mock()
@@ -2175,5 +2177,170 @@ class TestExtensionExecutors:
         )
         assert (
             "positive integer"
+            in (output_item["item"]["functionToolCallOutput"]["output"])
+        )
+
+
+class TestSearchObjectTypesExecutor:
+    ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000030"
+    OTHER_ONTOLOGY_RID = (
+        "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000031"
+    )
+
+    def _object_types(self):
+        return [
+            {
+                "api_name": "InventoryDiscrepancyV2",
+                "display_name": "[OTC] OTC Pipeline",
+                "description": "One row per discrepancy. " * 30,
+                "primary_key": "discrepancyId",
+            },
+            {
+                "api_name": "ResolutionTree",
+                "display_name": "[OTC] Resolution Tree",
+                "description": "Decision tree nodes.",
+                "primary_key": "nodeId",
+            },
+        ]
+
+    def test_substring_matches_api_name_and_display_name(self):
+        object_types = Mock()
+        object_types.list_object_types.return_value = self._object_types()
+        executor = ExtensionToolExecutor(
+            profile="test", object_type_service=object_types
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "pipeline", "ontologyRid": self.ONTOLOGY_RID, "limit": None},
+            )
+        )
+        object_types.list_object_types.assert_called_once_with(self.ONTOLOGY_RID)
+        assert payload["hit_count"] == 1
+        hit = payload["object_types"][0]
+        assert hit["apiName"] == "InventoryDiscrepancyV2"  # matched display_name
+        assert hit["displayName"] == "[OTC] OTC Pipeline"
+        assert hit["primaryKey"] == "discrepancyId"
+        assert hit["ontologyRid"] == self.ONTOLOGY_RID
+        assert len(hit["description"]) <= 200  # truncated
+
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {
+                    "query": "resolutiontree",
+                    "ontologyRid": self.ONTOLOGY_RID,
+                    "limit": None,
+                },
+            )
+        )
+        assert payload["hit_count"] == 1  # matched api_name, case-insensitive
+        assert payload["object_types"][0]["apiName"] == "ResolutionTree"
+
+    def test_all_ontologies_enumeration_tags_hits(self):
+        ontology = Mock()
+        ontology.list_ontologies.return_value = [
+            {"rid": self.ONTOLOGY_RID},
+            {"rid": self.OTHER_ONTOLOGY_RID},
+        ]
+        object_types = Mock()
+        object_types.list_object_types.side_effect = [
+            self._object_types(),
+            [
+                {
+                    "api_name": "PipelineRun",
+                    "display_name": "Pipeline Run",
+                    "description": None,
+                    "primary_key": "runId",
+                }
+            ],
+        ]
+        executor = ExtensionToolExecutor(
+            profile="test",
+            ontology_service=ontology,
+            object_type_service=object_types,
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "pipeline", "ontologyRid": None, "limit": None},
+            )
+        )
+        assert payload["ontologies_searched"] == 2
+        assert payload["hit_count"] == 2
+        assert {h["ontologyRid"] for h in payload["object_types"]} == {
+            self.ONTOLOGY_RID,
+            self.OTHER_ONTOLOGY_RID,
+        }
+        assert payload["errors"] == []
+
+    def test_per_ontology_failure_is_recorded_not_raised(self):
+        ontology = Mock()
+        ontology.list_ontologies.return_value = [
+            {"rid": self.ONTOLOGY_RID},
+            {"rid": self.OTHER_ONTOLOGY_RID},
+        ]
+        object_types = Mock()
+        object_types.list_object_types.side_effect = [
+            RuntimeError("permission denied"),
+            self._object_types(),
+        ]
+        executor = ExtensionToolExecutor(
+            profile="test",
+            ontology_service=ontology,
+            object_type_service=object_types,
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "pipeline", "ontologyRid": None, "limit": None},
+            )
+        )
+        assert payload["hit_count"] == 1
+        assert payload["errors"] == [
+            {"ontologyRid": self.ONTOLOGY_RID, "error": "permission denied"}
+        ]
+
+    def test_limit_applied_client_side(self):
+        object_types = Mock()
+        object_types.list_object_types.return_value = self._object_types()
+        executor = ExtensionToolExecutor(
+            profile="test", object_type_service=object_types
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "otc", "ontologyRid": self.ONTOLOGY_RID, "limit": 1},
+            )
+        )
+        assert payload["hit_count"] == 2
+        assert payload["returned_count"] == 1
+        assert len(payload["object_types"]) == 1
+
+    def test_error_comes_back_as_tool_output(self):
+        ontology = Mock()
+        ontology.list_ontologies.side_effect = RuntimeError("ontology list blew up")
+        extensions = ExtensionToolExecutor(profile="test", ontology_service=ontology)
+        loop, _, llm = make_loop(
+            [
+                _call_output(
+                    "pfoundry_search_object_types",
+                    json.dumps(
+                        {"query": "pipeline", "ontologyRid": None, "limit": None}
+                    ),
+                ),
+                _text_output("recovered"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("find the object type")
+        assert report["status"] == "completed"
+        assert report["toolCalls"][0]["name"] == "pfoundry_search_object_types"
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        assert (
+            "ontology list blew up"
             in (output_item["item"]["functionToolCallOutput"]["output"])
         )

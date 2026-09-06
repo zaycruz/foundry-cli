@@ -176,7 +176,13 @@ pfoundry ai-fde run "INSTRUCTION" [--thread THREAD_ID] [--name NAME]
 # marked cliExtension in the registry and advertised as CLI-provided in
 # the instructions): always exposed, never mode-gated, all read-risk.
 # - pfoundry_search_resources {query, limit?} — title search -> RID
-#   (wraps the same SearchService as `pfoundry search`).
+#   (wraps the same SearchService as `pfoundry search`). NOTE: ontology
+#   object types are NOT Compass resources; use the next tool for them.
+# - pfoundry_search_object_types {query, ontologyRid?, limit?} — find
+#   object types by case-insensitive substring of api_name/display_name
+#   (wraps OntologyService.list_ontologies +
+#   ObjectTypeService.list_object_types); without ontologyRid every
+#   visible ontology is searched and hits are tagged with it.
 # - pfoundry_search_builds {datasetRid?, branch?, createdAfter?, limit?}
 #   — recent builds newest-first (wraps OrchestrationService around SDK
 #   Build.search/Build.jobs); datasetRid filtering is client-side over

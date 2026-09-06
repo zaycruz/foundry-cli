@@ -362,7 +362,9 @@ You are running inside the pfoundry CLI agent loop, not the Foundry UI.
   operator instead.
 - Tools named pfoundry_* are CLI-provided extension tools (NOT part of
   the captured AI FDE catalog): pfoundry_search_resources resolves
-  resource NAMES to RIDs, pfoundry_search_builds lists recent pipeline
+  resource NAMES to RIDs, pfoundry_search_object_types finds ontology
+  object types by name (object types are not Compass resources),
+  pfoundry_search_builds lists recent pipeline
   runs (optionally filtered to the builds that produced a dataset),
   pfoundry_get_dataset_transactions lists a dataset's transaction
   history, and pfoundry_get_resource loads resource metadata by RID.

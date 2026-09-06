@@ -30,6 +30,14 @@ contracts here:
   the SDK-returned order.
 - ``pfoundry_get_resource`` wraps ``ResourceService.get_resource`` (SDK
   ``filesystem.Resource.get``).
+- ``pfoundry_search_object_types`` wraps
+  ``OntologyService.list_ontologies`` (SDK ``Ontology.list``) and
+  ``ObjectTypeService.list_object_types`` (SDK
+  ``Ontology.ObjectType.list``) — ontology object types are NOT Compass
+  resources, so title search cannot see them. Both list wrappers read a
+  single SDK page (no page-token handling exists in them), and the
+  result says so. Hits match the query as a case-insensitive substring
+  of api_name OR display_name.
 
 All extension tools are read-risk and always exposed (not mode-gated).
 Specs are hand-written by us (the captured catalog is verbatim-only).
@@ -41,6 +49,7 @@ import json
 from typing import Any, Dict, List, Mapping, Optional
 
 from .dataset import DatasetService
+from .ontology import ObjectTypeService, OntologyService
 from .orchestration import OrchestrationService
 from .resource import ResourceService
 from .search import SearchService
@@ -189,6 +198,50 @@ EXTENSION_TOOL_SPECS: Dict[str, Dict[str, Any]] = {
         },
         "type": "function",
     },
+    "pfoundry_search_object_types": {
+        "function": {
+            "name": "pfoundry_search_object_types",
+            "description": (
+                "CLI extension (not a captured AI FDE tool): find ontology "
+                "object types by name. Object types are NOT Compass "
+                "resources, so pfoundry_search_resources cannot see them — "
+                "use this whenever the user names an object type (e.g. 'the "
+                "Order Pipeline object type') to resolve its apiName, "
+                "displayName, and ontology. Matches the query as a "
+                "case-insensitive substring of api_name OR display_name."
+            ),
+            "parameters": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Name text to match against object type api_name "
+                            "and display_name (case-insensitive substring)."
+                        ),
+                    },
+                    "ontologyRid": {
+                        "anyOf": [{"type": "string"}, {"type": "null"}],
+                        "description": (
+                            "Restrict the search to one ontology "
+                            "(ri.ontology.main.ontology.<uuid>). When null, "
+                            "every ontology visible to the user is searched "
+                            "and each hit is tagged with its ontologyRid."
+                        ),
+                    },
+                    "limit": {
+                        "anyOf": [{"type": "integer"}, {"type": "null"}],
+                        "description": "Max hits to return (default 25).",
+                    },
+                },
+                "required": ["query", "ontologyRid", "limit"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+        "type": "function",
+    },
 }
 
 EXTENSION_TOOL_NAMES: tuple[str, ...] = tuple(EXTENSION_TOOL_SPECS)
@@ -213,12 +266,16 @@ class ExtensionToolExecutor:
         orchestration_service: Optional[Any] = None,
         dataset_service: Optional[Any] = None,
         resource_service: Optional[Any] = None,
+        ontology_service: Optional[Any] = None,
+        object_type_service: Optional[Any] = None,
     ) -> None:
         self.profile = profile
         self._search_service = search_service
         self._orchestration_service = orchestration_service
         self._dataset_service = dataset_service
         self._resource_service = resource_service
+        self._ontology_service = ontology_service
+        self._object_type_service = object_type_service
 
     def _search(self) -> Any:
         if self._search_service is None:
@@ -239,6 +296,16 @@ class ExtensionToolExecutor:
         if self._resource_service is None:
             self._resource_service = ResourceService(profile=self.profile)
         return self._resource_service
+
+    def _ontology(self) -> Any:
+        if self._ontology_service is None:
+            self._ontology_service = OntologyService(profile=self.profile)
+        return self._ontology_service
+
+    def _object_types(self) -> Any:
+        if self._object_type_service is None:
+            self._object_type_service = ObjectTypeService(profile=self.profile)
+        return self._object_type_service
 
     def execute(self, name: str, args: Mapping[str, Any]) -> str:
         """Run one extension tool; return the tool output payload."""
@@ -379,6 +446,78 @@ class ExtensionToolExecutor:
             raise ValueError("pfoundry_get_resource requires a string 'rid'")
         payload = self._resource().get_resource(rid)
         return json.dumps(payload, indent=1, default=str)
+
+    def _exec_search_object_types(self, args: Mapping[str, Any]) -> str:
+        query = args.get("query")
+        if not isinstance(query, str) or not query:
+            raise ValueError("pfoundry_search_object_types requires a string 'query'")
+        limit = self._int_arg(args, "limit", _DEFAULT_SEARCH_LIMIT)
+        ontology_rid = args.get("ontologyRid")
+        errors: List[Dict[str, Any]] = []
+        if isinstance(ontology_rid, str) and ontology_rid:
+            hits = self._object_type_hits(ontology_rid, query, errors)
+            ontologies_searched = 1
+        else:
+            ontologies = self._ontology().list_ontologies()
+            hits = []
+            ontologies_searched = len(ontologies)
+            for ontology in ontologies:
+                rid = ontology.get("rid") if isinstance(ontology, Mapping) else None
+                if not isinstance(rid, str) or not rid:
+                    continue
+                hits.extend(self._object_type_hits(rid, query, errors))
+        return json.dumps(
+            {
+                "query": query,
+                "ontologies_searched": ontologies_searched,
+                "hit_count": len(hits),
+                "returned_count": min(limit, len(hits)),
+                "page_note": (
+                    "the ontology/object-type list wrappers read a single SDK "
+                    "page each; hits beyond that page are not visible"
+                ),
+                "object_types": hits[:limit],
+                "errors": errors,
+            },
+            indent=1,
+            default=str,
+        )
+
+    def _object_type_hits(
+        self, ontology_rid: str, query: str, errors: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Filter one ontology's object types by case-insensitive substring."""
+        try:
+            object_types = self._object_types().list_object_types(ontology_rid)
+        except Exception as e:
+            errors.append({"ontologyRid": ontology_rid, "error": str(e)})
+            return []
+        needle = query.lower()
+        hits: List[Dict[str, Any]] = []
+        for object_type in object_types:
+            if not isinstance(object_type, Mapping):
+                continue
+            api_name = object_type.get("api_name")
+            display_name = object_type.get("display_name")
+            if (
+                needle not in str(api_name or "").lower()
+                and needle not in str(display_name or "").lower()
+            ):
+                continue
+            description = object_type.get("description")
+            hits.append(
+                {
+                    "apiName": api_name,
+                    "displayName": display_name,
+                    "description": (
+                        str(description)[:200] if description is not None else None
+                    ),
+                    "primaryKey": object_type.get("primary_key"),
+                    "ontologyRid": ontology_rid,
+                    "rid": object_type.get("rid"),
+                }
+            )
+        return hits
 
 
 def _dataset_outputs(jobs_payload: Mapping[str, Any], dataset_rid: str) -> List[Any]:

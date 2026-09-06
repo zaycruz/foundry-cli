@@ -199,7 +199,7 @@ Live runs proved the captured 72-tool catalog cannot answer "show me the
 most recent runs of the <name> pipeline": the catalog has no name-search
 tool (Palantir's design relies on UI @-mentions) and no
 build-history/dataset-transaction tool at all. The loop therefore
-registers four CLI-native extension tools (`services/
+registers five CLI-native extension tools (`services/
 ai_fde_extension_tools.py`; `pfoundry_`-prefixed, `cliExtension: true`,
 always exposed, all read-risk) that wrap already-verified pfoundry
 surfaces — public SDK / existing service contracts, NOT captured AI FDE
@@ -207,6 +207,13 @@ contracts:
 
 - `pfoundry_search_resources` → `SearchService.search` (the pinned
   `SearchTitles` GraphQL query behind `pfoundry search`).
+- `pfoundry_search_object_types` → `OntologyService.list_ontologies` +
+  `ObjectTypeService.list_object_types` (SDK `Ontology.list` /
+  `Ontology.ObjectType.list`). Object types are NOT Compass resources,
+  so title search cannot see them; matching is a case-insensitive
+  substring of api_name/display_name, all visible ontologies are
+  searched when `ontologyRid` is omitted, and per-ontology failures are
+  recorded in the result instead of raised.
 - `pfoundry_search_builds` → `OrchestrationService.search_builds` /
   `get_build_jobs` (SDK `Build.search` / `Build.jobs`). SDK constraints:
   `where` is required (no-filter searches use `gte STARTED_TIME epoch`)
