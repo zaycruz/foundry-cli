@@ -159,6 +159,7 @@ from uuid import uuid4
 
 import requests
 
+from ..auth.base import MissingCredentialsError
 from ..auth.storage import CredentialStorage
 from .ai_fde import AiFdeService
 from .ai_fde_tool_specs import CAPTURED_INSTRUCTIONS_PREFIX, TOOL_SPECS
@@ -615,6 +616,12 @@ class LlmSession:
         credentials = self._credentials()
         base_url = FoundryInternalClient._base_url(credentials.get("host", ""))
         token = credentials.get("token")
+        if not isinstance(token, str) or not token:
+            raise MissingCredentialsError(
+                "The active profile has no bearer token; the AI FDE LLM call "
+                "needs token auth (the attribution user is the bearer token "
+                "itself)."
+            )
         body = self.build_request_body(
             thread_id=thread_id,
             token=token,
@@ -682,11 +689,10 @@ class LlmSession:
                 "Unverified streamCompletionChunk completed shape: expected "
                 f"'output' to be a list, got {str(completed)[:200]!r}."
             )
+        usage = completed.get("usage")
         return CompletedResponse(
             output=[o for o in output if isinstance(o, Mapping)],
-            usage=completed.get("usage")
-            if isinstance(completed.get("usage"), Mapping)
-            else {},
+            usage=usage if isinstance(usage, Mapping) else {},
             response_id=completed.get("id"),
             model=completed.get("model"),
             events=events,
@@ -1319,9 +1325,8 @@ class AgentLoop:
     ) -> Dict[str, Any]:
         base_type = static_value.get("baseType")
         value = static_value.get("value")
-        parameter_type = (
-            meta.get("type") if isinstance(meta.get("type"), Mapping) else {}
-        )
+        meta_type = meta.get("type")
+        parameter_type = meta_type if isinstance(meta_type, Mapping) else {}
         typename = parameter_type.get("__typename")
         object_type = parameter_type.get("objectType")
         if base_type != "object" or not isinstance(object_type, Mapping):
@@ -1355,11 +1360,8 @@ class AgentLoop:
     def _object_locator(
         self, tool: str, object_type: Mapping[str, Any], primary_key_value: Any
     ) -> Dict[str, Any]:
-        latest = (
-            object_type.get("latest")
-            if isinstance(object_type.get("latest"), Mapping)
-            else {}
-        )
+        latest_raw = object_type.get("latest")
+        latest = latest_raw if isinstance(latest_raw, Mapping) else {}
         pk_properties = latest.get("primaryKeyPropertiesV2")
         if not isinstance(pk_properties, list) or len(pk_properties) != 1:
             raise UnverifiedContract(

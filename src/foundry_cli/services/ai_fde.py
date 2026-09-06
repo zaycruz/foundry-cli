@@ -511,7 +511,7 @@ class AiFdeService(BaseService):
         thread = data.get("aiFdeThreadV2")
         page = thread.get("contextItemsV2") if isinstance(thread, Mapping) else None
         items = page.get("contextItems") if isinstance(page, Mapping) else None
-        if not isinstance(items, list):
+        if not isinstance(page, Mapping) or not isinstance(items, list):
             raise AiFdeShapeError(
                 "Unverified ai-fde thread items response shape: expected "
                 "'aiFdeThreadV2.contextItemsV2.contextItems' to be a list, "
@@ -705,7 +705,11 @@ class AiFdeService(BaseService):
             if isinstance(updated_metadata, Mapping)
             else None
         )
-        if not isinstance(thread_version, str) or not thread_version:
+        if (
+            not isinstance(updated_metadata, Mapping)
+            or not isinstance(thread_version, str)
+            or not thread_version
+        ):
             raise AiFdeShapeError(
                 "Unverified ai-fde update response shape: expected "
                 f"'metadata.threadVersion', got {response!r}."
