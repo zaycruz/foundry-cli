@@ -5,14 +5,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pltr.services.copy import CopyService
+from foundry_cli.services.copy import CopyService
 
 
 def _setup_service_mocks():
     """Patch dependent services and return their mocks."""
-    dataset_patch = patch("pltr.services.copy.DatasetService")
-    folder_patch = patch("pltr.services.copy.FolderService")
-    resource_patch = patch("pltr.services.copy.ResourceService")
+    dataset_patch = patch("foundry_cli.services.copy.DatasetService")
+    folder_patch = patch("foundry_cli.services.copy.FolderService")
+    resource_patch = patch("foundry_cli.services.copy.ResourceService")
     return dataset_patch, folder_patch, resource_patch
 
 

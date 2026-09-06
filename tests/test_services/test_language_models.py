@@ -4,7 +4,7 @@ import json
 import pytest
 import requests
 from unittest.mock import Mock, patch
-from pltr.services.language_models import LanguageModelsService
+from foundry_cli.services.language_models import LanguageModelsService
 
 
 class TestLanguageModelsService:
@@ -22,7 +22,7 @@ class TestLanguageModelsService:
     @pytest.fixture
     def service(self, mock_client):
         """Create LanguageModelsService with mocked client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = mock_client
             service = LanguageModelsService()
             return service

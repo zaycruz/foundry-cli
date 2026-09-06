@@ -7,8 +7,8 @@ import json
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.commands.orchestration import app
-from pltr.auth.base import ProfileNotFoundError, MissingCredentialsError
+from foundry_cli.commands.orchestration import app
+from foundry_cli.auth.base import ProfileNotFoundError, MissingCredentialsError
 
 runner = CliRunner()
 
@@ -17,7 +17,7 @@ runner = CliRunner()
 def mock_orchestration_service():
     """Mock OrchestrationService for command tests."""
     with patch(
-        "pltr.commands.orchestration.OrchestrationService"
+        "foundry_cli.commands.orchestration.OrchestrationService"
     ) as mock_service_class:
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -195,7 +195,7 @@ def test_get_build_jobs_empty(mock_orchestration_service):
 
 def test_search_builds_success(mock_orchestration_service, sample_build):
     """Test successful build search."""
-    from src.pltr.utils.pagination import PaginationResult, PaginationMetadata
+    from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
 
     pagination_result = PaginationResult(
         data=[sample_build],

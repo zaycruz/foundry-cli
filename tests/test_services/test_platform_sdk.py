@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pltr.services.platform_sdk import PlatformSdkService
+from foundry_cli.services.platform_sdk import PlatformSdkService
 
 
 CLIENT_PY = """

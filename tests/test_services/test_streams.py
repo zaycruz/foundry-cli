@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pltr.services.streams import StreamsService
+from foundry_cli.services.streams import StreamsService
 
 
 class TestStreamsService:
@@ -20,7 +20,7 @@ class TestStreamsService:
     @pytest.fixture
     def service(self, mock_client):
         """Create StreamsService with mocked client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = mock_client
             service = StreamsService()
             return service

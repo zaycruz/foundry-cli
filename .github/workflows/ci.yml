@@ -44,12 +44,12 @@ jobs:
 
     - name: Run type checking with mypy
       run: |
-        uv run mypy src/pltr
+        uv run mypy src/foundry_cli
 
     - name: Run tests with coverage
       run: |
         # Run all tests including integration tests (import issues fixed)
-        uv run pytest tests/ --cov=pltr --cov-report=xml --cov-report=term
+        uv run pytest tests/ --cov=foundry_cli --cov-report=xml --cov-report=term
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -91,6 +91,7 @@ jobs:
       run: |
         uv export --locked --format requirements-txt --no-dev --no-hashes --no-emit-project --output-file "${RUNNER_TEMP}/runtime-requirements.txt"
         uv run pip-audit --disable-pip --no-deps --strict --format json --progress-spinner off --requirement "${RUNNER_TEMP}/runtime-requirements.txt"
+
 
   ci-ok:
     # Single required status check for branch protection. Keeps the ruleset

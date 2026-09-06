@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestStreamsCommands:
@@ -17,7 +17,7 @@ class TestStreamsCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock StreamsService."""
-        with patch("pltr.commands.streams.StreamsService") as MockService:
+        with patch("foundry_cli.commands.streams.StreamsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc
@@ -577,3 +577,45 @@ class TestStreamsCommands:
         # Assert
         assert result.exit_code == 1
         assert "Error:" in result.output
+
+
+class TestSchemaNormalizer:
+    """CLI-friendly fieldSchemaList must convert to the SDK StreamSchema shape."""
+
+    def _normalize(self, d):
+        from foundry_cli.commands.streams import _normalize_stream_schema
+
+        return _normalize_stream_schema(d)
+
+    def test_converts_legacy_format(self):
+        result = self._normalize(
+            {"fieldSchemaList": [{"name": "value", "type": "STRING"}]}
+        )
+        assert result == {
+            "fields": [
+                {
+                    "name": "value",
+                    "schema": {
+                        "nullable": True,
+                        "dataType": {"type": "string"},
+                    },
+                }
+            ]
+        }
+
+    def test_passes_through_sdk_shape(self):
+        sdk = {"fields": [{"name": "x", "schema": {"nullable": False}}]}
+        assert self._normalize(sdk) == sdk
+
+    def test_maps_types(self):
+        result = self._normalize(
+            {
+                "fieldSchemaList": [
+                    {"name": "a", "type": "INTEGER"},
+                    {"name": "b", "type": "BOOLEAN"},
+                    {"name": "c", "type": "TIMESTAMP"},
+                ]
+            }
+        )
+        types = [f["schema"]["dataType"]["type"] for f in result["fields"]]
+        assert types == ["integer", "boolean", "timestamp"]

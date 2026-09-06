@@ -6,8 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from pltr.services.foundry_internal_client import GraphQLResult
-from pltr.services.search import (
+from foundry_cli.services.foundry_internal_client import GraphQLResult
+from foundry_cli.services.search import (
     FILTER_COVERAGE_NOTE,
     RESOURCE_SEARCH_SORT,
     SEARCH_RESOURCES_QUERY,

@@ -5,7 +5,7 @@ Tests for the read-only Global Branching (branch-service) services.
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.global_branching import (
+from foundry_cli.services.global_branching import (
     GlobalBranchNotFoundError,
     GlobalBranchService,
     GlobalBranchShapeError,
@@ -21,7 +21,7 @@ NAMESPACE_RID = "ri.compass.main.folder.00000000-0000-0000-0000-000000000005"
 class TestGlobalBranchService:
     """Test cases for read-only Global Branch loads."""
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_success(self, mock_client_class):
         """Test loading a branch returns the raw payload."""
         mock_client = Mock()
@@ -38,7 +38,7 @@ class TestGlobalBranchService:
             "PUT", f"branch-service/api/branch/load/{BRANCH_RID}", json_body={}
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_not_found_error_name(self, mock_client_class):
         """Test that a Branch:BranchNotFound error maps to not-found."""
         mock_client = Mock()
@@ -53,7 +53,7 @@ class TestGlobalBranchService:
         with pytest.raises(GlobalBranchNotFoundError, match="No branch found"):
             service.get_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_permission_denied_is_loud(self, mock_client_class):
         """Test that the verified 403 contract surfaces as a loud error."""
         mock_client = Mock()
@@ -68,7 +68,7 @@ class TestGlobalBranchService:
         with pytest.raises(RuntimeError, match="HTTP 403"):
             service.get_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_unverified_shape(self, mock_client_class):
         """Test that a non-object success payload fails loudly."""
         mock_client = Mock()
@@ -79,7 +79,7 @@ class TestGlobalBranchService:
         with pytest.raises(GlobalBranchShapeError, match="Unverified"):
             service.get_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_empty_object_fails_loudly(self, mock_client_class):
         """Test that an empty object is not rendered as a result."""
         mock_client = Mock()
@@ -90,7 +90,7 @@ class TestGlobalBranchService:
         with pytest.raises(GlobalBranchShapeError, match="Unverified"):
             service.get_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_route_not_mounted(self, mock_client_class):
         """Test a clear error when branch-service is not mounted."""
         mock_client = Mock()
@@ -105,7 +105,7 @@ class TestGlobalBranchService:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.get_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_branch_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -120,7 +120,7 @@ class TestGlobalBranchService:
 class TestGlobalProposalService:
     """Test cases for read-only Global Proposal loads."""
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_proposal_success(self, mock_client_class):
         """Test loading a proposal returns the raw payload."""
         mock_client = Mock()
@@ -138,7 +138,7 @@ class TestGlobalProposalService:
             json_body={},
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_proposal_not_found_error_name(self, mock_client_class):
         """Test that a Branch:ProposalNotFound error maps to not-found."""
         mock_client = Mock()
@@ -153,7 +153,7 @@ class TestGlobalProposalService:
         with pytest.raises(GlobalBranchNotFoundError, match="No proposal found"):
             service.get_proposal(PROPOSAL_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_get_proposal_unverified_shape(self, mock_client_class):
         """Test that a non-object success payload fails loudly."""
         mock_client = Mock()
@@ -166,11 +166,11 @@ class TestGlobalProposalService:
 
     def test_without_profile_raises_before_network(self):
         """Test that a missing profile fails before any network call."""
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         service = GlobalProposalService()
         with patch(
-            "pltr.config.profiles.ProfileManager.get_active_profile",
+            "foundry_cli.config.profiles.ProfileManager.get_active_profile",
             return_value=None,
         ):
             with pytest.raises(ProfileNotFoundError, match="No profile specified"):
@@ -214,7 +214,7 @@ class TestGlobalBranchWriteService:
             "ri.foundry.main.dataset.bbb",
         ]
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_resolve_compass_namespace(self, mock_client_class):
         """Test namespace resolution reads ontologies[rid].compassNamespaceRid."""
         mock_client = Mock()
@@ -235,7 +235,7 @@ class TestGlobalBranchWriteService:
             json_body={"externalMappingConfigurationFilters": []},
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_resolve_compass_namespace_missing_entry(self, mock_client_class):
         """Test a missing ontology entry fails loudly."""
         mock_client = Mock()
@@ -246,7 +246,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(GlobalBranchShapeError, match="compassNamespaceRid"):
             service.resolve_compass_namespace(ONTOLOGY_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_resolve_compass_namespace_missing_field(self, mock_client_class):
         """Test an entry without compassNamespaceRid fails loudly."""
         mock_client = Mock()
@@ -261,7 +261,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(GlobalBranchShapeError, match="compassNamespaceRid"):
             service.resolve_compass_namespace(ONTOLOGY_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_branch_success(self, mock_client_class):
         """Test create resolves the namespace, posts the verified body, parses the RID."""
         mock_client = Mock()
@@ -302,7 +302,7 @@ class TestGlobalBranchWriteService:
             },
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_branch_with_resources(self, mock_client_class):
         """Test create posts plain-string resourcesToAdd entries."""
         mock_client = Mock()
@@ -339,7 +339,7 @@ class TestGlobalBranchWriteService:
             },
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_branch_wrong_rid_prefix_fails_loudly(self, mock_client_class):
         """Test a non ri.branch..branch. create RID is a shape error."""
         mock_client = Mock()
@@ -366,7 +366,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(GlobalBranchShapeError, match="ri.branch..branch."):
             service.create_branch("my-branch", "desc", ONTOLOGY_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_branch_missing_record_fails_loudly(self, mock_client_class):
         """Test a create response without branchRecord is a shape error."""
         mock_client = Mock()
@@ -384,7 +384,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(GlobalBranchShapeError, match="branchRecord.branchRid"):
             service.create_branch("my-branch", "desc", ONTOLOGY_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_branch_http_error_is_loud(self, mock_client_class):
         """Test a non-2xx create surfaces the status and error name."""
         mock_client = Mock()
@@ -402,7 +402,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(RuntimeError, match="HTTP 400"):
             service.create_branch("my-branch", "desc", ONTOLOGY_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_success(self, mock_client_class):
         """Test closing a branch returns the raw payload."""
         mock_client = Mock()
@@ -418,7 +418,7 @@ class TestGlobalBranchWriteService:
             "PUT", f"branch-service/api/branch/close/{BRANCH_RID}", json_body={}
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_empty_2xx_is_acknowledgment(self, mock_client_class):
         """Test an empty 2xx body maps to an explicit acknowledgment."""
         mock_client = Mock()
@@ -434,7 +434,7 @@ class TestGlobalBranchWriteService:
             "response_empty": True,
         }
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_permission_denied_is_loud(self, mock_client_class):
         """Test that the verified 403 error contract surfaces loudly."""
         mock_client = Mock()
@@ -449,7 +449,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(RuntimeError, match="HTTP 403"):
             service.close_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_not_found(self, mock_client_class):
         """Test that Branch:BranchNotFound maps to not-found."""
         mock_client = Mock()
@@ -464,7 +464,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(GlobalBranchNotFoundError, match="No branch found"):
             service.close_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_non_object_2xx_fails_loudly(self, mock_client_class):
         """Test that a non-object success payload is a shape error."""
         mock_client = Mock()
@@ -475,7 +475,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(GlobalBranchShapeError, match="Unverified"):
             service.close_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_route_not_mounted(self, mock_client_class):
         """Test a clear error when branch-service is not mounted."""
         mock_client = Mock()
@@ -490,7 +490,7 @@ class TestGlobalBranchWriteService:
         with pytest.raises(RuntimeError, match="not mounted"):
             service.close_branch(BRANCH_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_branch_transport_error_wrapped(self, mock_client_class):
         """Test that transport failures are wrapped."""
         mock_client = Mock()
@@ -580,7 +580,7 @@ class TestGlobalProposalWriteService:
                 BRANCH_RID, "my-proposal", "desc", merge_to="bogus"
             )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_proposal_success(self, mock_client_class):
         """Test create posts the verified union body and parses the RID."""
         mock_client = Mock()
@@ -611,7 +611,7 @@ class TestGlobalProposalWriteService:
             },
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_proposal_merge_to_branch_rid(self, mock_client_class):
         """Test create posts the branchRid union arm for a branch target."""
         mock_client = Mock()
@@ -645,7 +645,7 @@ class TestGlobalProposalWriteService:
             },
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_proposal_wrong_rid_prefix_fails_loudly(self, mock_client_class):
         """Test a non ri.branch..proposal. create RID is a shape error."""
         mock_client = Mock()
@@ -660,7 +660,7 @@ class TestGlobalProposalWriteService:
         with pytest.raises(GlobalBranchShapeError, match="ri.branch..proposal."):
             service.create_proposal(BRANCH_RID, "my-proposal", "desc")
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_proposal_missing_record_fails_loudly(self, mock_client_class):
         """Test a create response without proposal is a shape error."""
         mock_client = Mock()
@@ -671,7 +671,7 @@ class TestGlobalProposalWriteService:
         with pytest.raises(GlobalBranchShapeError, match="proposal.proposalRid"):
             service.create_proposal(BRANCH_RID, "my-proposal", "desc")
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_create_proposal_http_error_is_loud(self, mock_client_class):
         """Test a non-2xx create surfaces the status and error name."""
         mock_client = Mock()
@@ -686,7 +686,7 @@ class TestGlobalProposalWriteService:
         with pytest.raises(RuntimeError, match="HTTP 400"):
             service.create_proposal(BRANCH_RID, "my-proposal", "desc")
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_proposal_success(self, mock_client_class):
         """Test closing a proposal returns the raw payload."""
         mock_client = Mock()
@@ -704,7 +704,7 @@ class TestGlobalProposalWriteService:
             json_body={},
         )
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_proposal_not_found(self, mock_client_class):
         """Test that Branch:ProposalNotFound maps to not-found."""
         mock_client = Mock()
@@ -719,7 +719,7 @@ class TestGlobalProposalWriteService:
         with pytest.raises(GlobalBranchNotFoundError, match="No proposal found"):
             service.close_proposal(PROPOSAL_RID)
 
-    @patch("pltr.services.global_branching.FoundryInternalClient")
+    @patch("foundry_cli.services.global_branching.FoundryInternalClient")
     def test_close_proposal_permission_denied_is_loud(self, mock_client_class):
         """Test that the verified 403 error contract surfaces loudly."""
         mock_client = Mock()

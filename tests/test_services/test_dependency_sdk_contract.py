@@ -22,7 +22,7 @@ from foundry_sdk.v2.third_party_applications.third_party_application import (
     ThirdPartyApplicationClient,
 )
 
-from pltr.services.dependency import (
+from foundry_cli.services.dependency import (
     SDK_OPERATION_SPECS,
     AnalysisContext,
     ArgumentObservation,

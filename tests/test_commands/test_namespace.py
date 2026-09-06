@@ -6,9 +6,9 @@ from typer.testing import CliRunner
 
 from io import StringIO
 
-from pltr.commands.namespace import app
-from pltr.utils.agent_output import flush_agent_output
-from pltr.utils.pagination import PaginationMetadata, PaginationResult
+from foundry_cli.commands.namespace import app
+from foundry_cli.utils.agent_output import flush_agent_output
+from foundry_cli.utils.pagination import PaginationMetadata, PaginationResult
 
 runner = CliRunner()
 
@@ -19,8 +19,8 @@ def test_namespace_list_uses_agent_envelope() -> None:
         metadata=PaginationMetadata(next_page_token="next", has_more=True),
     )
     with (
-        patch("pltr.commands.namespace.CompassService") as service_class,
-        patch("pltr.commands.namespace.agent_mode_enabled", return_value=True),
+        patch("foundry_cli.commands.namespace.CompassService") as service_class,
+        patch("foundry_cli.commands.namespace.agent_mode_enabled", return_value=True),
     ):
         service_class.return_value.list_namespaces.return_value = page
 
@@ -36,7 +36,7 @@ def test_namespace_list_uses_agent_envelope() -> None:
 
 
 def test_namespace_list_error_returns_nonzero() -> None:
-    with patch("pltr.commands.namespace.CompassService") as service_class:
+    with patch("foundry_cli.commands.namespace.CompassService") as service_class:
         service_class.return_value.list_namespaces.side_effect = RuntimeError("denied")
 
         result = runner.invoke(app, [])

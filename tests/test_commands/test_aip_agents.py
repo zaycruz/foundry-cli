@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.cli import app
-from pltr.utils.pagination import PaginationResult, PaginationMetadata
+from foundry_cli.cli import app
+from foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
 
 
 class TestAipAgentsCommands:
@@ -18,7 +18,7 @@ class TestAipAgentsCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock AipAgentsService."""
-        with patch("pltr.commands.aip_agents.AipAgentsService") as MockService:
+        with patch("foundry_cli.commands.aip_agents.AipAgentsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc
@@ -105,7 +105,7 @@ class TestAipAgentsCommands:
         # Assert
         assert result.exit_code == 0
         # Verify service was initialized with profile
-        from pltr.commands.aip_agents import AipAgentsService
+        from foundry_cli.commands.aip_agents import AipAgentsService
 
         AipAgentsService.assert_called_with(profile="test-profile")
 

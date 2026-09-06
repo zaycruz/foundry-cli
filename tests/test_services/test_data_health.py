@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from pltr.services.data_health import DataHealthService
+from foundry_cli.services.data_health import DataHealthService
 
 
 class TestDataHealthService:
@@ -20,7 +20,7 @@ class TestDataHealthService:
     @pytest.fixture
     def service(self, mock_client):
         """Create DataHealthService with mocked client."""
-        with patch("pltr.services.base.AuthManager") as mock_auth:
+        with patch("foundry_cli.services.base.AuthManager") as mock_auth:
             mock_auth.return_value.get_client.return_value = mock_client
             service = DataHealthService()
             return service
