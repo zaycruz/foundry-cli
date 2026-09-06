@@ -27,7 +27,10 @@ class TestAdminCommands:
     def test_user_list_command_success(self, runner, mock_service):
         """Test successful user list command."""
         # Setup
-        from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
+        from src.foundry_cli.utils.pagination import (
+            PaginationResult,
+            PaginationMetadata,
+        )
 
         user_data = [
             {"id": "user1", "username": "john.doe", "email": "john@example.com"},
@@ -50,7 +53,10 @@ class TestAdminCommands:
     def test_user_list_with_pagination(self, runner, mock_service):
         """Test user list command with pagination."""
         # Setup
-        from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
+        from src.foundry_cli.utils.pagination import (
+            PaginationResult,
+            PaginationMetadata,
+        )
 
         pagination_result = PaginationResult(
             data=[],
@@ -401,7 +407,10 @@ class TestAdminCommands:
     def test_user_list_with_profile(self, runner, mock_service):
         """Test user list command with profile parameter."""
         # Setup
-        from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
+        from src.foundry_cli.utils.pagination import (
+            PaginationResult,
+            PaginationMetadata,
+        )
 
         profile_name = "prod"
         pagination_result = PaginationResult(
@@ -441,7 +450,10 @@ class TestAdminCommands:
     def test_user_list_json_format(self, runner, mock_service):
         """Test user list command with JSON format."""
         # Setup
-        from src.foundry_cli.utils.pagination import PaginationResult, PaginationMetadata
+        from src.foundry_cli.utils.pagination import (
+            PaginationResult,
+            PaginationMetadata,
+        )
 
         user_data = [{"id": "user1", "username": "john"}]
         pagination_result = PaginationResult(

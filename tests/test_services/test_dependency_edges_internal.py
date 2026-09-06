@@ -22,7 +22,10 @@ from foundry_cli.services.dependency_internal_specs import (
     GRAPHQL_OPERATION_SPECS,
     TRANSFORM_LINEAGE_GET_OPERATION_SPECS,
 )
-from foundry_cli.services.dependency_providers import ConjureRestProvider, ProviderResult
+from foundry_cli.services.dependency_providers import (
+    ConjureRestProvider,
+    ProviderResult,
+)
 from foundry_cli.services.foundry_internal_client import (
     FoundryInternalClient,
     GraphQLOperation,

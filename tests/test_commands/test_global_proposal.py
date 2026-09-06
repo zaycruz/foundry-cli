@@ -173,7 +173,10 @@ class TestGlobalProposalCreateCommand:
     @patch("foundry_cli.commands.global_proposal.GlobalProposalService")
     def test_create_apply_agent_format(self, mock_service_class):
         """Test the applied create records an agent payload with the new RID."""
-        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import (
+            build_agent_output,
+            reset_agent_output,
+        )
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service

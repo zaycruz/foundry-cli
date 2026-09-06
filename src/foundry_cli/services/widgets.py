@@ -37,7 +37,9 @@ class WidgetsService(BaseService):
             settings = self.service.DevModeSettings.enable(preview=True)
             return self._serialize_response(settings)
         except Exception as e:
-            raise RuntimeError(f"Failed to enable dev mode: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to enable dev mode: {self._describe_error(e)}"
+            ) from e
 
     # ===== WidgetSet =====
 

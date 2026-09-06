@@ -46,7 +46,9 @@ class TestAuthenticationFlow:
                 mock_storage_settings.return_value._get_config_dir.return_value = (
                     temp_config_dir
                 )
-                with patch("foundry_cli.config.profiles.Settings") as mock_profile_settings:
+                with patch(
+                    "foundry_cli.config.profiles.Settings"
+                ) as mock_profile_settings:
                     mock_profile_settings.return_value._get_config_dir.return_value = (
                         temp_config_dir
                     )
@@ -238,7 +240,9 @@ class TestAuthenticationFlow:
             }
             mock_storage.return_value = mock_storage_instance
 
-            with patch("foundry_cli.config.profiles.ProfileManager") as mock_profile_manager:
+            with patch(
+                "foundry_cli.config.profiles.ProfileManager"
+            ) as mock_profile_manager:
                 mock_pm = Mock()
                 mock_pm.get_active_profile.return_value = "env-profile"
                 mock_profile_manager.return_value = mock_pm

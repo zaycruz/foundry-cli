@@ -144,7 +144,9 @@ class RepositoryService(BaseService):
                 request_timeout=self.PULL_REQUEST_LIST_TIMEOUT,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to list pull requests: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to list pull requests: {self._describe_error(e)}"
+            ) from e
 
         self._raise_for_status(status, payload, raw, "pull-request list")
 
@@ -349,7 +351,9 @@ class RepositoryService(BaseService):
                 json_body=plan["intended_body"],
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create pull request: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to create pull request: {self._describe_error(e)}"
+            ) from e
 
         self._raise_for_status(status, payload, raw, "pull-request create")
         if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
@@ -654,7 +658,9 @@ class RepositoryService(BaseService):
                 "GET", f"stemma/api/repos/{repository_rid}/head"
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to read HEAD for {repository_rid}: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to read HEAD for {repository_rid}: {self._describe_error(e)}"
+            ) from e
         self._raise_for_status(status, payload, raw, "repository head")
         if not isinstance(payload, Mapping) or not isinstance(
             payload.get("commitish"), str
@@ -715,7 +721,9 @@ class RepositoryService(BaseService):
                 "GET", f"stemma/api/repos/{repository_rid}/tags"
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to list tags for {repository_rid}: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to list tags for {repository_rid}: {self._describe_error(e)}"
+            ) from e
         self._raise_for_status(status, payload, raw, "repository tags")
         if not isinstance(payload, list):
             raise RepositoryShapeError(
@@ -974,11 +982,12 @@ class RepositoryService(BaseService):
         self._validate_branch_ref(local_ref, "local ref")
         self._validate_branch_ref(destination_branch, "destination branch")
 
-        context = self.get_repository_context(
-            repository_rid, include_tree=False
-        )
+        context = self.get_repository_context(repository_rid, include_tree=False)
         repository = context.get("repository")
-        if not isinstance(repository, Mapping) or repository.get("rid") != repository_rid:
+        if (
+            not isinstance(repository, Mapping)
+            or repository.get("rid") != repository_rid
+        ):
             raise RepositoryPushError(
                 f"Repository context RID does not match requested repository {repository_rid}"
             )
@@ -997,9 +1006,7 @@ class RepositoryService(BaseService):
             r"[A-Za-z0-9._-]+", repository_name
         ):
             allowed_remote_urls.add(f"{remote_base_url}/{repository_name}")
-        remote_url = self._assert_origin(
-            allowed_remote_urls, token, git_timeout
-        )
+        remote_url = self._assert_origin(allowed_remote_urls, token, git_timeout)
         local_commit = self._git_stdout(
             ["git", "rev-parse", "--verify", local_ref],
             token,
@@ -1015,9 +1022,7 @@ class RepositoryService(BaseService):
             remote_url, destination_branch, token, git_timeout
         )
         if remote_commit:
-            self._require_fast_forward(
-                remote_commit, local_commit, token, git_timeout
-            )
+            self._require_fast_forward(remote_commit, local_commit, token, git_timeout)
 
         result: Dict[str, Any] = {
             "operation": "push_code_repository_branch",
@@ -1075,12 +1080,16 @@ class RepositoryService(BaseService):
     def _assert_origin(
         self, allowed_remote_urls: set[str], token: str, timeout: float
     ) -> str:
-        configured = self._git_stdout(
-            ["git", "remote", "get-url", "origin"],
-            token,
-            timeout,
-            "read local repository remote",
-        ).strip().rstrip("/")
+        configured = (
+            self._git_stdout(
+                ["git", "remote", "get-url", "origin"],
+                token,
+                timeout,
+                "read local repository remote",
+            )
+            .strip()
+            .rstrip("/")
+        )
         allowed = {url.rstrip("/") for url in allowed_remote_urls}
         if configured not in allowed:
             raise RepositoryPushError(
@@ -1099,7 +1108,9 @@ class RepositoryService(BaseService):
             "read remote ref",
         )
         matches = [line.split("\t", 1) for line in output.splitlines()]
-        matching = [parts[0] for parts in matches if len(parts) == 2 and parts[1] == ref]
+        matching = [
+            parts[0] for parts in matches if len(parts) == 2 and parts[1] == ref
+        ]
         if not matching:
             return None
         if len(matching) != 1 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", matching[0]):
@@ -1412,7 +1423,9 @@ class RepositoryService(BaseService):
                 "POST", "stemma/api/repos", json_body=stemma_body
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to create repository {name!r}: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to create repository {name!r}: {self._describe_error(e)}"
+            ) from e
         self._raise_for_status(status, payload, raw, "repository create")
         if not isinstance(payload, Mapping) or not isinstance(payload.get("rid"), str):
             raise RepositoryShapeError(

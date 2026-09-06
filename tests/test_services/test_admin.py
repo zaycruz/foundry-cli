@@ -522,7 +522,8 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.list.assert_called_once_with(
-            page_size=None, page_token=None, 
+            page_size=None,
+            page_token=None,
         )
         assert "data" in result
 
@@ -542,7 +543,9 @@ class TestAdminService:
         result = service.get_marking(marking_id)
 
         # Assert
-        mock_client.admin.Marking.get.assert_called_once_with(marking_id, )
+        mock_client.admin.Marking.get.assert_called_once_with(
+            marking_id,
+        )
         assert result["id"] == marking_id
 
     def test_get_batch_markings(self, service, mock_client):
@@ -563,7 +566,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.get_batch.assert_called_once_with(
-            body=marking_ids, 
+            body=marking_ids,
         )
         assert "data" in result
 
@@ -594,7 +597,8 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.create.assert_called_once_with(
-            name=marking_name, description=description, 
+            name=marking_name,
+            description=description,
         )
         assert result["name"] == marking_name
 
@@ -614,7 +618,7 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.create.assert_called_once_with(
-            name=marking_name, 
+            name=marking_name,
         )
         assert result["name"] == marking_name
 
@@ -635,7 +639,8 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Marking.replace.assert_called_once_with(
-            marking_id, name=new_name, 
+            marking_id,
+            name=new_name,
         )
         assert result["name"] == new_name
 
@@ -715,7 +720,8 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Organization.replace.assert_called_once_with(
-            org_rid, name=new_name, 
+            org_rid,
+            name=new_name,
         )
         assert result["name"] == new_name
 
@@ -738,7 +744,9 @@ class TestAdminService:
 
         # Assert
         mock_client.admin.Organization.list_available_roles.assert_called_once_with(
-            org_rid, page_size=None, page_token=None, 
+            org_rid,
+            page_size=None,
+            page_token=None,
         )
         assert "data" in result
 

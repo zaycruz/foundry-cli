@@ -66,7 +66,9 @@ class AuditService(BaseService):
             )
             return [self._serialize_response(log) for log in log_files]
         except Exception as e:
-            raise RuntimeError(f"Failed to list audit log files: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to list audit log files: {self._describe_error(e)}"
+            ) from e
 
     def get_log_file_content(
         self,

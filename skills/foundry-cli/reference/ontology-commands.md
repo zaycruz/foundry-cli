@@ -283,6 +283,54 @@ pfoundry ontology object-get ONTOLOGY_RID OBJECT_TYPE PRIMARY_KEY [--properties 
 pfoundry ontology object-get ri.ontology.main.ontology.abc123 Employee "john.doe"
 ```
 
+### Upsert Object (create-or-update by primary key via an action, plan-first)
+
+```bash
+pfoundry ontology object-upsert ONTOLOGY_RID OBJECT_TYPE \
+    --primary-key-property PROPERTY --primary-key-value VALUE \
+    --properties PROPERTIES_JSON --action-type ACTION_TYPE \
+    [--overrides OVERRIDES_JSON] [--apply]
+
+# Object instances have no direct write endpoint; the write goes through
+# the named action. Default prints the plan: the create-vs-update decision
+# (from reading the object by primary key), the resolved action parameters
+# (the primary key property is pinned to --primary-key-value; a conflicting
+# value in --properties is rejected), and the VALIDATE_ONLY validation
+# result. Nothing is written without --apply. On --apply the action
+# executes (applyWithOverrides when --overrides is given) and the object is
+# read back; a failed or contradicting read-back is an error.
+# --overrides is an ApplyActionOverrides JSON object
+# (uniqueIdentifierLinkIdValues, actionExecutionTime) for UniqueIdentifier
+# and CurrentTime generated action parameters.
+
+# Example
+pfoundry ontology object-upsert ri.ontology.main.ontology.abc123 Employee \
+    --primary-key-property employee_id --primary-key-value "john.doe" \
+    --properties '{"name": "John Doe", "department": "Engineering"}' \
+    --action-type upsert-employee --apply
+```
+
+### Upsert Objects in Batch (chunked, plan-first)
+
+```bash
+pfoundry ontology object-upsert-batch ONTOLOGY_RID OBJECT_TYPE \
+    --rows ROWS_JSON_FILE --primary-key-property PROPERTY \
+    --action-type ACTION_TYPE [--apply]
+
+# --rows is a path to a JSON array ('-' reads stdin); each row is
+# {"primary_key": value, "properties": {...}} with an optional "overrides"
+# object. Rows are chunked into groups of at most 20 per applyBatch
+# request (chunks containing overrides use applyBatchWithOverrides).
+# Default prints the per-row plan (create-vs-update + VALIDATE_ONLY
+# validation per row). --apply executes the chunks and reports a per-row
+# read-back status; any row that cannot be verified fails the command.
+
+# Example
+pfoundry ontology object-upsert-batch ri.ontology.main.ontology.abc123 Employee \
+    --rows employees.json --primary-key-property employee_id \
+    --action-type upsert-employee --apply
+```
+
 ### Aggregate Objects
 
 ```bash
@@ -425,6 +473,26 @@ pfoundry ontology action-validate ONTOLOGY_RID ACTION_TYPE PARAMETERS
 
 # Example
 pfoundry ontology action-validate ri.ontology.main.ontology.abc123 promoteEmployee '{"employeeId": "john.doe", "newLevel": "senior"}'
+```
+
+### Apply Action With Overrides (validate-only unless --apply)
+
+```bash
+pfoundry ontology action-apply-with-overrides ONTOLOGY_RID ACTION_TYPE PARAMETERS \
+    --overrides OVERRIDES_JSON [--apply]
+
+# Overrides specify values for UniqueIdentifier and CurrentTime generated
+# action parameters via the SDK applyWithOverrides endpoint
+# (POST /v2/ontologies/{ontology}/actions/{action}/applyWithOverrides).
+# PARAMETERS and --overrides are JSON; the overrides object carries
+# ApplyActionOverrides fields (uniqueIdentifierLinkIdValues,
+# actionExecutionTime). Default prints the VALIDATE_ONLY validation
+# result; nothing is written without --apply.
+
+# Example
+pfoundry ontology action-apply-with-overrides ri.ontology.main.ontology.abc123 promoteEmployee \
+    '{"employeeId": "john.doe", "newLevel": "senior"}' \
+    --overrides '{"actionExecutionTime": "2026-09-03T00:00:00Z"}' --apply
 ```
 
 ### Upsert Action Type (modifyOntology, plan-first)

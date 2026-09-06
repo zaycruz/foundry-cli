@@ -1216,7 +1216,9 @@ def test_no_internal_preserves_sdk_only_graph_and_constructs_no_internal_client(
     expected["coverage_records"] = [{"surface": "query-metadata", "status": "partial"}]
     instance.analyze.return_value = expected
     with (
-        patch("foundry_cli.commands.dependency.FoundryInternalClient") as internal_client,
+        patch(
+            "foundry_cli.commands.dependency.FoundryInternalClient"
+        ) as internal_client,
         patch("foundry_cli.commands.dependency.ConjureRestProvider") as provider,
     ):
         result = runner.invoke(
@@ -1258,7 +1260,9 @@ def test_positive_controls_configure_the_shared_internal_client_once(
     tmp_path, service, positive_controls
 ):
     _, _, _, _ = service
-    with patch("foundry_cli.commands.dependency.FoundryInternalClient") as client_constructor:
+    with patch(
+        "foundry_cli.commands.dependency.FoundryInternalClient"
+    ) as client_constructor:
         arguments = [
             "dependency",
             "object-type",
@@ -1373,8 +1377,12 @@ def test_provider_subset_configures_only_selected_internal_transports(
         )
     instance.analyze.return_value = payload
     with (
-        patch("foundry_cli.commands.dependency.FoundryInternalClient") as client_constructor,
-        patch("foundry_cli.commands.dependency.ConjureRestProvider") as provider_constructor,
+        patch(
+            "foundry_cli.commands.dependency.FoundryInternalClient"
+        ) as client_constructor,
+        patch(
+            "foundry_cli.commands.dependency.ConjureRestProvider"
+        ) as provider_constructor,
     ):
         internal_client = client_constructor.return_value
         provider = provider_constructor.return_value
@@ -1420,8 +1428,12 @@ def test_invalid_provider_subset_fails_before_internal_provider_construction(
     tmp_path, providers
 ):
     with (
-        patch("foundry_cli.commands.dependency.FoundryInternalClient") as internal_client,
-        patch("foundry_cli.commands.dependency.DependencyGraphService") as service_constructor,
+        patch(
+            "foundry_cli.commands.dependency.FoundryInternalClient"
+        ) as internal_client,
+        patch(
+            "foundry_cli.commands.dependency.DependencyGraphService"
+        ) as service_constructor,
     ):
         result = runner.invoke(
             app,

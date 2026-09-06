@@ -260,16 +260,12 @@ def test_upsert_object_type_command_forwards_primary_key_backing_column(mock_ser
 
     result = runner.invoke(
         app,
-        _object_type_upsert_args(
-            "--primary-key-backing-column", "SOURCE_EMPLOYEE_ID"
-        ),
+        _object_type_upsert_args("--primary-key-backing-column", "SOURCE_EMPLOYEE_ID"),
     )
 
     assert result.exit_code == 0
     assert (
-        mock_instance.upsert_object_type.call_args.kwargs[
-            "primary_key_backing_column"
-        ]
+        mock_instance.upsert_object_type.call_args.kwargs["primary_key_backing_column"]
         == "SOURCE_EMPLOYEE_ID"
     )
 
@@ -785,6 +781,350 @@ def test_validate_action_invalid(mock_services):
     assert result.exit_code == 0
     assert "Action parameters are invalid" in result.output
     mock_instance.validate_action.assert_called_once()
+
+
+def test_apply_action_with_overrides_command_validate_only(mock_services):
+    """Test apply-with-overrides defaults to a validate-only plan."""
+    mock_instance = Mock()
+    mock_instance.apply_action_with_overrides.return_value = {
+        "result": "VALID",
+        "submission_criteria": [],
+        "parameters": {},
+    }
+    mock_services["action"].return_value = mock_instance
+
+    params = json.dumps({"employee_id": "EMP001"})
+    overrides = json.dumps({"actionExecutionTime": "2026-09-03T00:00:00Z"})
+    result = runner.invoke(
+        app,
+        [
+            "action-apply-with-overrides",
+            "ri.ontology.main.ontology.test",
+            "transfer_employee",
+            params,
+            "--overrides",
+            overrides,
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.apply_action_with_overrides.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "transfer_employee",
+        {"employee_id": "EMP001"},
+        {"actionExecutionTime": "2026-09-03T00:00:00Z"},
+        validate_only=True,
+    )
+
+
+def test_apply_action_with_overrides_command_apply(mock_services):
+    """Test apply-with-overrides --apply executes the action."""
+    mock_instance = Mock()
+    mock_instance.apply_action_with_overrides.return_value = {
+        "operation_id": "ri.action.operation.123",
+        "validation_result": "VALID",
+        "edits_type": "objectEdits",
+        "added_object_count": 0,
+        "modified_objects_count": 1,
+        "deleted_objects_count": 0,
+        "added_links_count": 0,
+        "deleted_links_count": 0,
+        "edits": ["EMP001"],
+    }
+    mock_services["action"].return_value = mock_instance
+
+    params = json.dumps({"employee_id": "EMP001"})
+    overrides = json.dumps({"actionExecutionTime": "2026-09-03T00:00:00Z"})
+    result = runner.invoke(
+        app,
+        [
+            "action-apply-with-overrides",
+            "ri.ontology.main.ontology.test",
+            "transfer_employee",
+            params,
+            "--overrides",
+            overrides,
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert (
+        mock_instance.apply_action_with_overrides.call_args.kwargs["validate_only"]
+        is False
+    )
+
+
+def test_apply_action_with_overrides_invalid_json(mock_services):
+    """Test apply-with-overrides rejects invalid JSON."""
+    result = runner.invoke(
+        app,
+        [
+            "action-apply-with-overrides",
+            "ri.ontology.main.ontology.test",
+            "transfer_employee",
+            "invalid json",
+            "--overrides",
+            "{}",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.output
+
+
+def test_object_upsert_command_plan_only(mock_services):
+    """Test object-upsert defaults to the plan and never applies."""
+    mock_instance = Mock()
+    plan = {
+        "operation": "create",
+        "parameters": {"employee_id": "EMP001", "name": "John Doe"},
+        "validation": {"result": "VALID"},
+        "applied": False,
+    }
+    mock_instance.prepare_object_upsert.return_value = plan
+    mock_services["object"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-upsert",
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "--primary-key-property",
+            "employee_id",
+            "--primary-key-value",
+            "EMP001",
+            "--properties",
+            json.dumps({"name": "John Doe"}),
+            "--action-type",
+            "upsert-employee",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.prepare_object_upsert.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "EMP001",
+        {"name": "John Doe"},
+        "upsert-employee",
+        overrides=None,
+    )
+    mock_instance.apply_object_upsert.assert_not_called()
+
+
+def test_object_upsert_command_apply(mock_services):
+    """Test object-upsert --apply executes the prepared plan."""
+    mock_instance = Mock()
+    plan = {
+        "operation": "update",
+        "parameters": {"employee_id": "EMP001", "name": "John Doe"},
+        "validation": {"result": "VALID"},
+        "applied": False,
+    }
+    mock_instance.prepare_object_upsert.return_value = plan
+    mock_instance.apply_object_upsert.return_value = {
+        **plan,
+        "applied": True,
+        "readback": {"status": "verified", "object": {"employee_id": "EMP001"}},
+    }
+    mock_services["object"].return_value = mock_instance
+
+    result = runner.invoke(
+        app,
+        [
+            "object-upsert",
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "--primary-key-property",
+            "employee_id",
+            "--primary-key-value",
+            "EMP001",
+            "--properties",
+            json.dumps({"name": "John Doe"}),
+            "--action-type",
+            "upsert-employee",
+            "--overrides",
+            json.dumps({"actionExecutionTime": "2026-09-03T00:00:00Z"}),
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert mock_instance.prepare_object_upsert.call_args.kwargs["overrides"] == {
+        "actionExecutionTime": "2026-09-03T00:00:00Z"
+    }
+    mock_instance.apply_object_upsert.assert_called_once_with(plan)
+
+
+def test_object_upsert_batch_command_plan_only(mock_services, tmp_path):
+    """Test object-upsert-batch defaults to the chunked plan."""
+    mock_instance = Mock()
+    plan = {
+        "operation": "object-upsert-batch",
+        "row_count": 2,
+        "chunk_count": 1,
+        "plans": [],
+        "applied": False,
+    }
+    mock_instance.prepare_object_upsert_batch.return_value = plan
+    mock_services["object"].return_value = mock_instance
+
+    rows_file = tmp_path / "rows.json"
+    rows_file.write_text(
+        json.dumps(
+            [
+                {"primary_key": "EMP001", "properties": {"name": "John Doe"}},
+                {"primary_key": "EMP002", "properties": {"name": "Jane Smith"}},
+            ]
+        )
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "object-upsert-batch",
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "--rows",
+            str(rows_file),
+            "--primary-key-property",
+            "employee_id",
+            "--action-type",
+            "upsert-employee",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.prepare_object_upsert_batch.assert_called_once_with(
+        "ri.ontology.main.ontology.test",
+        "Employee",
+        "employee_id",
+        "upsert-employee",
+        [
+            {"primary_key": "EMP001", "properties": {"name": "John Doe"}},
+            {"primary_key": "EMP002", "properties": {"name": "Jane Smith"}},
+        ],
+    )
+    mock_instance.apply_object_upsert_batch.assert_not_called()
+
+
+def test_object_upsert_batch_command_apply(mock_services, tmp_path):
+    """Test object-upsert-batch --apply executes and reports read-backs."""
+    mock_instance = Mock()
+    plan = {
+        "operation": "object-upsert-batch",
+        "row_count": 1,
+        "chunk_count": 1,
+        "plans": [],
+        "applied": False,
+    }
+    mock_instance.prepare_object_upsert_batch.return_value = plan
+    mock_instance.apply_object_upsert_batch.return_value = {
+        **plan,
+        "applied": True,
+        "report": [{"primary_key": "EMP001", "status": "verified"}],
+    }
+    mock_services["object"].return_value = mock_instance
+
+    rows_file = tmp_path / "rows.json"
+    rows_file.write_text(
+        json.dumps([{"primary_key": "EMP001", "properties": {"name": "John Doe"}}])
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "object-upsert-batch",
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "--rows",
+            str(rows_file),
+            "--primary-key-property",
+            "employee_id",
+            "--action-type",
+            "upsert-employee",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_instance.apply_object_upsert_batch.assert_called_once_with(plan)
+
+
+def test_object_upsert_batch_command_unverified_rows_fail(mock_services, tmp_path):
+    """Test that unverified read-back rows fail the batch command."""
+    mock_instance = Mock()
+    plan = {
+        "operation": "object-upsert-batch",
+        "row_count": 1,
+        "chunk_count": 1,
+        "plans": [],
+        "applied": False,
+    }
+    mock_instance.prepare_object_upsert_batch.return_value = plan
+    mock_instance.apply_object_upsert_batch.return_value = {
+        **plan,
+        "applied": True,
+        "report": [
+            {
+                "primary_key": "EMP001",
+                "status": "not-verified",
+                "detail": "name: expected 'John Doe', read back 'Jane Smith'",
+            }
+        ],
+    }
+    mock_services["object"].return_value = mock_instance
+
+    rows_file = tmp_path / "rows.json"
+    rows_file.write_text(
+        json.dumps([{"primary_key": "EMP001", "properties": {"name": "John Doe"}}])
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "object-upsert-batch",
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "--rows",
+            str(rows_file),
+            "--primary-key-property",
+            "employee_id",
+            "--action-type",
+            "upsert-employee",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "could not be verified" in result.output
+
+
+def test_object_upsert_batch_rejects_non_array(mock_services, tmp_path):
+    """Test that a non-array rows document is rejected."""
+    rows_file = tmp_path / "rows.json"
+    rows_file.write_text(json.dumps({"primary_key": "EMP001"}))
+
+    result = runner.invoke(
+        app,
+        [
+            "object-upsert-batch",
+            "ri.ontology.main.ontology.test",
+            "Employee",
+            "--rows",
+            str(rows_file),
+            "--primary-key-property",
+            "employee_id",
+            "--action-type",
+            "upsert-employee",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "JSON array" in result.output
 
 
 # Query command tests

@@ -110,7 +110,9 @@ def list_users(
 
 @user_app.command("get")
 def get_user(
-    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
+    user_id: str = typer.Argument(
+        ..., help="User UUID or ri.compass.main.user.<uuid> RID"
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),
@@ -224,7 +226,9 @@ def search_users(
 
 @user_app.command("markings")
 def get_user_markings(
-    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
+    user_id: str = typer.Argument(
+        ..., help="User UUID or ri.compass.main.user.<uuid> RID"
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),
@@ -261,7 +265,9 @@ def get_user_markings(
 
 @user_app.command("revoke-tokens")
 def revoke_user_tokens(
-    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
+    user_id: str = typer.Argument(
+        ..., help="User UUID or ri.compass.main.user.<uuid> RID"
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),
@@ -297,7 +303,9 @@ def revoke_user_tokens(
 
 @user_app.command("delete")
 def delete_user(
-    user_id: str = typer.Argument(..., help="User UUID or ri.compass.main.user.<uuid> RID"),
+    user_id: str = typer.Argument(
+        ..., help="User UUID or ri.compass.main.user.<uuid> RID"
+    ),
     profile: Optional[str] = typer.Option(
         None, "--profile", help="Auth profile to use"
     ),

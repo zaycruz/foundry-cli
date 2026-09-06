@@ -185,7 +185,6 @@ class TestSpaceService:
         )
 
         mock_client.filesystem.Space.list.assert_called_once_with(
-            
             organization_rid="ri.compass.main.organization.789",
             page_size=10,
             page_token="token123",

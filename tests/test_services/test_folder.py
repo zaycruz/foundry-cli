@@ -79,7 +79,6 @@ def test_create_folder(mock_folder_service, sample_folder):
     mock_folder_class.create.assert_called_once_with(
         display_name="Test Folder",
         parent_folder_rid="ri.compass.main.folder.parent",
-        
     )
 
 
@@ -95,7 +94,7 @@ def test_get_folder(mock_folder_service, sample_folder):
     assert result["description"] == "Test folder description"
 
     mock_folder_class.get.assert_called_once_with(
-        "ri.compass.main.folder.test-folder", 
+        "ri.compass.main.folder.test-folder",
     )
 
 
@@ -114,7 +113,7 @@ def test_move_folder_preserves_current_name(mock_folder_service, sample_folder):
     assert result["rid"] == "ri.compass.main.folder.test-folder"
     assert result["display_name"] == "Test Folder"
     mock_folder_class.get.assert_called_once_with(
-        "ri.compass.main.folder.test-folder", 
+        "ri.compass.main.folder.test-folder",
     )
     mock_folder_class.replace.assert_called_once_with(
         folder_rid="ri.compass.main.folder.test-folder",
@@ -137,7 +136,7 @@ def test_move_folder_overrides_name_after_fetch(mock_folder_service, sample_fold
     )
 
     mock_folder_class.get.assert_called_once_with(
-        "ri.compass.main.folder.test-folder", 
+        "ri.compass.main.folder.test-folder",
     )
     mock_folder_class.replace.assert_called_once_with(
         folder_rid="ri.compass.main.folder.test-folder",
@@ -188,7 +187,9 @@ def test_list_children(mock_folder_service, sample_children):
     assert result[1]["name"] == "Child Dataset"
 
     mock_folder_class.children.assert_called_once_with(
-        "ri.compass.main.folder.parent", page_size=None, page_token=None, 
+        "ri.compass.main.folder.parent",
+        page_size=None,
+        page_token=None,
     )
 
 
@@ -207,7 +208,6 @@ def test_list_children_with_pagination(mock_folder_service, sample_children):
         "ri.compass.main.folder.parent",
         page_size=10,
         page_token="next-page-token",
-        
     )
 
 

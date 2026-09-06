@@ -162,7 +162,9 @@ class SqlService(BaseService):
         except Exception as e:
             if isinstance(e, RuntimeError):
                 raise
-            raise RuntimeError(f"Failed to get query results: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get query results: {self._describe_error(e)}"
+            )
 
     def cancel_query(self, query_id: str, preview: bool = True) -> Dict[str, Any]:
         """
@@ -230,7 +232,9 @@ class SqlService(BaseService):
             except Exception as e:
                 if isinstance(e, RuntimeError):
                     raise
-                raise RuntimeError(f"Error checking query status: {self._describe_error(e)}")
+                raise RuntimeError(
+                    f"Error checking query status: {self._describe_error(e)}"
+                )
 
         # Timeout reached
         raise RuntimeError(f"Query timed out after {timeout} seconds")

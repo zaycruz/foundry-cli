@@ -48,7 +48,9 @@ class TestDataWorkflows:
         self, runner, authenticated_profile
     ):
         """Test creating a dataset and then retrieving it."""
-        with patch("foundry_cli.services.dataset.DatasetService") as mock_dataset_service:
+        with patch(
+            "foundry_cli.services.dataset.DatasetService"
+        ) as mock_dataset_service:
             mock_service = Mock()
 
             # Mock dataset creation

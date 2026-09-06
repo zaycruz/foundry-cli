@@ -40,7 +40,9 @@ class DatasetService(BaseService):
             dataset = self.service.Dataset.get(dataset_rid)
             return self._format_dataset_info(dataset)
         except Exception as e:
-            raise RuntimeError(f"Failed to get dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to get dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def get_schema(self, dataset_rid: str) -> Dict[str, Any]:
         """
@@ -61,7 +63,9 @@ class DatasetService(BaseService):
                 "status": "Schema retrieved successfully",
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to get schema for dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to get schema for dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def apply_schema(self, dataset_rid: str, branch: str = "master") -> Dict[str, Any]:
         """
@@ -116,7 +120,9 @@ class DatasetService(BaseService):
                 "version_id": metadata_result.get("versionId"),
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to apply schema for dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to apply schema for dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def _get_schema_response(self, dataset_rid: str, branch: str = "master") -> Any:
         """Fetch the raw GetDatasetSchemaResponse (schema + version_id)."""
@@ -198,7 +204,9 @@ class DatasetService(BaseService):
                 "schema": result,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to set schema for dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to set schema for dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     @staticmethod
     def _serialize_schema(schema: Any) -> Dict[str, Any]:
@@ -340,7 +348,8 @@ class DatasetService(BaseService):
         except Exception as e:
             # The f-string below is an error-context message, never SQL (B608 FP).
             raise foundry_error_from_sdk(
-                e, context=f"Failed to update schema for dataset {dataset_rid}"  # nosec B608
+                e,
+                context=f"Failed to update schema for dataset {dataset_rid}",  # nosec B608
             )
 
         read_back = self._get_schema_response(dataset_rid, branch)
@@ -473,7 +482,9 @@ class DatasetService(BaseService):
             )
             return self._format_dataset_info(dataset)
         except Exception as e:
-            raise RuntimeError(f"Failed to create dataset '{name}': {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to create dataset '{name}': {self._format_error_detail(e)}"
+            )
 
     def read_table(self, dataset_rid: str, format: str = "arrow") -> Any:
         """
@@ -489,7 +500,9 @@ class DatasetService(BaseService):
         try:
             return self.service.Dataset.read_table(dataset_rid, format=format)
         except Exception as e:
-            raise RuntimeError(f"Failed to read dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to read dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def preview_data(
         self,
@@ -513,7 +526,9 @@ class DatasetService(BaseService):
             # Limit rows and convert to records
             return df.head(limit).to_dict(orient="records")
         except Exception as e:
-            raise RuntimeError(f"Failed to preview dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to preview dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def delete_dataset(self, dataset_rid: str) -> bool:
         """Move a dataset resource to the Foundry filesystem trash."""
@@ -521,7 +536,9 @@ class DatasetService(BaseService):
             self.client.filesystem.Resource.delete(dataset_rid)
             return True
         except Exception as e:
-            raise RuntimeError(f"Failed to delete dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to delete dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def upload_file(
         self,
@@ -897,7 +914,9 @@ class DatasetService(BaseService):
                 for file in files
             ]
         except Exception as e:
-            raise RuntimeError(f"Failed to list files in dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to list files in dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def list_files_paginated(
         self,
@@ -969,7 +988,9 @@ class DatasetService(BaseService):
                 for branch in branches
             ]
         except Exception as e:
-            raise RuntimeError(f"Failed to get branches for dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to get branches for dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def create_branch(
         self, dataset_rid: str, branch_name: str, parent_branch: str = "master"
@@ -1070,7 +1091,9 @@ class DatasetService(BaseService):
                 "success": True,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to commit transaction {transaction_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to commit transaction {transaction_rid}: {self._format_error_detail(e)}"
+            )
 
     def abort_transaction(
         self, dataset_rid: str, transaction_rid: str
@@ -1099,7 +1122,9 @@ class DatasetService(BaseService):
                 "success": True,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to abort transaction {transaction_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to abort transaction {transaction_rid}: {self._format_error_detail(e)}"
+            )
 
     def get_transaction_status(
         self, dataset_rid: str, transaction_rid: str
@@ -1335,7 +1360,9 @@ class DatasetService(BaseService):
                 for job in jobs
             ]
         except Exception as e:
-            raise RuntimeError(f"Failed to get jobs for dataset {dataset_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to get jobs for dataset {dataset_rid}: {self._format_error_detail(e)}"
+            )
 
     def delete_branch(self, dataset_rid: str, branch_name: str) -> Dict[str, Any]:
         """
@@ -1550,7 +1577,9 @@ class DatasetService(BaseService):
                 "primary_key": getattr(view, "primary_key", None),
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to get view {view_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to get view {view_rid}: {self._format_error_detail(e)}"
+            )
 
     def add_backing_datasets(
         self, view_rid: str, dataset_rids: List[str]
@@ -1687,7 +1716,9 @@ class DatasetService(BaseService):
                 "result": result,
             }
         except Exception as e:
-            raise RuntimeError(f"Failed to add primary key to view {view_rid}: {self._format_error_detail(e)}")
+            raise RuntimeError(
+                f"Failed to add primary key to view {view_rid}: {self._format_error_detail(e)}"
+            )
 
     def _format_dataset_info(self, dataset: Any) -> Dict[str, Any]:
         """

@@ -98,7 +98,9 @@ class DataHealthService(BaseService):
             )
             return self._serialize_response(check)
         except Exception as e:
-            raise RuntimeError(f"Failed to get check '{check_rid}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get check '{check_rid}': {self._describe_error(e)}"
+            )
 
     def replace_check(
         self,
@@ -141,7 +143,9 @@ class DataHealthService(BaseService):
             )
             return self._serialize_response(check)
         except Exception as e:
-            raise RuntimeError(f"Failed to replace check '{check_rid}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to replace check '{check_rid}': {self._describe_error(e)}"
+            )
 
     def delete_check(
         self,
@@ -170,7 +174,9 @@ class DataHealthService(BaseService):
                 preview=preview,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to delete check '{check_rid}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to delete check '{check_rid}': {self._describe_error(e)}"
+            )
 
     # ===== CheckReport Operations =====
 
@@ -213,4 +219,6 @@ class DataHealthService(BaseService):
             )
             return self._serialize_response(report)
         except Exception as e:
-            raise RuntimeError(f"Failed to get check report '{check_report_rid}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get check report '{check_report_rid}': {self._describe_error(e)}"
+            )

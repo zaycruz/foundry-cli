@@ -175,7 +175,9 @@ def get_query_status(
             console.print("Query is still executing...")
         elif status == "succeeded":
             console.print(f"Status: [green]{status}[/green]")
-            console.print("Use [bold]pfoundry sql results <query-id>[/bold] to get results")
+            console.print(
+                "Use [bold]pfoundry sql results <query-id>[/bold] to get results"
+            )
         elif status == "failed":
             console.print(f"Status: [red]{status}[/red]")
             error_msg = result.get("error_message", "Unknown error")
@@ -398,7 +400,9 @@ def wait_for_query(
             else:
                 formatter.display(result, output_format)
         else:
-            console.print("Use [bold]pfoundry sql results <query-id>[/bold] to get results")
+            console.print(
+                "Use [bold]pfoundry sql results <query-id>[/bold] to get results"
+            )
 
     except Exception as e:
         formatter.print_error(f"Failed while waiting for query: {e}")

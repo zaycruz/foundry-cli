@@ -103,6 +103,7 @@ def test_is_object_type_not_found_matches_local_service_error():
 
 def test_is_object_type_not_found_matches_sdk_payload_name():
     """Generic SDK not-found errors are matched by their payload name."""
+
     class NotFoundError(Exception):
         name = "ObjectTypeNotFound"
 
@@ -177,7 +178,9 @@ def test_prepare_net_new_skips_gate_with_caveat(mock_guarded_service):
             "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch(
+            "foundry_cli.services.guarded_upsert.DependencyGraphService"
+        ) as dependency_cls,
     ):
         result = mock_guarded_service.prepare_object_type_upsert(**_prepare_kwargs())
 
@@ -200,7 +203,9 @@ def test_prepare_skip_impact_gate_is_recorded(mock_guarded_service):
             "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch(
+            "foundry_cli.services.guarded_upsert.DependencyGraphService"
+        ) as dependency_cls,
     ):
         result = mock_guarded_service.prepare_object_type_upsert(
             **_prepare_kwargs(skip_impact_gate=True)
@@ -449,7 +454,9 @@ def test_prepare_delete_not_found_fails_typed(mock_guarded_service):
             "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch(
+            "foundry_cli.services.guarded_upsert.DependencyGraphService"
+        ) as dependency_cls,
     ):
         with pytest.raises(ObjectTypeNotFoundError):
             mock_guarded_service.prepare_object_type_delete(**_prepare_delete_kwargs())
@@ -483,7 +490,9 @@ def test_prepare_delete_skip_impact_gate_is_recorded(mock_guarded_service):
             "foundry_cli.services.guarded_upsert.ObjectTypeService",
             return_value=object_types,
         ),
-        patch("foundry_cli.services.guarded_upsert.DependencyGraphService") as dependency_cls,
+        patch(
+            "foundry_cli.services.guarded_upsert.DependencyGraphService"
+        ) as dependency_cls,
     ):
         result = mock_guarded_service.prepare_object_type_delete(
             **_prepare_delete_kwargs(skip_impact_gate=True)

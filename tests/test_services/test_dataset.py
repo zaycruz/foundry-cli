@@ -275,9 +275,7 @@ def test_preview_data_converts_arrow_to_pandas(mock_dataset_service):
     mock_df.to_dict.return_value = [{"cohort_id": 1}, {"cohort_id": 2}]
     mock_dataset_class.read_table.return_value = mock_table
 
-    result = service.preview_data(
-        "ri.foundry.main.dataset.test-dataset", limit=2
-    )
+    result = service.preview_data("ri.foundry.main.dataset.test-dataset", limit=2)
 
     assert result == [{"cohort_id": 1}, {"cohort_id": 2}]
     mock_dataset_class.read_table.assert_called_once_with(

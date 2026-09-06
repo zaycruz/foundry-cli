@@ -454,7 +454,9 @@ def test_schedule_list_passes_public_dictionary_contract_to_formatter(
     ]
     mock_dataset_service.get_schedules.return_value = schedules
 
-    with patch("foundry_cli.commands.dataset.formatter.format_schedules") as format_schedules:
+    with patch(
+        "foundry_cli.commands.dataset.formatter.format_schedules"
+    ) as format_schedules:
         result = runner.invoke(
             app,
             ["schedules", "list", "ri.foundry.main.dataset.input"],

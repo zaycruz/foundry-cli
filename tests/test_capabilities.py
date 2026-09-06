@@ -15,9 +15,9 @@ from foundry_cli.capabilities import (
 def test_baseline_contains_all_tools_and_workflows() -> None:
     manifest = capability_manifest()
 
-    assert manifest["catalog"]["tool_count"] == 73
+    assert manifest["catalog"]["tool_count"] == 95
     assert manifest["catalog"]["workflow_count"] == 1
-    assert manifest["counts"]["total"] == 74
+    assert manifest["counts"]["total"] == 96
     assert {item["capability_id"] for item in manifest["capabilities"]} >= {
         "get_resource_graph",
         "preview_transform",

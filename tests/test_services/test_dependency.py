@@ -1457,7 +1457,8 @@ def test_dataset_chain_uses_schedule_action_then_run_build_jobs_outputs(monkeypa
         }
 
     monkeypatch.setattr(
-        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page", schedules
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
+        schedules,
     )
     monkeypatch.setattr(
         "foundry_cli.services.dependency.OrchestrationService.get_schedule", schedule
@@ -2288,7 +2289,8 @@ def test_schedule_reverse_index_pages_create_per_subject_conditional_records(
         return {"schedule_rids": ["schedule-b"], "next_page_token": None}
 
     monkeypatch.setattr(
-        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page", schedules
+        "foundry_cli.services.dependency.DatasetService.get_schedule_rids_page",
+        schedules,
     )
     monkeypatch.setattr(
         DependencyGraphService,

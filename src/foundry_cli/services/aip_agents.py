@@ -49,7 +49,9 @@ class AipAgentsService(BaseService):
             agent = self.service.Agent.get(agent_rid, version=version, preview=preview)
             return self._serialize_response(agent)
         except Exception as e:
-            raise RuntimeError(f"Failed to get agent {agent_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get agent {agent_rid}: {self._describe_error(e)}"
+            )
 
     # ===== Session Operations =====
 
@@ -81,7 +83,9 @@ class AipAgentsService(BaseService):
             )
             return self._paginate_iterator(iterator, config)
         except Exception as e:
-            raise RuntimeError(f"Failed to list sessions for agent {agent_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to list sessions for agent {agent_rid}: {self._describe_error(e)}"
+            )
 
     def get_session(
         self, agent_rid: str, session_rid: str, preview: bool = True
@@ -144,4 +148,6 @@ class AipAgentsService(BaseService):
             )
             return self._paginate_iterator(iterator, config)
         except Exception as e:
-            raise RuntimeError(f"Failed to list versions for agent {agent_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to list versions for agent {agent_rid}: {self._describe_error(e)}"
+            )

@@ -314,7 +314,9 @@ class TestCLIIntegration:
             profile_manager.add_profile("test")
             profile_manager.set_default("test")
 
-            with patch("foundry_cli.services.dataset.DatasetService") as mock_dataset_service:
+            with patch(
+                "foundry_cli.services.dataset.DatasetService"
+            ) as mock_dataset_service:
                 # Service mocking handles authentication internally
                 # Mock dataset service
                 mock_service = Mock()
@@ -382,7 +384,9 @@ class TestCLIIntegration:
             }
             mock_storage.return_value = mock_storage_instance
 
-            with patch("foundry_cli.config.profiles.ProfileManager") as mock_profile_manager:
+            with patch(
+                "foundry_cli.config.profiles.ProfileManager"
+            ) as mock_profile_manager:
                 mock_pm = Mock()
                 mock_pm.get_active_profile.return_value = "env-profile"
                 mock_profile_manager.return_value = mock_pm

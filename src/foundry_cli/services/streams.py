@@ -72,7 +72,9 @@ class StreamsService(BaseService):
             )
             return self._serialize_response(dataset)
         except Exception as e:
-            raise RuntimeError(f"Failed to create streaming dataset '{name}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to create streaming dataset '{name}': {self._describe_error(e)}"
+            )
 
     # ===== Stream Operations =====
 
@@ -205,7 +207,9 @@ class StreamsService(BaseService):
                 preview=preview,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to publish record to stream: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to publish record to stream: {self._describe_error(e)}"
+            )
 
     def publish_records(
         self,

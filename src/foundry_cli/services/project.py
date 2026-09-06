@@ -124,7 +124,9 @@ class ProjectService(BaseService):
                 project = create_fn(**create_params)
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to create project '{display_name}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to create project '{display_name}': {self._describe_error(e)}"
+            )
 
     def get_project(self, project_rid: str) -> Dict[str, Any]:
         """
@@ -140,7 +142,9 @@ class ProjectService(BaseService):
             project = self.service.Project.get(project_rid)
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to get project {project_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get project {project_rid}: {self._describe_error(e)}"
+            )
 
     def list_projects(
         self,
@@ -226,7 +230,9 @@ class ProjectService(BaseService):
             )
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to update project {project_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to update project {project_rid}: {self._describe_error(e)}"
+            )
 
     def get_project_imports(
         self,
@@ -560,7 +566,9 @@ class ProjectService(BaseService):
             project = self.service.Project.create_from_template(**create_params)
             return self._format_project_info(project)
         except Exception as e:
-            raise RuntimeError(f"Failed to create project from template: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to create project from template: {self._describe_error(e)}"
+            )
 
     def _format_project_info(self, project: Any) -> Dict[str, Any]:
         """

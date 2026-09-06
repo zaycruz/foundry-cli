@@ -106,7 +106,10 @@ class TestComputeInfoCommand:
     @patch("foundry_cli.commands.compute.ComputeService")
     def test_info_agent_format_marks_shape_unverified(self, mock_service_class):
         """Test the agent envelope honestly marks shape_verified false."""
-        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import (
+            build_agent_output,
+            reset_agent_output,
+        )
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -366,7 +369,10 @@ class TestComputeManageCommand:
     @patch("foundry_cli.commands.compute.ComputeService")
     def test_manage_agent_plan_envelope(self, mock_service_class):
         """Test the agent plan envelope carries mode and verification flags."""
-        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import (
+            build_agent_output,
+            reset_agent_output,
+        )
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service
@@ -507,7 +513,10 @@ class TestComputeExecuteCommand:
     @patch("foundry_cli.commands.compute.ComputeService")
     def test_execute_agent_plan_envelope(self, mock_service_class):
         """Test the agent plan envelope carries the operation and flags."""
-        from foundry_cli.utils.agent_output import build_agent_output, reset_agent_output
+        from foundry_cli.utils.agent_output import (
+            build_agent_output,
+            reset_agent_output,
+        )
 
         mock_service = Mock()
         mock_service_class.return_value = mock_service

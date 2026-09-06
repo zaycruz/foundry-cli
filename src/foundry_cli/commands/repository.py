@@ -648,9 +648,13 @@ def push_repository(
                 allow_default_branch=allow_default_branch,
             )
 
-        warnings = [] if apply else [
-            "Dry-run only: no remote write was issued. Re-run with --apply to push."
-        ]
+        warnings = (
+            []
+            if apply
+            else [
+                "Dry-run only: no remote write was issued. Re-run with --apply to push."
+            ]
+        )
         if agent_mode_enabled() or format == "agent":
             buffer_agent_payload(
                 result,

@@ -16,7 +16,9 @@ class TestVerifyCommandSimple:
 
     def test_verify_no_profile_configured(self):
         """Test verify when no profile is configured."""
-        with patch("foundry_cli.commands.verify.AuthManager") as mock_auth_manager_class:
+        with patch(
+            "foundry_cli.commands.verify.AuthManager"
+        ) as mock_auth_manager_class:
             # Mock AuthManager to return None for active profile
             mock_auth_manager = Mock()
             mock_auth_manager.get_current_profile.return_value = None

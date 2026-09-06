@@ -158,7 +158,9 @@ def test_provider_errors_map_to_stable_categories(error, expected_type):
 def delegates():
     with (
         patch("foundry_cli.services.proposal.RepositoryService") as repository_class,
-        patch("foundry_cli.services.proposal.GlobalProposalService") as global_proposal_class,
+        patch(
+            "foundry_cli.services.proposal.GlobalProposalService"
+        ) as global_proposal_class,
     ):
         yield repository_class, global_proposal_class
 

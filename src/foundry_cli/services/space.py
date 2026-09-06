@@ -52,7 +52,9 @@ class SpaceService(BaseService):
             )
             return self._format_space_info(space)
         except Exception as e:
-            raise RuntimeError(f"Failed to create space '{display_name}': {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to create space '{display_name}': {self._describe_error(e)}"
+            )
 
     def get_space(self, space_rid: str) -> Dict[str, Any]:
         """
@@ -68,7 +70,9 @@ class SpaceService(BaseService):
             space = self.service.Space.get(space_rid, preview=True)
             return self._format_space_info(space)
         except Exception as e:
-            raise RuntimeError(f"Failed to get space {space_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get space {space_rid}: {self._describe_error(e)}"
+            )
 
     def list_spaces(
         self,
@@ -144,7 +148,9 @@ class SpaceService(BaseService):
             )
             return self._format_space_info(space)
         except Exception as e:
-            raise RuntimeError(f"Failed to update space {space_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to update space {space_rid}: {self._describe_error(e)}"
+            )
 
     def delete_space(self, space_rid: str) -> None:
         """
@@ -159,7 +165,9 @@ class SpaceService(BaseService):
         try:
             self.service.Space.delete(space_rid, preview=True)
         except Exception as e:
-            raise RuntimeError(f"Failed to delete space {space_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to delete space {space_rid}: {self._describe_error(e)}"
+            )
 
     def _format_space_info(self, space: Any) -> Dict[str, Any]:
         """

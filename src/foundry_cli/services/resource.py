@@ -173,9 +173,7 @@ class ResourceService(BaseService):
                     continue
                 visited_folders.add(current_folder_rid)
 
-                children = self.service.Folder.children(
-                    current_folder_rid
-                )
+                children = self.service.Folder.children(current_folder_rid)
                 for resource in children:
                     if self._matches_resource_type(
                         resource, resource_type
@@ -276,9 +274,7 @@ class ResourceService(BaseService):
             RuntimeError: If adding markings fails
         """
         try:
-            self.service.Resource.add_markings(
-                resource_rid, marking_ids=marking_ids
-            )
+            self.service.Resource.add_markings(resource_rid, marking_ids=marking_ids)
         except Exception as e:
             detail = self._format_error_detail(e)
             raise RuntimeError(
@@ -297,9 +293,7 @@ class ResourceService(BaseService):
             RuntimeError: If removing markings fails
         """
         try:
-            self.service.Resource.remove_markings(
-                resource_rid, marking_ids=marking_ids
-            )
+            self.service.Resource.remove_markings(resource_rid, marking_ids=marking_ids)
         except Exception as e:
             detail = self._format_error_detail(e)
             raise RuntimeError(
@@ -356,9 +350,7 @@ class ResourceService(BaseService):
             Access requirements dictionary with organizations and markings
         """
         try:
-            requirements = self.service.Resource.get_access_requirements(
-                resource_rid
-            )
+            requirements = self.service.Resource.get_access_requirements(resource_rid)
             return self._format_access_requirements(requirements)
         except Exception as e:
             detail = self._format_error_detail(e)
@@ -381,9 +373,7 @@ class ResourceService(BaseService):
 
         try:
             elements = [GetByPathResourcesBatchRequestElement(path=p) for p in paths]
-            response = self.service.Resource.get_by_path_batch(
-                body=elements
-            )
+            response = self.service.Resource.get_by_path_batch(body=elements)
             resources = []
             for resource in response.resources:
                 resources.append(self._format_resource_info(resource))

@@ -130,7 +130,9 @@ class ResourceRoleService(BaseService):
                     role_grants.append(formatted)
             return role_grants
         except Exception as e:
-            raise RuntimeError(f"Failed to list roles for resource {resource_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to list roles for resource {resource_rid}: {self._describe_error(e)}"
+            )
 
     def _format_role_grant(self, role_grant: Any, resource_rid: str) -> Dict[str, Any]:
         """

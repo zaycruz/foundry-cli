@@ -142,6 +142,8 @@ Load these files based on the user's task:
 | Custom widget sets and releases | `reference/widgets-commands.md` |
 | Dependency and change-impact analysis | `reference/dependency-commands.md` |
 | Compute Modules (info, logs, plan-first manage/execute) | `reference/compute-commands.md` |
+| AIP evaluation suites and runs (plan-first run trigger) | `reference/evals-commands.md` |
+| AI FDE threads, agent state, and settings | `reference/ai-fde-commands.md` |
 
 ## Workflow Files
 

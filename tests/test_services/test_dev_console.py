@@ -282,7 +282,9 @@ def test_subprocess_failure_marks_install_failed(storage):
         (200, _definition(packages=[{"type": "pypi", "name": "my-app-sdk"}]), "{}"),
     ]
     completed = Mock(returncode=1, stdout="", stderr="boom")
-    with patch("foundry_cli.services.dev_console.subprocess.run", return_value=completed):
+    with patch(
+        "foundry_cli.services.dev_console.subprocess.run", return_value=completed
+    ):
         result = service.install_sdk_package(APP_RID, target=Path("/tmp/t"))
 
     assert result["status"] == "failed"
@@ -552,7 +554,9 @@ def test_sdk_generate_apply_non_success_terminal_status_is_failed():
         (200, _sdk_record_payload(npm_status="requested"), "{}"),
         (200, _sdks_page(_sdk_record_payload(npm_status="failure")), "{}"),
     ]
-    with patch("foundry_cli.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]):
+    with patch(
+        "foundry_cli.services.dev_console.time.monotonic", side_effect=[0.0, 12.0]
+    ):
         result = service.generate_sdk(APP_RID, apply=True)
 
     assert result["status"] == "failed"

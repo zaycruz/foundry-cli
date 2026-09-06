@@ -256,9 +256,7 @@ class TestPushRepository:
             }
         )
         with pytest.raises(RepositoryPushError, match="does not match"):
-            service.push_repository(
-                REPO_RID, "refs/heads/feature", "refs/heads/review"
-            )
+            service.push_repository(REPO_RID, "refs/heads/feature", "refs/heads/review")
         run.assert_not_called()
 
     @patch("foundry_cli.services.repository.subprocess.run")
@@ -268,9 +266,7 @@ class TestPushRepository:
         )
         service = self._service()
         with pytest.raises(RepositoryPushError, match="does not match") as error:
-            service.push_repository(
-                REPO_RID, "refs/heads/feature", "refs/heads/review"
-            )
+            service.push_repository(REPO_RID, "refs/heads/feature", "refs/heads/review")
         assert self.TOKEN not in str(error.value)
 
     @patch("foundry_cli.services.repository.subprocess.run")

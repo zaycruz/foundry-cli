@@ -47,7 +47,9 @@ class TestAuthManager:
         mock_storage.get_profile.return_value = credentials
 
         # Mock the token provider
-        with patch("foundry_cli.auth.manager.TokenAuthProvider") as mock_token_provider_class:
+        with patch(
+            "foundry_cli.auth.manager.TokenAuthProvider"
+        ) as mock_token_provider_class:
             mock_provider = Mock()
             mock_client = Mock()
             mock_provider.get_client.return_value = mock_client
@@ -90,7 +92,9 @@ class TestAuthManager:
         }
         mock_storage.get_profile.return_value = credentials
 
-        with patch("foundry_cli.auth.manager.TokenAuthProvider") as mock_token_provider_class:
+        with patch(
+            "foundry_cli.auth.manager.TokenAuthProvider"
+        ) as mock_token_provider_class:
             mock_provider = Mock()
             mock_client = Mock()
             mock_provider.get_client.return_value = mock_client

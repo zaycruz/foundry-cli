@@ -4,7 +4,10 @@ import sys
 from unittest.mock import MagicMock, patch
 
 
-from foundry_cli.utils.alias_resolver import resolve_command_aliases, inject_alias_resolution
+from foundry_cli.utils.alias_resolver import (
+    resolve_command_aliases,
+    inject_alias_resolution,
+)
 
 
 class TestAliasResolver:

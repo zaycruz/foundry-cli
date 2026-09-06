@@ -221,7 +221,9 @@ class TestOntologyGetNotFoundHint:
         assert _hints(result) == [ONTOLOGY_GET_NOT_FOUND_HINT]
 
     def test_generic_get_failure_carries_no_hint(self):
-        with patch("foundry_cli.commands.ontology.ObjectTypeService") as service_constructor:
+        with patch(
+            "foundry_cli.commands.ontology.ObjectTypeService"
+        ) as service_constructor:
             service_constructor.return_value.get_object_type.side_effect = RuntimeError(
                 "connection reset"
             )
@@ -268,7 +270,9 @@ class TestUpsertInvocationHint:
         assert _hints(result) == [ACTION_TYPE_UPSERT_HINT]
 
     def test_dry_run_validation_failure_carries_hint(self):
-        with patch("foundry_cli.commands.ontology.ObjectTypeService") as service_constructor:
+        with patch(
+            "foundry_cli.commands.ontology.ObjectTypeService"
+        ) as service_constructor:
             service_constructor.return_value.upsert_object_type.return_value = {
                 "validation": {
                     "status": "error",

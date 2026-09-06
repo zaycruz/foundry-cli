@@ -39,7 +39,9 @@ class OrchestrationService(BaseService):
                 )
             return self._format_build_info(build)
         except Exception as e:
-            raise RuntimeError(f"Failed to get build {build_rid}: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to get build {build_rid}: {self._describe_error(e)}"
+            ) from e
 
     def create_build(
         self,
@@ -103,7 +105,9 @@ class OrchestrationService(BaseService):
         try:
             self.service.Build.cancel(build_rid)
         except Exception as e:
-            raise RuntimeError(f"Failed to cancel build {build_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to cancel build {build_rid}: {self._describe_error(e)}"
+            )
 
     def get_build_jobs(
         self,
@@ -135,7 +139,9 @@ class OrchestrationService(BaseService):
             response = self.service.Build.jobs(**kwargs)
             return self._format_jobs_response(response)
         except Exception as e:
-            raise RuntimeError(f"Failed to get jobs for build {build_rid}: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to get jobs for build {build_rid}: {self._describe_error(e)}"
+            ) from e
 
     def search_builds(
         self,
@@ -262,7 +268,9 @@ class OrchestrationService(BaseService):
             job = self.service.Job.get(job_rid)
             return self._format_job_info(job)
         except Exception as e:
-            raise RuntimeError(f"Failed to get job {job_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to get job {job_rid}: {self._describe_error(e)}"
+            )
 
     def get_jobs_batch(self, job_rids: List[str]) -> Dict[str, Any]:
         """
@@ -311,7 +319,9 @@ class OrchestrationService(BaseService):
             schedule = self.service.Schedule.get(**kwargs)
             return self._format_schedule_info(schedule)
         except Exception as e:
-            raise RuntimeError(f"Failed to get schedule {schedule_rid}: {self._describe_error(e)}") from e
+            raise RuntimeError(
+                f"Failed to get schedule {schedule_rid}: {self._describe_error(e)}"
+            ) from e
 
     def get_schedule_affected_resources(
         self,
@@ -387,7 +397,9 @@ class OrchestrationService(BaseService):
         try:
             self.service.Schedule.delete(schedule_rid)
         except Exception as e:
-            raise RuntimeError(f"Failed to delete schedule {schedule_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to delete schedule {schedule_rid}: {self._describe_error(e)}"
+            )
 
     def pause_schedule(self, schedule_rid: str) -> None:
         """
@@ -399,7 +411,9 @@ class OrchestrationService(BaseService):
         try:
             self.service.Schedule.pause(schedule_rid)
         except Exception as e:
-            raise RuntimeError(f"Failed to pause schedule {schedule_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to pause schedule {schedule_rid}: {self._describe_error(e)}"
+            )
 
     def unpause_schedule(self, schedule_rid: str) -> None:
         """
@@ -411,7 +425,9 @@ class OrchestrationService(BaseService):
         try:
             self.service.Schedule.unpause(schedule_rid)
         except Exception as e:
-            raise RuntimeError(f"Failed to unpause schedule {schedule_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to unpause schedule {schedule_rid}: {self._describe_error(e)}"
+            )
 
     def run_schedule(self, schedule_rid: str) -> None:
         """
@@ -423,7 +439,9 @@ class OrchestrationService(BaseService):
         try:
             self.service.Schedule.run(schedule_rid)
         except Exception as e:
-            raise RuntimeError(f"Failed to run schedule {schedule_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to run schedule {schedule_rid}: {self._describe_error(e)}"
+            )
 
     def replace_schedule(
         self,
@@ -470,7 +488,9 @@ class OrchestrationService(BaseService):
             schedule = self.service.Schedule.replace(**kwargs)
             return self._format_schedule_info(schedule)
         except Exception as e:
-            raise RuntimeError(f"Failed to replace schedule {schedule_rid}: {self._describe_error(e)}")
+            raise RuntimeError(
+                f"Failed to replace schedule {schedule_rid}: {self._describe_error(e)}"
+            )
 
     def get_schedule_runs(
         self,

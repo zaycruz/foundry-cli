@@ -77,7 +77,6 @@ class TestProjectService:
                     }
                 ]
             },
-            
         )
 
         assert result["rid"] == "ri.compass.main.project.123"
@@ -121,7 +120,6 @@ class TestProjectService:
                     }
                 ]
             },
-            
         )
 
     def test_create_project_failure(
@@ -151,7 +149,7 @@ class TestProjectService:
         result = project_service.get_project("ri.compass.main.project.123")
 
         mock_client.filesystem.Project.get.assert_called_once_with(
-            "ri.compass.main.project.123", 
+            "ri.compass.main.project.123",
         )
         assert result["rid"] == "ri.compass.main.project.123"
         assert result["display_name"] == "Test Project"
@@ -194,7 +192,7 @@ class TestProjectService:
 
         mock_client.filesystem.Space.list.assert_called_once_with()
         mock_client.filesystem.Folder.children.assert_called_once_with(
-            "ri.compass.main.space.789", 
+            "ri.compass.main.space.789",
         )
         assert len(result) == 2
         assert result[0]["rid"] == "ri.compass.main.project.123"
@@ -247,7 +245,7 @@ class TestProjectService:
 
         mock_client.filesystem.Space.list.assert_called_once_with()
         mock_client.filesystem.Folder.children.assert_called_once_with(
-            "ri.compass.main.space.789", 
+            "ri.compass.main.space.789",
         )
 
     def test_list_projects_with_filters(self, project_service, mock_client):
@@ -265,7 +263,6 @@ class TestProjectService:
 
         mock_client.filesystem.Folder.children.assert_called_once_with(
             "ri.compass.main.space.789",
-            
             page_size=10,
             page_token="token123",
         )
@@ -321,7 +318,7 @@ class TestProjectService:
         )
 
         mock_client.filesystem.Project.get.assert_called_once_with(
-            "ri.compass.main.project.123", 
+            "ri.compass.main.project.123",
         )
         mock_client.filesystem.Project.replace.assert_called_once_with(
             project_rid="ri.compass.main.project.123",
@@ -369,7 +366,8 @@ class TestProjectService:
         project_service.add_organizations("ri.compass.main.project.789", org_rids)
 
         mock_client.filesystem.Project.add_organizations.assert_called_once_with(
-            "ri.compass.main.project.789", organization_rids=org_rids, 
+            "ri.compass.main.project.789",
+            organization_rids=org_rids,
         )
 
     def test_add_organizations_failure(self, project_service, mock_client):
@@ -396,7 +394,8 @@ class TestProjectService:
         project_service.remove_organizations("ri.compass.main.project.789", org_rids)
 
         mock_client.filesystem.Project.remove_organizations.assert_called_once_with(
-            "ri.compass.main.project.789", organization_rids=org_rids, 
+            "ri.compass.main.project.789",
+            organization_rids=org_rids,
         )
 
     def test_remove_organizations_failure(self, project_service, mock_client):
@@ -428,7 +427,7 @@ class TestProjectService:
         result = project_service.list_organizations("ri.compass.main.project.789")
 
         mock_client.filesystem.Project.organizations.assert_called_once_with(
-            "ri.compass.main.project.789", 
+            "ri.compass.main.project.789",
         )
         assert len(result) == 2
         assert result[0]["organization_rid"] == "ri.compass.main.org.123"
@@ -450,7 +449,6 @@ class TestProjectService:
 
         mock_client.filesystem.Project.organizations.assert_called_once_with(
             "ri.compass.main.project.789",
-            
             page_size=10,
             page_token="token123",
         )
@@ -487,7 +485,6 @@ class TestProjectService:
         mock_client.filesystem.Project.create_from_template.assert_called_once_with(
             template_rid="ri.compass.main.template.456",
             variable_values={"name": "MyProject", "env": "prod"},
-            
         )
         assert result["rid"] == "ri.compass.main.project.123"
         assert result["display_name"] == "Project from Template"
@@ -513,7 +510,6 @@ class TestProjectService:
         mock_client.filesystem.Project.create_from_template.assert_called_once_with(
             template_rid="ri.compass.main.template.456",
             variable_values={"name": "MyProject"},
-            
             default_roles=["viewer"],
             organization_rids=["ri.compass.main.org.789"],
             project_description="Test project",

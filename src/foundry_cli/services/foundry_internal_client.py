@@ -1,4 +1,9 @@
-"""HTTP client for inspectable, read-only Foundry internal API requests."""
+"""HTTP client for inspectable Foundry internal API requests.
+
+GraphQL traffic is read-only by default; the only mutation path is the
+scoped, registry-gated exception documented on ``graphql_bulk`` and
+``VERIFIED_GRAPHQL_MUTATION_NAMES``.
+"""
 
 from __future__ import annotations
 
@@ -42,6 +47,17 @@ class GraphQLOperation:
     name: str
     query: str
     variables: Mapping[str, Any]
+
+
+# Scoped exception to the read-only GraphQL policy below. These operation
+# names are the ONLY mutations the gateway client will ever send, and only
+# when the caller also passes the name via ``allow_mutation_names`` — both
+# gates are required. An operation name enters this registry only after its
+# mutation document and variables were captured verbatim from the live
+# Foundry UI (currently: AI FDE thread creation; see services/ai_fde.py and
+# /tmp/evals-capture/contracts-digest.md, CDP capture 2026-09-04, HTTP 200).
+# The general ban stays for every other operation.
+VERIFIED_GRAPHQL_MUTATION_NAMES: frozenset[str] = frozenset({"CreateThreadMutation"})
 
 
 class FoundryInternalClient:
@@ -113,6 +129,7 @@ class FoundryInternalClient:
         operations: Sequence[GraphQLOperation | Mapping[str, Any]],
         *,
         request_timeout: float = 30.0,
+        allow_mutation_names: Optional[Iterable[str]] = None,
     ) -> list[GraphQLResult]:
         """Run read queries through the GraphQL bulk gateway.
 
@@ -120,14 +137,31 @@ class FoundryInternalClient:
         ``extensions.requestIndex`` because the SSE stream can arrive out of
         order. An unusable HTTP 500 for a single-operation batch is retried
         once with the same operation; a second failure is inconclusive.
+
+        Mutations are banned by default. A mutation document passes only when
+        its operation name appears BOTH in the module-level
+        ``VERIFIED_GRAPHQL_MUTATION_NAMES`` registry (UI-capture-verified
+        operations) and in the per-call ``allow_mutation_names`` argument, so
+        no caller can smuggle an unverified mutation through and no verified
+        mutation runs by accident.
         """
 
         normalized = [self._normalize_graphql_operation(item) for item in operations]
         if not normalized:
             return []
+        allowed_mutations = set(allow_mutation_names or ())
         for operation in normalized:
             if re.search(r"(?i)\bmutation\b", operation.query):
-                raise ValueError("FoundryInternalClient only permits GraphQL reads")
+                if not (
+                    operation.name in allowed_mutations
+                    and operation.name in VERIFIED_GRAPHQL_MUTATION_NAMES
+                ):
+                    raise ValueError(
+                        "FoundryInternalClient only permits GraphQL reads; "
+                        f"mutation {operation.name!r} is not in the "
+                        "verified-mutation registry or was not passed via "
+                        "allow_mutation_names"
+                    )
 
         status, results, usable = self._graphql_request(
             normalized, request_timeout=request_timeout
@@ -159,12 +193,18 @@ class FoundryInternalClient:
         variables: Mapping[str, Any],
         *,
         request_timeout: float = 30.0,
+        allow_mutation_names: Optional[Iterable[str]] = None,
     ) -> GraphQLResult:
-        """Run one read query and return its data and GraphQL errors."""
+        """Run one read query and return its data and GraphQL errors.
+
+        ``allow_mutation_names`` is the scoped mutation exception; see
+        ``graphql_bulk``.
+        """
 
         return self.graphql_bulk(
             [GraphQLOperation(operation_name, query, variables)],
             request_timeout=request_timeout,
+            allow_mutation_names=allow_mutation_names,
         )[0]
 
     @staticmethod

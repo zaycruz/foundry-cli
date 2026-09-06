@@ -584,6 +584,7 @@ class TestSchemaNormalizer:
 
     def _normalize(self, d):
         from foundry_cli.commands.streams import _normalize_stream_schema
+
         return _normalize_stream_schema(d)
 
     def test_converts_legacy_format(self):

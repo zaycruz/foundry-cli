@@ -1,0 +1,67 @@
+[
+ {
+  "type": "success",
+  "success": {
+   "type": "openAiResponses",
+   "openAiResponses": {
+    "type": "created",
+    "created": {
+     "createdAt": "2026-09-04T00:00:00Z",
+     "id": "resp_0000000000000000000000000000000000000000000000000001",
+     "model": "gpt-5.6-sol",
+     "sequenceNumber": 0
+    }
+   }
+  }
+ },
+ {
+  "type": "success",
+  "success": {
+   "type": "openAiResponses",
+   "openAiResponses": {
+    "type": "functionCallArgumentsDone",
+    "functionCallArgumentsDone": {
+     "arguments": "{\"pageIds\":[\"foundry-docs/overview\"]}",
+     "itemId": "fc_0000000000000000000000000000000000000000000000000002",
+     "outputIndex": 0,
+     "sequenceNumber": 1
+    }
+   }
+  }
+ },
+ {
+  "type": "success",
+  "success": {
+   "type": "openAiResponses",
+   "openAiResponses": {
+    "type": "completed",
+    "completed": {
+     "createdAt": "2026-09-04T00:00:00Z",
+     "id": "resp_0000000000000000000000000000000000000000000000000001",
+     "model": "gpt-5.6-sol",
+     "output": [
+      {
+       "type": "functionToolCall",
+       "functionToolCall": {
+        "arguments": "{\"pageIds\":[\"foundry-docs/overview\"]}",
+        "callId": "call_Aaaaaaaaaaaaaaaaaaaaaaaaa",
+        "id": "fc_0000000000000000000000000000000000000000000000000002",
+        "name": "load_documentation",
+        "status": "COMPLETED"
+       }
+      }
+     ],
+     "status": "COMPLETED",
+     "usage": {
+      "inputTokens": 98,
+      "inputTokenDetails": {"cachedTokens": 0, "cacheWriteTokens": 0},
+      "outputTokens": 26,
+      "outputTokensDetails": {"reasoningTokens": 0},
+      "totalTokens": 124
+     },
+     "sequenceNumber": 2
+    }
+   }
+  }
+ }
+]
