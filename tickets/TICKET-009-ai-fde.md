@@ -1,6 +1,6 @@
 # TICKET-009: AI FDE thread orchestration (agentic coding/ops assistant)
 
-**Status**: Thread primitives AND the client-side agent loop (MVP) implemented and contract-verified (loop captured from the live UI; LLM call + thread delta writes verified against a second deployment); lifecycle and tool-coverage gaps below remain open
+**Status**: Thread primitives AND the client-side agent loop implemented and contract-verified (loop captured from the live UI; LLM call + thread delta writes verified against a second deployment); the full 72-tool catalog is registered with a mined mode→tool-set system (25 live executors, 47 fail-closed — matrix below); lifecycle and remaining tool-coverage gaps below stay open
 **Priority**: High — flagship agentic surface; thread primitives are the foundation for any agent-loop work
 **Found**: 2026-09-04 UI capture session (same CDP capture as TICKET-007 resolution)
 
@@ -108,6 +108,91 @@ block is the captured text minus session-specific lines (run date
 substituted; no fabricated user ID or skill catalog) plus an additive
 `<cliNotes>` block describing this loop's constraints.
 
+## Implemented: full tool catalog + mode system
+
+The complete 72-tool catalog the UI can expose is now registered verbatim
+(extracted from the richest captured request, pinned by a SHA-256
+regression test), with a mined mode→tool-set system:
+
+- Default (no mode selected): the captured 8-tool base set.
+- `change_mode` swaps the exposed set per the capture: `functionsEditing`
+  → 51 tools; enabling the `executeAction` capability adds
+  `execute_action` AND `await_automation_execution` (53 total). The
+  72-tool superset adds the 7 schedule + 12 logic tools; those families
+  were enabled client-side mid-session with no capability name recorded
+  (modeConfig/sessionState byte-identical across the transition — only
+  `toolConfigurations` changed). Other advertised modes were never
+  selected, so `change_mode` to them keeps the current set with a note.
+- `--all-tools` exposes the full catalog from turn 1.
+- The request tool list exactly matches the
+  `agentStateModification.toolConfigurations` enabled map the UI writes
+  to thread metadata at each transition (the mining key).
+
+### Tool coverage matrix (live vs fail-closed)
+
+LIVE (25): `ontology_sql_query`, `list_evaluation_runs`,
+`load_evaluation_runs`, `get_test_case_results`,
+`get_evaluation_suite_definition`, `get_evaluation_suites_for_target`,
+`run_evaluation_suite`*, `execute_action`*,
+`request_clarification_from_user`, `change_mode`, `enable_capabilities`,
+`disable_capabilities`, `manage_context`, `load_skill`,
+`load_object_types`, `load_action_types`, `load_link_types`,
+`get_action_types_for_object_type`, `get_link_types_for_object_type`,
+`load_object_sets`, `load_functions`, `load_code_repo`,
+`load_pull_request`, `container_git_status`,
+`container_execute_terminal_command`* (* = approval-gated write; the
+terminal command gates every call because the UI's auto-approval
+classifier was not captured; container tools boot a container deployment
+as a side effect, exactly as the captured UI does).
+
+FAIL-CLOSED (47 — spec exposed verbatim, executor raises a typed
+`UnverifiedContract`; per-tool evidence in the loop module docstring):
+
+- Schedules family (7): `get_dataset_schedules`, `run_schedule`,
+  `pause_schedule`, `unpause_schedule`, `create_schedule`,
+  `replace_schedule`, `delete_schedule` — **no schedule/orchestration
+  endpoint appears anywhere in the 8,143-request capture**, even though
+  the 72-tool set exposes the specs.
+- `ci_checks` — the tool was never exercised; only UI background polling
+  for already-known job/build RIDs was recorded (`GET
+  /build2/api/info/jobs3/{jobRid}`, `GET
+  /job-tracker/api/builds/{buildRid}`), not the repositoryRid+branch →
+  check mapping the tool contract takes.
+- Logic family (12): `create_logic_function`,
+  `edit_logic_function_definition`, `put_logic_function_definition`,
+  `publish_logic_function`, `modify_logic_function_metadata`,
+  `get_logic_function_definition`, `get_logic_function_metadata`,
+  `get_logic_execution_details`, `list_logic_blocks`,
+  `list_logic_executions`, `lookup_logic_block_declarations`,
+  `preview_run_logic_function` — exposed but never exercised.
+- `await_automation_execution`, `search_language_model_functions`,
+  `get_language_model_function`, `get_ontology_sdk_documentation`,
+  `refresh_ontology_sdk`, `get_functions_repository_imports`,
+  `edit_functions_repository_imports`, `run_functions_diagnostics`,
+  `function_preview`, `publish_functions`, `create_branch`,
+  `create_code_repo`, `create_or_update_pull_request`,
+  `add_missing_project_imports`, `edit_code_workspace_source_imports`,
+  `upgrade_code_repository`, `create_evaluation_suite`,
+  `edit_evaluation_suite`, `put_evaluation_suite`,
+  `get_evaluation_suite_project_scope_readiness` (core
+  `suggestedExecutionScope` captured — use `evals suite
+  suggested-scope` — but the imports-context half was not),
+  `load_documentation`, `load_documentation_bundles`,
+  `container_get_file_contents` (endpoint captured, all response bodies
+  elided), `container_put_file`, `container_edit_file`,
+  `container_sync`, `container_copy_blobster_file_to_repo`.
+
+UX changes shipped with the catalog: default stdout is the final
+assistant text as full-width Markdown (`-f json` for the structured
+report); run help documents that AI FDE has no resource-search tool even
+in the full catalog (name RIDs explicitly — the UI's @-mentions are
+unavailable to the CLI); a clarification guard injects a best-effort
+directive with a remaining-turns countdown after 2 consecutive
+`request_clarification_from_user` calls with no intervening tool use;
+the request context budget rises to ~280k estimated tokens (captured
+instructions: 1,050,000-token window, 300,000 recommended) so the full
+catalog fits without truncating tool outputs.
+
 ## Remaining gaps (deliberately not built — never captured)
 - **Stop/cancel mid-run**: no cancel call was observed. Capture guidance:
   start a long-running agent task in the UI, press stop, and record the
@@ -117,17 +202,19 @@ substituted; no fabricated user ID or skill catalog) plus an additive
   the resulting thread items / metadata writes.
 - **Thread delete/rename**: never observed. Capture guidance: rename and
   delete a disposable thread in the UI and record verb/path/body for both.
-- **Documentation tool endpoints**: `load_documentation` /
-  `load_documentation_bundles` executors fail closed. Capture guidance:
-  start a fresh AI FDE session, make the agent load a documentation page
-  and a bundle, and record verb/path/body for both.
-- **Full mode→tool semantics**: the captured instructions list tool
-  CATEGORIES per mode, not tool names, so `change_mode` does not gate the
-  offered tool set. Capture guidance: diff the `tools` array of two
-  `streamCompletionChunk` requests across a mode switch.
+- **Fail-closed tool endpoints** (see the matrix): capture guidance —
+  exercise each tool in the UI with the network recorder on. Priority:
+  the schedules family (run a schedule from an AI FDE session), CI
+  checks (let the agent commit and watch checks), documentation loads,
+  and the container file-write family (all currently blocked on elided
+  or absent capture evidence).
+- **Other-mode tool sets**: capture a `change_mode` to
+  `dataIntegration`/`exploration`/etc. and diff the next request's
+  `tools` array.
 - **Additional fail-closed sub-contracts** (listed in the loop module
   docstring): evals pageTokens, branch arms beyond `mainBranch`,
-  staticInputs/experiments, scalar action parameters, ontology-branch SQL.
+  staticInputs/experiments, scalar action parameters, ontology-branch
+  SQL, associated-action-type pagination.
 
 ## Acceptance criteria
 
