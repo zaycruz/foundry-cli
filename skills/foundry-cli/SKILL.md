@@ -35,6 +35,8 @@ foundry-cli is a comprehensive CLI with 100+ commands for:
 - **Streams**: Create and manage streaming datasets, publish real-time data
 - **Functions**: Execute queries, search functions, inspect value types
 - **AIP Agents**: Manage AI agents, sessions, and versions
+- **AI FDE**: Orchestrate AI FDE sessions — thread primitives plus a client-side agent loop (`ai-fde run`) with the full captured tool catalog and pfoundry extension tools
+- **AIP Evals**: Evaluation suite inspection and plan-first run orchestration (`evals suite`, `evals run`)
 - **Models**: ML model registry for model and version management
 - **Repositories**: Pull-request inspection and verified writes, headless repo context, git clone
 - **Global branching**: Ontology Global Branch and Global Proposal reads plus plan-first create/close
