@@ -9,9 +9,9 @@ repeat until the model stops calling tools.
 
 Evidence: every contract below was captured from the live AI FDE UI via
 Chrome DevTools Protocol (artifact
-``/tmp/evals-capture/capture.jsonl``, 1896 requests; richest request artifact
-``/tmp/ai-fde-richest-request.json`` with 170 input items and 72 tool specs)
-and the LLM call plus thread delta writes were live-verified
+``/tmp/evals-capture/capture.jsonl``, 8143 requests; richest request artifact
+``/tmp/ai-fde-richest-request.json`` with 170 input items and all 72 tool
+specs) and the LLM call plus thread delta writes were live-verified
 against a second deployment (probe artifact
 ``/tmp/stream-toolcall-probe.json``). This is "UI capture, live-exercised"
 evidence per ``tickets/README.md``.
@@ -107,19 +107,156 @@ Tool executors — endpoint mappings mined from the capture (all HTTP 200):
   output instead of blocking.
 - ``change_mode`` / ``enable_capabilities`` / ``disable_capabilities`` /
   ``manage_context`` (state tools, LIVE): client-side only in the capture
-  (no endpoint). Mode/capability changes adjust the active tool set for
-  subsequent LLM requests within the registered MVP tools (capability ->
-  tool mapping per the captured instructions block); ``manage_context``
-  hides/restores tool outputs from subsequent request construction
-  (captured ``<manageContextResult>`` and hidden-item serializations).
-  The full Foundry mode->tool-category semantics are NOT captured, so
-  modes do not gate which registered tools are offered.
+  (no endpoint). ``change_mode`` swaps the exposed tool set for subsequent
+  LLM requests per the mined mode->tool-set mapping below;
+  ``enable_capabilities``/``disable_capabilities`` toggle capability ->
+  tool groups per the captured instructions block and the captured
+  ``executeAction`` enablement; ``manage_context`` hides/restores tool
+  outputs from subsequent request construction (captured
+  ``<manageContextResult>`` and hidden-item serializations).
+- ``load_object_types`` / ``load_action_types`` (read, LIVE): one ``POST
+  /ontology-metadata/api/ontology/ontology/bulkLoadEntities`` per entity.
+  Object types use the captured identifier-form body
+  (``{objectTypes: [{identifier: {objectTypeRid, type: "objectTypeRid"}}],
+  entityMetadata: {}, datasourceTypes: [...5 captured types...],
+  includeObjectTypesWithoutSearchableDatasources: true, ...}``); action
+  types use the captured rid-form body (``{actionTypes: [{rid}],
+  loadRedacted: true, datasourceTypes: [], ...}``). Those are the only two
+  bulkLoad forms in the capture; non-null ``ontologyBranchRid`` arguments
+  fail closed (never captured).
+- ``load_link_types`` (read, LIVE): the pinned ``LinkTypeMainQuery``
+  GraphQL read per link type RID (captured batched 31 RIDs in one bulk
+  call). The bulkLoad ``linkTypes`` request form was never captured, so
+  the GraphQL read is used instead; non-null branches fail closed.
+- ``get_link_types_for_object_type`` / ``get_action_types_for_object_type``
+  (read, LIVE): the pinned ``AssociatedLinkTypesForObjectTypeMainQuery``
+  / ``AssociatedActionTypeRidsMainQuery`` GraphQL reads (variables carry
+  only ``objectTypeRid``), followed by the detail loads above
+  (``LinkTypeMainQuery`` per link type; rid-form bulkLoad per action
+  type). Pagination was never captured: only the first page of action
+  types is returned, with a ``_truncated`` marker when the page carries a
+  ``nextPageToken``. Non-null ``ontologyBranchRid`` fails closed.
+- ``load_object_sets`` (read, LIVE): ``GET /object-set-service/api/
+  objectSets/{objectSetRid}`` per RID (captured). The captured GETs carry
+  no branch parameter, so a non-null ``ontologyBranchRid`` fails closed.
+- ``get_evaluation_suites_for_target`` (read, LIVE): only the captured
+  arms — ``target == {"type": "function", "rid": ...}`` and
+  ``branch == {"mainBranch": true}``. Delegates to ``EvalsService``
+  (``config/v2/target/get-evaluation-suites`` then ``config/v2/get`` per
+  suite, both captured in this tool's execution window).
+- ``load_functions`` (read, LIVE): ``GET /function-registry/api/
+  functions/{functionRid}/specs/{version}`` per function (captured,
+  visible response). A null ``version`` resolves through the pinned
+  ``LatestFunctionVersionQuery`` (main branch); a non-null
+  ``ontologyBranchRid`` fails closed (never captured).
+- ``load_code_repo`` (read, LIVE): only the captured ``{"mainBranch":
+  true}`` arm. ``GET /stemma/api/repos/{rid}/resolve/refs%2Fheads%2F
+  master`` then ``GET .../paths/contents/%2F?commitish=refs%2Fheads%2F
+  master`` (root listing) and ``GET .../paths/contents/AGENTS.md?
+  commitish=...`` (the captured triple; a missing AGENTS.md is reported
+  as null, matching the UI's best-effort load).
+- ``load_pull_request`` (read, LIVE): delegates to
+  ``RepositoryService.get_pull_request`` (contract-verified ``GET
+  /stemma-pull-request/api/pulls/{pullRequestRid}``).
+- ``container_git_status`` (read, LIVE — boots a container deployment as
+  a side effect, exactly as the captured UI does): pinned
+  ``GetContainersForRepository`` GraphQL read (first non-trashed ``CODE``
+  container) -> ``POST /foundry-container-service/api/containers/{rid}/
+  deployments`` (captured empty body) -> poll ``GET .../deployments/
+  {rid}/status`` until ``running`` (captured states: starting,
+  initializing, launching, running) -> ``GET .../deployments/{rid}/
+  git/status`` (visible ``{gitStatus: {head, fileChanges}}`` response).
+- ``container_execute_terminal_command`` (write, LIVE, approval-gated):
+  the same container chain, then ``POST .../deployments/{rid}/terminal/
+  execute-command`` with the captured ``{command, directory?}`` body and
+  visible ``{exitCode, stdout, stderr}`` response, serialized in the
+  captured "Terminal command executed: ... with exit code N" pattern.
+  The UI's read-only command auto-approval classifier is NOT captured, so
+  every terminal command goes through the operator approval gate instead.
 - ``load_documentation`` / ``load_documentation_bundles`` (read, FAIL
   CLOSED): no documentation page-load endpoint appears anywhere in the
-  1896-request capture — the only ``/documentation/api/`` call is
+  8143-request capture — the only ``/documentation/api/`` call is
   ``/documentation/api/v2/release-notes/pagination``, a different surface
   (workspace release notes). The specs are registered verbatim but the
   executors raise ``UnverifiedContract`` rather than guess a contract.
+- ``ci_checks`` (FAIL CLOSED): the tool was never exercised in the
+  capture. The only CI endpoints present are heavy UI background polling
+  for already-known job/build RIDs (``GET /build2/api/info/jobs3/
+  {jobRid}``, ``GET /job-tracker/api/builds/{buildRid}``); the
+  repositoryRid+branch -> job/check mapping the tool contract needs was
+  never captured.
+- Schedules family (``get_dataset_schedules``, ``run_schedule``,
+  ``pause_schedule``, ``unpause_schedule``, ``create_schedule``,
+  ``replace_schedule``, ``delete_schedule`` — FAIL CLOSED): no
+  schedule/orchestration endpoint appears anywhere in the 8143-request
+  capture, even though the 72-tool set exposes the specs.
+- ``container_get_file_contents`` (FAIL CLOSED): the endpoint was
+  captured (``GET .../deployments/{rid}/files/contents/{path}``, HTTP
+  200) but every response body was elided by the capture, so the result
+  contract is unknown. ``container_put_file`` / ``container_edit_file`` /
+  ``container_sync`` / ``container_copy_blobster_file_to_repo`` fail
+  closed for the same reason (terminal proxy traffic was captured but
+  the mutation contracts were not).
+- ``get_evaluation_suite_project_scope_readiness`` (FAIL CLOSED): the
+  core ``suggestedExecutionScope`` call is captured (and exposed via
+  ``evals suite suggested-scope``), but the full tool flow also posts a
+  project-imports context body whose resource-RID list construction was
+  not fully captured.
+- Logic family (12 tools), ``await_automation_execution``,
+  ``search_language_model_functions`` / ``get_language_model_function``,
+  ``get_ontology_sdk_documentation``, ``refresh_ontology_sdk``,
+  ``get_functions_repository_imports`` /
+  ``edit_functions_repository_imports``, ``run_functions_diagnostics``,
+  ``function_preview``, ``publish_functions``, ``create_branch``,
+  ``create_code_repo``, ``create_or_update_pull_request``,
+  ``add_missing_project_imports``,
+  ``edit_code_workspace_source_imports``, ``upgrade_code_repository``,
+  ``create_evaluation_suite`` / ``edit_evaluation_suite`` /
+  ``put_evaluation_suite`` (FAIL CLOSED): no endpoint for these tools
+  appears in the capture (their tool sets were exposed, but the tools
+  were never exercised while the network was recorded).
+
+Mode -> tool-set mapping (mined from the capture; the request tool list
+matches the ``agentStateModification.toolConfigurations`` enabled map
+written to thread metadata at each transition):
+
+- No mode selected (the default; captured ``<selectedMode>none``): the
+  8 base tools — ``change_mode``, ``enable_capabilities``,
+  ``disable_capabilities``, ``manage_context``,
+  ``request_clarification_from_user``, ``load_skill``,
+  ``load_documentation``, ``load_documentation_bundles``.
+- ``functionsEditing`` (the only mode ever selected in the capture;
+  config with ``functionsType.selected == "typescriptV2"``, ``evals``,
+  ``useLanguageModels``): the base 8 plus 43 more (51 total) — see
+  ``MODE_TOOL_SETS``.
+- ``executeAction`` capability enabled on top of ``functionsEditing``:
+  adds ``execute_action`` AND ``await_automation_execution`` (53 total;
+  the captured ``enable_capabilities {"capabilities": ["executeAction"]}``
+  call added both to the next request's tool list).
+- The 72-tool superset (51 + the 7 schedule tools + the 12 logic tools +
+  the 2 executeAction tools): the schedule and logic families were added
+  client-side mid-session with no capability name recorded anywhere in
+  the capture (modeConfig and sessionState are byte-identical across the
+  transition; only ``toolConfigurations`` changed). Exposed from turn 1
+  via ``ai-fde run --all-tools``.
+- Other modes advertised in the captured instructions
+  (``dataIntegration``, ``dataConnection``, ``ontologyEditing``,
+  ``exploration``, ``governance``, ``applicationBuilding``,
+  ``platformQna``, ``machineLearning``) were never selected, so their
+  tool sets are unknown: ``change_mode`` to one keeps the current set
+  and says so in the tool output.
+
+CLI-native extension tools (NOT part of the captured catalog): the
+``pfoundry_*`` tools in ``EXTENSION_TOOL_REGISTRY`` are synthetic tools
+this CLI adds beyond the captured 72, because live runs proved the
+catalog alone cannot answer "show me the most recent runs of the <name>
+pipeline" (no name-search tool exists even in the full catalog, and no
+build-history/dataset-transaction tool exists at all). They wrap
+pfoundry's already-verified surfaces — public SDK / existing service
+contracts, no captured-contract claims — and are always exposed (not
+mode-gated), all read-risk, executed through the same
+approval/write-back machinery. See ``ai_fde_extension_tools.py`` for the
+per-tool wrapper mapping.
 
 Write-back shapes (captured, ``/tmp/ai-fde-item-shapes.json``): tool
 results are written as ``tool-usage`` items ``{contextItemId,
@@ -152,6 +289,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -162,6 +300,7 @@ import requests
 from ..auth.base import MissingCredentialsError
 from ..auth.storage import CredentialStorage
 from .ai_fde import AiFdeService
+from .ai_fde_extension_tools import EXTENSION_TOOL_SPECS, ExtensionToolExecutor
 from .ai_fde_tool_specs import CAPTURED_INSTRUCTIONS_PREFIX, TOOL_SPECS
 from .errors import FoundryApiError, foundry_error_from_conjure
 from .evals import EvalsService
@@ -169,7 +308,12 @@ from .foundry_internal_client import FoundryInternalClient
 
 DEFAULT_MODEL = "GPT_5_6_SOL"
 DEFAULT_MAX_TURNS = 25
-CONTEXT_TOKEN_THRESHOLD = 60_000
+# Context budget for one request, in estimated tokens (chars/4). The
+# captured instructions block states a 1,050,000-token context window
+# with a 300,000-token recommended limit; the threshold stays just under
+# the recommended limit so the full 72-tool catalog (~140k estimated
+# tokens of specs) plus a long conversation still fits.
+CONTEXT_TOKEN_THRESHOLD = 280_000
 LLM_REQUEST_TIMEOUT = 240.0
 
 _LLM_PATH = "language-model-service/api/llm/v3/completion/{model}/streamCompletionChunk"
@@ -178,19 +322,53 @@ _BULK_LOAD_ENTITIES_PATH = "ontology-metadata/api/ontology/ontology/bulkLoadEnti
 _ACTIONS_VALIDATE_PATH = "actions/api/actions/validate"
 _ACTIONS_APPLY_PATH = "actions/api/actionsV2"
 _SKILL_LATEST_PATH = "aip-agents/api/skills/{rid}/latest"
+_OBJECT_SET_PATH = "object-set-service/api/objectSets/{rid}"
+_FUNCTION_SPECS_PATH = "function-registry/api/functions/{rid}/specs/{version}"
+_STEMMA_RESOLVE_PATH = "stemma/api/repos/{rid}/resolve/refs%2Fheads%2Fmaster"
+_STEMMA_CONTENTS_PATH = "stemma/api/repos/{rid}/paths/contents/{path}"
+_STEMMA_COMMITISH = "commitish=refs%2Fheads%2Fmaster"
+_CONTAINER_DEPLOYMENTS_PATH = (
+    "foundry-container-service/api/containers/{container_rid}/deployments"
+)
+_DEPLOYMENT_STATUS_PATH = (
+    "foundry-container-service/api/deployments/{deployment_rid}/status"
+)
+_DEPLOYMENT_GIT_STATUS_PATH = (
+    "foundry-container-service/api/deployments/{deployment_rid}/git/status"
+)
+_DEPLOYMENT_EXECUTE_COMMAND_PATH = (
+    "foundry-container-service/api/deployments/{deployment_rid}/terminal/"
+    "execute-command"
+)
 
 # Additive CLI-specific guidance appended after the captured instructions;
 # NOT part of the captured block (it describes this loop's own constraints).
 _CLI_NOTES = """
 <cliNotes>
 You are running inside the pfoundry CLI agent loop, not the Foundry UI.
-- Write tools (execute_action, run_evaluation_suite) execute only after
-  operator approval. If a write is declined, continue without it.
+- Write tools (execute_action, run_evaluation_suite,
+  container_execute_terminal_command) execute only after operator
+  approval. If a write is declined, continue without it.
 - request_clarification_from_user may be unavailable in non-interactive
   runs; then make reasonable assumptions, state them, and proceed.
-- load_documentation and load_documentation_bundles are registered but not
-  wired to a verified endpoint in this environment; they will fail closed.
-  Do not rely on them.
+- There is NO resource-search tool (even in the full AI FDE catalog):
+  resources are identified by explicit RIDs or user @-mentions. If you
+  need a resource and do not have its RID, ask the operator for the RID
+  instead of searching by name.
+- Tools whose endpoint contract was never captured fail closed with an
+  explanatory message (this includes the documentation tools, the
+  schedules family, ci_checks, and the logic family). Do not retry a
+  fail-closed tool with the same contract; use change_mode or ask the
+  operator instead.
+- Tools named pfoundry_* are CLI-provided extension tools (NOT part of
+  the captured AI FDE catalog): pfoundry_search_resources resolves
+  resource NAMES to RIDs, pfoundry_search_object_types finds ontology
+  object types by name (object types are not Compass resources),
+  pfoundry_search_builds lists recent pipeline
+  runs (optionally filtered to the builds that produced a dataset),
+  pfoundry_get_dataset_transactions lists a dataset's transaction
+  history, and pfoundry_get_resource loads resource metadata by RID.
+  Prefer them for resource discovery and build observability questions.
 </cliNotes>
 """
 
@@ -275,6 +453,385 @@ LATEST_FUNCTION_VERSION_QUERY = """query LatestFunctionVersionQuery($functionRid
   __typename
 }"""
 
+ASSOCIATED_LINK_TYPES_QUERY = """query AssociatedLinkTypesForObjectTypeMainQuery($objectTypeRid: RID!) {
+  objectTypeV2(identifier: {rid: $objectTypeRid}) {
+    latest {
+      linksIncludingLinksToObjectTypesWithoutSearchableDatasources {
+        linkType {
+          linkType {
+            rid
+            _id
+            __typename
+          }
+          _id
+          __typename
+        }
+        _id
+        __typename
+      }
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  __typename
+}"""
+
+ASSOCIATED_ACTION_TYPE_RIDS_QUERY = """query AssociatedActionTypeRidsMainQuery($objectTypeRid: RID!, $nextPageToken: String) {
+  objectTypeV2(identifier: {rid: $objectTypeRid}) {
+    latest {
+      associatedActionTypesV2(pageSize: 20, pageToken: $nextPageToken) {
+        ... on ActionTypeVersionPage {
+          values {
+            actionTypeRid
+            _id
+            __typename
+          }
+          nextPageToken
+          __typename
+        }
+        ... on AssociatedActionTypesError {
+          reason
+          __typename
+        }
+        __typename
+      }
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  __typename
+}"""
+
+GET_CONTAINERS_FOR_REPOSITORY_QUERY = """query GetContainersForRepository($repositoryRid: RID!) {
+  stemmaRepository(rid: $repositoryRid) {
+    containers {
+      ...GetEditorContainerFragment
+      rid
+      metadata {
+        trashedStatus
+        _id
+        __typename
+      }
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  __typename
+}
+
+fragment GetEditorContainerFragment on Container {
+  imageType
+  metadata {
+    created {
+      time
+      __typename
+    }
+    _id
+    __typename
+  }
+  _id
+  __typename
+}"""
+
+# Verbatim from the capture (289 lines; the UI issues one bulk request
+# with one LinkTypeMainQuery request per link type RID).
+LINK_TYPE_MAIN_QUERY = """query LinkTypeMainQuery($linkTypeRid: RID!) {
+  linkType(rid: $linkTypeRid) {
+    latest {
+      ...LinkTypeDetailsFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  __typename
+}
+
+fragment LinkTypeDetailsFragment on LinkTypeVersion {
+  linkType {
+    rid
+    id
+    ontology {
+      rid
+      namespace {
+        rid
+        _id
+        __typename
+      }
+      _id
+      __typename
+    }
+    metadata {
+      description
+      ...SaveLocationFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  status {
+    __typename
+  }
+  dataSources {
+    _id
+    ... on LinkTypeDataSource_CatalogBranch {
+      ...LinkTypeDatasetFragment
+      __typename
+    }
+    __typename
+  }
+  definition {
+    ... on LinkTypeDefinition_OneToMany {
+      ...ManyToOneConfigFragment
+      __typename
+    }
+    ... on LinkTypeDefinition_ManyToMany {
+      ...ManyToManyConfigFragment
+      __typename
+    }
+    ... on LinkTypeDefinition_Intermediary {
+      ...ObjectBackedConfigFragment
+      __typename
+    }
+    __typename
+  }
+  _id
+  __typename
+}
+
+fragment SaveLocationFragment on ResourceMetadata {
+  parent {
+    rid
+    resource {
+      _id
+      ... on Project {
+        type
+        __typename
+      }
+      __typename
+    }
+    _id
+    __typename
+  }
+  _id
+  __typename
+}
+
+fragment LinkTypeDatasetFragment on LinkTypeDataSource_CatalogBranch {
+  datasetRid
+  objectTypeAPrimaryKeyMapping {
+    columnName
+    __typename
+  }
+  objectTypeBPrimaryKeyMapping {
+    columnName
+    __typename
+  }
+  _id
+  __typename
+}
+
+fragment ManyToOneConfigFragment on LinkTypeDefinition_OneToMany {
+  manySide {
+    metadata {
+      ...LinkSideMetadataFragment
+      __typename
+    }
+    objectTypeV2 {
+      ...LinkTypeObjectTypeFragment
+      _id
+      __typename
+    }
+    cardinality
+    _id
+    __typename
+  }
+  oneSidePrimaryKeyPropertyV2 {
+    apiName
+    _id
+    __typename
+  }
+  manySideForeignKeyPropertyV2 {
+    id
+    apiName
+    _id
+    __typename
+  }
+  oneSide {
+    metadata {
+      ...LinkSideMetadataFragment
+      __typename
+    }
+    objectTypeV2 {
+      ...LinkTypeObjectTypeFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  __typename
+}
+
+fragment LinkSideMetadataFragment on LinkTypeMetadata {
+  displayName
+  pluralDisplayName
+  visibility
+  apiName
+  __typename
+}
+
+fragment LinkTypeObjectTypeFragment on ObjectTypeVersion {
+  ...ObjectTypeTitleFragment
+  objectType {
+    rid
+    _id
+    __typename
+  }
+  _id
+  __typename
+}
+
+fragment ObjectTypeTitleFragment on ObjectTypeVersion {
+  objectTypeApiName: apiName
+  displayName
+  objectTypeIcon: iconV2 {
+    ...ObjectTypeIconFragment
+    __typename
+  }
+  objectType {
+    id
+    _id
+    __typename
+  }
+  status {
+    ...ObjectTypeStatusTypeFragment
+    __typename
+  }
+  _id
+  __typename
+}
+
+fragment ObjectTypeIconFragment on BlueprintIcon {
+  locator
+  color
+  __typename
+}
+
+fragment ObjectTypeStatusTypeFragment on ObjectTypeStatus {
+  ... on ObjectTypeStatus {
+    __typename
+  }
+  __typename
+}
+
+fragment ManyToManyConfigFragment on LinkTypeDefinition_ManyToMany {
+  aSide {
+    metadata {
+      ...LinkSideMetadataFragment
+      __typename
+    }
+    objectTypeV2 {
+      ...LinkTypeObjectTypeFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  bSide {
+    metadata {
+      ...LinkSideMetadataFragment
+      __typename
+    }
+    objectTypeV2 {
+      ...LinkTypeObjectTypeFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  settings {
+    editable
+    __typename
+  }
+  __typename
+}
+
+fragment ObjectBackedConfigFragment on LinkTypeDefinition_Intermediary {
+  intermediaryObjectTypeV2 {
+    objectType {
+      rid
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  aSide {
+    metadata {
+      ...LinkSideMetadataFragment
+      __typename
+    }
+    objectTypeV2 {
+      ...LinkTypeObjectTypeFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  aSideToIntermediarySide {
+    linkType {
+      linkType {
+        rid
+        _id
+        __typename
+      }
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  bSide {
+    metadata {
+      ...LinkSideMetadataFragment
+      __typename
+    }
+    objectTypeV2 {
+      ...LinkTypeObjectTypeFragment
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  bSideToIntermediarySide {
+    linkType {
+      linkType {
+        rid
+        _id
+        __typename
+      }
+      _id
+      __typename
+    }
+    _id
+    __typename
+  }
+  __typename
+}"""
+
 
 class UnverifiedContract(RuntimeError):
     """A tool's endpoint mapping was never captured; fail closed, never guess."""
@@ -309,81 +866,334 @@ class ToolRegistration:
     executor: str  # AgentLoop method name
     live: bool
     note: str = ""
+    cli_extension: bool = False  # CLI-native tool, not part of the captured 72
 
 
-TOOL_REGISTRY: Dict[str, ToolRegistration] = {
-    "load_documentation": ToolRegistration(
-        "load_documentation",
-        "read",
-        "_exec_unverified_documentation",
-        live=False,
-        note="no page-load endpoint in capture; only release-notes pagination",
-    ),
-    "load_documentation_bundles": ToolRegistration(
-        "load_documentation_bundles",
-        "read",
-        "_exec_unverified_documentation",
-        live=False,
-        note="no bundle-load endpoint in capture",
-    ),
-    "ontology_sql_query": ToolRegistration(
-        "ontology_sql_query", "read", "_exec_ontology_sql_query", live=True
-    ),
-    "list_evaluation_runs": ToolRegistration(
-        "list_evaluation_runs", "read", "_exec_list_evaluation_runs", live=True
-    ),
-    "load_evaluation_runs": ToolRegistration(
-        "load_evaluation_runs", "read", "_exec_load_evaluation_runs", live=True
-    ),
-    "get_test_case_results": ToolRegistration(
-        "get_test_case_results", "read", "_exec_get_test_case_results", live=True
-    ),
-    "get_evaluation_suite_definition": ToolRegistration(
-        "get_evaluation_suite_definition",
-        "read",
-        "_exec_get_evaluation_suite_definition",
-        live=True,
-    ),
-    "run_evaluation_suite": ToolRegistration(
-        "run_evaluation_suite", "write", "_exec_run_evaluation_suite", live=True
-    ),
-    "execute_action": ToolRegistration(
-        "execute_action", "write", "_exec_execute_action", live=True
-    ),
-    "request_clarification_from_user": ToolRegistration(
-        "request_clarification_from_user",
-        "read",
-        "_exec_request_clarification_from_user",
-        live=True,
-    ),
-    "change_mode": ToolRegistration(
-        "change_mode", "read", "_exec_change_mode", live=True
-    ),
-    "enable_capabilities": ToolRegistration(
-        "enable_capabilities", "read", "_exec_enable_capabilities", live=True
-    ),
-    "disable_capabilities": ToolRegistration(
-        "disable_capabilities", "read", "_exec_disable_capabilities", live=True
-    ),
-    "manage_context": ToolRegistration(
-        "manage_context", "read", "_exec_manage_context", live=True
-    ),
-    "load_skill": ToolRegistration("load_skill", "read", "_exec_load_skill", live=True),
+_NO_SCHEDULE_ENDPOINT = (
+    "no schedule/orchestration endpoint appears anywhere in the 8143-request capture"
+)
+_NO_LOGIC_ENDPOINT = "no logic-authoring endpoint for this tool appears in the capture"
+
+# Fail-closed tools whose contract would be a mutation; the class is kept
+# accurate so a future live wiring is approval-gated from day one.
+_FAIL_CLOSED_WRITE_RISKS: Dict[str, str] = {
+    name: "write"
+    for name in (
+        "add_missing_project_imports",
+        "container_copy_blobster_file_to_repo",
+        "container_edit_file",
+        "container_put_file",
+        "container_sync",
+        "create_branch",
+        "create_code_repo",
+        "create_evaluation_suite",
+        "create_logic_function",
+        "create_or_update_pull_request",
+        "create_schedule",
+        "delete_schedule",
+        "edit_code_workspace_source_imports",
+        "edit_evaluation_suite",
+        "edit_functions_repository_imports",
+        "edit_logic_function_definition",
+        "modify_logic_function_metadata",
+        "pause_schedule",
+        "publish_functions",
+        "publish_logic_function",
+        "put_evaluation_suite",
+        "put_logic_function_definition",
+        "refresh_ontology_sdk",
+        "replace_schedule",
+        "run_schedule",
+        "unpause_schedule",
+        "upgrade_code_repository",
+    )
 }
 
-# Capability -> registered tools, per the captured instructions block. Only
-# capabilities whose tools exist in TOOL_REGISTRY can be toggled.
+_LIVE_TOOLS: Dict[str, Tuple[str, str]] = {
+    # name -> (risk, AgentLoop executor method); contracts in the docstring
+    "ontology_sql_query": ("read", "_exec_ontology_sql_query"),
+    "list_evaluation_runs": ("read", "_exec_list_evaluation_runs"),
+    "load_evaluation_runs": ("read", "_exec_load_evaluation_runs"),
+    "get_test_case_results": ("read", "_exec_get_test_case_results"),
+    "get_evaluation_suite_definition": (
+        "read",
+        "_exec_get_evaluation_suite_definition",
+    ),
+    "get_evaluation_suites_for_target": (
+        "read",
+        "_exec_get_evaluation_suites_for_target",
+    ),
+    "run_evaluation_suite": ("write", "_exec_run_evaluation_suite"),
+    "execute_action": ("write", "_exec_execute_action"),
+    "request_clarification_from_user": (
+        "read",
+        "_exec_request_clarification_from_user",
+    ),
+    "change_mode": ("read", "_exec_change_mode"),
+    "enable_capabilities": ("read", "_exec_enable_capabilities"),
+    "disable_capabilities": ("read", "_exec_disable_capabilities"),
+    "manage_context": ("read", "_exec_manage_context"),
+    "load_skill": ("read", "_exec_load_skill"),
+    "load_object_types": ("read", "_exec_load_object_types"),
+    "load_action_types": ("read", "_exec_load_action_types"),
+    "load_link_types": ("read", "_exec_load_link_types"),
+    "get_action_types_for_object_type": (
+        "read",
+        "_exec_get_action_types_for_object_type",
+    ),
+    "get_link_types_for_object_type": ("read", "_exec_get_link_types_for_object_type"),
+    "load_object_sets": ("read", "_exec_load_object_sets"),
+    "load_functions": ("read", "_exec_load_functions"),
+    "load_code_repo": ("read", "_exec_load_code_repo"),
+    "load_pull_request": ("read", "_exec_load_pull_request"),
+    "container_git_status": ("read", "_exec_container_git_status"),
+    "container_execute_terminal_command": (
+        "write",
+        "_exec_container_execute_terminal_command",
+    ),
+}
+
+# Fail-closed tools: spec exposed verbatim, executor raises
+# UnverifiedContract with this reason (evidence in the module docstring).
+_FAIL_CLOSED_TOOLS: Dict[str, str] = {
+    "load_documentation": (
+        "no documentation page-load endpoint was captured (the only "
+        "/documentation/api/ call in the 8143-request capture is "
+        "/v2/release-notes/pagination, a different surface); the "
+        "documentation tools are registered spec-only and fail closed"
+    ),
+    "load_documentation_bundles": (
+        "no documentation bundle-load endpoint was captured"
+    ),
+    "ci_checks": (
+        "ci_checks was never exercised in the capture; only polling "
+        "endpoints for already-known job/build RIDs were recorded "
+        "(GET /build2/api/info/jobs3/{jobRid}, GET "
+        "/job-tracker/api/builds/{buildRid}) — the repositoryRid+branch "
+        "to check mapping was never captured"
+    ),
+    "container_get_file_contents": (
+        "the container files/contents endpoint was captured (HTTP 200) "
+        "but every response body was elided by the capture, so the "
+        "result contract is unknown"
+    ),
+    "container_put_file": "no container file-write contract was captured",
+    "container_edit_file": "no container file-edit contract was captured",
+    "container_sync": "no container sync/commit contract was captured",
+    "container_copy_blobster_file_to_repo": ("no blobster copy contract was captured"),
+    "get_evaluation_suite_project_scope_readiness": (
+        "the full readiness flow was only partially captured (the "
+        "project-imports context body construction was not); use "
+        "'pfoundry evals suite suggested-scope' for the captured core"
+    ),
+    "await_automation_execution": (
+        "no automation-execution endpoint appears in the capture"
+    ),
+    "get_dataset_schedules": _NO_SCHEDULE_ENDPOINT,
+    "run_schedule": _NO_SCHEDULE_ENDPOINT,
+    "pause_schedule": _NO_SCHEDULE_ENDPOINT,
+    "unpause_schedule": _NO_SCHEDULE_ENDPOINT,
+    "create_schedule": _NO_SCHEDULE_ENDPOINT,
+    "replace_schedule": _NO_SCHEDULE_ENDPOINT,
+    "delete_schedule": _NO_SCHEDULE_ENDPOINT,
+    "create_logic_function": _NO_LOGIC_ENDPOINT,
+    "edit_logic_function_definition": _NO_LOGIC_ENDPOINT,
+    "put_logic_function_definition": _NO_LOGIC_ENDPOINT,
+    "publish_logic_function": _NO_LOGIC_ENDPOINT,
+    "modify_logic_function_metadata": _NO_LOGIC_ENDPOINT,
+    "get_logic_function_definition": _NO_LOGIC_ENDPOINT,
+    "get_logic_function_metadata": _NO_LOGIC_ENDPOINT,
+    "get_logic_execution_details": _NO_LOGIC_ENDPOINT,
+    "list_logic_blocks": _NO_LOGIC_ENDPOINT,
+    "list_logic_executions": _NO_LOGIC_ENDPOINT,
+    "lookup_logic_block_declarations": _NO_LOGIC_ENDPOINT,
+    "preview_run_logic_function": _NO_LOGIC_ENDPOINT,
+    "search_language_model_functions": (
+        "no language-model search endpoint appears in the capture"
+    ),
+    "get_language_model_function": (
+        "no language-model function endpoint appears in the capture"
+    ),
+    "get_ontology_sdk_documentation": (
+        "no OSDK documentation endpoint appears in the capture"
+    ),
+    "refresh_ontology_sdk": "no SDK refresh endpoint appears in the capture",
+    "get_functions_repository_imports": (
+        "no repository-imports read endpoint appears in the capture"
+    ),
+    "edit_functions_repository_imports": (
+        "no repository-imports edit endpoint appears in the capture"
+    ),
+    "run_functions_diagnostics": (
+        "no functions diagnostics endpoint appears in the capture"
+    ),
+    "function_preview": "no function preview endpoint appears in the capture",
+    "publish_functions": "no function publish endpoint appears in the capture",
+    "create_branch": "no branch-creation endpoint appears in the capture",
+    "create_code_repo": "no repo-creation endpoint appears in the capture",
+    "create_or_update_pull_request": (
+        "no pull-request create/update call was captured from this tool "
+        "(the verified stemma-pull-request contracts are exposed via the "
+        "'proposal code-pr' commands instead)"
+    ),
+    "add_missing_project_imports": (
+        "no project-imports edit endpoint appears in the capture"
+    ),
+    "edit_code_workspace_source_imports": (
+        "no code-workspace imports endpoint appears in the capture"
+    ),
+    "upgrade_code_repository": (
+        "no repository upgrade endpoint appears in the capture"
+    ),
+    "create_evaluation_suite": ("no suite-creation endpoint appears in the capture"),
+    "edit_evaluation_suite": "no suite-edit endpoint appears in the capture",
+    "put_evaluation_suite": "no suite-put endpoint appears in the capture",
+}
+
+TOOL_REGISTRY: Dict[str, ToolRegistration] = {
+    **{
+        name: ToolRegistration(name, risk, executor, live=True)
+        for name, (risk, executor) in _LIVE_TOOLS.items()
+    },
+    **{
+        name: ToolRegistration(
+            name,
+            _FAIL_CLOSED_WRITE_RISKS.get(name, "read"),
+            "_exec_fail_closed",
+            live=False,
+            note=note,
+        )
+        for name, note in _FAIL_CLOSED_TOOLS.items()
+    },
+}
+
+_missing = set(TOOL_SPECS) - set(TOOL_REGISTRY)
+_extra = set(TOOL_REGISTRY) - set(TOOL_SPECS)
+if _missing or _extra:
+    raise RuntimeError(
+        f"TOOL_REGISTRY/TOOL_SPECS drift: missing={sorted(_missing)}, "
+        f"extra={sorted(_extra)}"
+    )
+
+# The captured default: no mode selected exposes these 8 base tools.
+BASE_TOOL_NAMES: Tuple[str, ...] = (
+    "change_mode",
+    "disable_capabilities",
+    "enable_capabilities",
+    "load_documentation",
+    "load_documentation_bundles",
+    "load_skill",
+    "manage_context",
+    "request_clarification_from_user",
+)
+
+# Mined mode -> tool-set mapping (see the module docstring). Only
+# functionsEditing was ever selected in the capture; the 51-tool set is
+# BASE_TOOL_NAMES plus the tools below.
+_FUNCTIONS_EDITING_EXTRA: Tuple[str, ...] = (
+    "add_missing_project_imports",
+    "ci_checks",
+    "container_copy_blobster_file_to_repo",
+    "container_edit_file",
+    "container_execute_terminal_command",
+    "container_get_file_contents",
+    "container_git_status",
+    "container_put_file",
+    "container_sync",
+    "create_branch",
+    "create_code_repo",
+    "create_evaluation_suite",
+    "create_or_update_pull_request",
+    "edit_code_workspace_source_imports",
+    "edit_evaluation_suite",
+    "edit_functions_repository_imports",
+    "function_preview",
+    "get_action_types_for_object_type",
+    "get_evaluation_suite_definition",
+    "get_evaluation_suite_project_scope_readiness",
+    "get_evaluation_suites_for_target",
+    "get_functions_repository_imports",
+    "get_language_model_function",
+    "get_link_types_for_object_type",
+    "get_ontology_sdk_documentation",
+    "get_test_case_results",
+    "list_evaluation_runs",
+    "load_action_types",
+    "load_code_repo",
+    "load_evaluation_runs",
+    "load_functions",
+    "load_link_types",
+    "load_object_sets",
+    "load_object_types",
+    "load_pull_request",
+    "ontology_sql_query",
+    "publish_functions",
+    "put_evaluation_suite",
+    "refresh_ontology_sdk",
+    "run_evaluation_suite",
+    "run_functions_diagnostics",
+    "search_language_model_functions",
+    "upgrade_code_repository",
+)
+
+MODE_TOOL_SETS: Dict[str, Tuple[str, ...]] = {
+    "functionsEditing": BASE_TOOL_NAMES + _FUNCTIONS_EDITING_EXTRA,
+}
+
+# Modes advertised in the captured instructions but never selected, so
+# their tool sets are unknown; change_mode keeps the current set.
+UNCAPTURED_MODE_TYPES: Tuple[str, ...] = (
+    "applicationBuilding",
+    "dataConnection",
+    "dataIntegration",
+    "exploration",
+    "governance",
+    "machineLearning",
+    "ontologyEditing",
+    "platformQna",
+)
+
+# Capability -> registered tools, per the captured instructions block and
+# the captured executeAction enablement (which added BOTH execute_action
+# and await_automation_execution to the next request's tool list).
 CAPABILITY_TOOL_MAP: Dict[str, Tuple[str, ...]] = {
     "changeMode": ("change_mode",),
     "requestClarification": ("request_clarification_from_user",),
     "loadDocumentation": ("load_documentation", "load_documentation_bundles"),
     "manageContext": ("manage_context",),
     "manageCapabilities": ("enable_capabilities", "disable_capabilities"),
-    "executeAction": ("execute_action",),
+    "executeAction": ("execute_action", "await_automation_execution"),
     "loadSkills": ("load_skill",),
 }
 
-DEFAULT_TOOL_NAMES: Tuple[str, ...] = tuple(TOOL_REGISTRY.keys())
+DEFAULT_TOOL_NAMES: Tuple[str, ...] = BASE_TOOL_NAMES
+
+ALL_TOOL_NAMES: Tuple[str, ...] = tuple(sorted(TOOL_REGISTRY))
+
+# CLI-native extension tools (see ai_fde_extension_tools.py): pfoundry's
+# own synthetic tools BEYOND the captured 72, wrapping already-verified
+# services (compass title search, SDK Build.search/Build.jobs, dataset
+# transactions, resource get) because the captured catalog has no
+# name-search or build-history tool. Always exposed, never mode-gated,
+# all read-risk.
+EXTENSION_TOOL_REGISTRY: Dict[str, ToolRegistration] = {
+    name: ToolRegistration(
+        name,
+        "read",
+        "_exec_extension",
+        live=True,
+        note="CLI extension (public SDK / existing service contract)",
+        cli_extension=True,
+    )
+    for name in EXTENSION_TOOL_SPECS
+}
+
+_extension_collisions = set(EXTENSION_TOOL_SPECS) & set(TOOL_SPECS)
+if _extension_collisions:
+    raise RuntimeError(
+        f"extension tools collide with the captured catalog: "
+        f"{sorted(_extension_collisions)}"
+    )
 
 
 def estimate_tokens(text: str) -> int:
@@ -714,14 +1524,19 @@ class AgentLoop:
         model: str = DEFAULT_MODEL,
         approve: str = "interactive",
         tool_names: Optional[Sequence[str]] = None,
+        all_tools: bool = False,
         service: Optional[AiFdeService] = None,
         evals_service: Optional[EvalsService] = None,
+        repository_service: Optional[Any] = None,
+        extension_executor: Optional[ExtensionToolExecutor] = None,
         llm_session: Optional[LlmSession] = None,
         internal_client: Optional[FoundryInternalClient] = None,
         progress: Optional[Callable[[str], None]] = None,
         confirm: Optional[Callable[[str], bool]] = None,
         clarification_handler: Optional[Callable[[Sequence[Any]], str]] = None,
         instructions: Optional[str] = None,
+        container_boot_timeout: float = 120.0,
+        container_poll_interval: float = 2.0,
     ) -> None:
         if approve not in {"interactive", "always", "never"}:
             raise ValueError(
@@ -730,7 +1545,10 @@ class AgentLoop:
         self.profile = profile
         self.model = model
         self.approve = approve
-        names = list(tool_names) if tool_names else list(DEFAULT_TOOL_NAMES)
+        if all_tools:
+            names = list(ALL_TOOL_NAMES)
+        else:
+            names = list(tool_names) if tool_names else list(DEFAULT_TOOL_NAMES)
         unknown = [n for n in names if n not in TOOL_REGISTRY]
         if unknown:
             raise ValueError(
@@ -740,12 +1558,16 @@ class AgentLoop:
         self._active_tools: set[str] = set(names)
         self._service = service
         self._evals_service = evals_service
+        self._repository_service = repository_service
+        self._extension_executor = extension_executor
         self._llm_session = llm_session
         self._internal_client = internal_client
         self._progress = progress or (lambda _msg: None)
         self._confirm = confirm
         self._clarification_handler = clarification_handler
         self._instructions_override = instructions
+        self._container_boot_timeout = container_boot_timeout
+        self._container_poll_interval = container_poll_interval
         self._mode: Optional[str] = None
         self._thread_id: Optional[str] = None
         self._cumulative_tokens = 0
@@ -753,7 +1575,11 @@ class AgentLoop:
         self._tool_output_items: Dict[str, Dict[str, Any]] = {}
         self._tool_output_payloads: Dict[str, str] = {}
         self._object_type_id_cache: Dict[str, str] = {}
+        self._object_type_load_cache: Dict[str, Dict[str, Any]] = {}
         self._skill_rids_cache: Optional[List[str]] = None
+        self._container_deployment_cache: Dict[str, str] = {}
+        self._consecutive_clarifications = 0
+        self._turns_remaining = DEFAULT_MAX_TURNS
 
     # --- wiring --------------------------------------------------------
 
@@ -766,6 +1592,18 @@ class AgentLoop:
         if self._evals_service is None:
             self._evals_service = EvalsService(profile=self.profile)
         return self._evals_service
+
+    def _repository(self) -> Any:
+        if self._repository_service is None:
+            from .repository import RepositoryService
+
+            self._repository_service = RepositoryService(profile=self.profile)
+        return self._repository_service
+
+    def _extensions(self) -> ExtensionToolExecutor:
+        if self._extension_executor is None:
+            self._extension_executor = ExtensionToolExecutor(profile=self.profile)
+        return self._extension_executor
 
     def _llm(self) -> LlmSession:
         if self._llm_session is None:
@@ -810,9 +1648,9 @@ class AgentLoop:
         )
 
     def _active_tool_specs(self) -> List[Mapping[str, Any]]:
-        return [
-            TOOL_SPECS[name] for name in TOOL_REGISTRY if name in self._active_tools
-        ]
+        captured = [TOOL_SPECS[name] for name in sorted(self._active_tools)]
+        extensions = [EXTENSION_TOOL_SPECS[name] for name in EXTENSION_TOOL_REGISTRY]
+        return captured + extensions
 
     # --- approval gate ---------------------------------------------------
 
@@ -840,11 +1678,12 @@ class AgentLoop:
 
     def _execute_tool(self, name: str, raw_arguments: str) -> Tuple[str, str, Any]:
         """Run one tool call; return (payload, state, parsed_request)."""
-        registration = TOOL_REGISTRY.get(name)
+        registration = TOOL_REGISTRY.get(name) or EXTENSION_TOOL_REGISTRY.get(name)
         if registration is None:
             return (
                 f"Unknown tool '{name}'. It is not registered in this CLI loop; "
-                f"registered tools: {', '.join(TOOL_REGISTRY)}.",
+                f"registered tools: {', '.join(TOOL_REGISTRY)}; CLI extension "
+                f"tools: {', '.join(EXTENSION_TOOL_REGISTRY)}.",
                 "completed",
                 {"_rawArguments": raw_arguments},
             )
@@ -856,7 +1695,11 @@ class AgentLoop:
                 "completed",
                 {"_rawArguments": raw_arguments},
             )
-        if registration.risk == "write" and not self._gate(name, args):
+        if (
+            registration.risk == "write"
+            and registration.live
+            and not self._gate(name, args)
+        ):
             return (
                 f"Write tool '{name}' was declined by the operator and was "
                 "not executed. Continue without it.",
@@ -880,18 +1723,38 @@ class AgentLoop:
 
     # --- tool executors ----------------------------------------------------
 
-    def _exec_unverified_documentation(self, name: str, args: Mapping[str, Any]) -> str:
-        raise UnverifiedContract(
-            name,
-            "no documentation page-load endpoint was captured (the only "
-            "/documentation/api/ call in the 1896-request capture is "
-            "/v2/release-notes/pagination, a different surface). The "
-            "documentation tools are registered spec-only and fail closed.",
-        )
+    def _exec_fail_closed(self, name: str, args: Mapping[str, Any]) -> str:
+        note = TOOL_REGISTRY[name].note or "no endpoint contract was captured"
+        raise UnverifiedContract(name, note)
+
+    def _exec_extension(self, name: str, args: Mapping[str, Any]) -> str:
+        return self._extensions().execute(name, args)
 
     def _object_type_id_for_rid(self, rid: str) -> str:
         if rid in self._object_type_id_cache:
             return self._object_type_id_cache[rid]
+        payload = self._bulk_load_object_type(rid)
+        object_types = payload.get("objectTypes")
+        object_type_id: Optional[str] = None
+        if isinstance(object_types, list) and object_types:
+            first = object_types[0]
+            if isinstance(first, Mapping):
+                ot = first.get("objectType")
+                if isinstance(ot, Mapping) and isinstance(ot.get("id"), str):
+                    object_type_id = ot["id"]
+        if not object_type_id:
+            raise UnverifiedContract(
+                "ontology_sql_query",
+                f"bulkLoadEntities returned no objectType.id for {rid!r}: "
+                f"{str(payload)[:200]!r}",
+            )
+        self._object_type_id_cache[rid] = object_type_id
+        return object_type_id
+
+    def _bulk_load_object_type(self, rid: str) -> Dict[str, Any]:
+        """The captured identifier-form bulkLoadEntities object-type load."""
+        if rid in self._object_type_load_cache:
+            return self._object_type_load_cache[rid]
         payload = self._conjure(
             "POST",
             _BULK_LOAD_ENTITIES_PATH,
@@ -914,24 +1777,415 @@ class AgentLoop:
                 "actionTypes": [],
                 "includeObjectTypesWithoutSearchableDatasources": True,
             },
-            "resolve object type",
+            "load object type",
         )
-        object_types = payload.get("objectTypes")
-        object_type_id: Optional[str] = None
-        if isinstance(object_types, list) and object_types:
-            first = object_types[0]
-            if isinstance(first, Mapping):
-                ot = first.get("objectType")
-                if isinstance(ot, Mapping) and isinstance(ot.get("id"), str):
-                    object_type_id = ot["id"]
-        if not object_type_id:
+        self._object_type_load_cache[rid] = payload
+        return payload
+
+    def _bulk_load_action_type(self, rid: str) -> Dict[str, Any]:
+        """The captured rid-form bulkLoadEntities action-type load."""
+        return self._conjure(
+            "POST",
+            _BULK_LOAD_ENTITIES_PATH,
+            {
+                "actionTypes": [{"rid": rid}],
+                "loadRedacted": True,
+                "datasourceTypes": [],
+                "objectTypes": [],
+                "linkTypes": [],
+                "sharedPropertyTypes": [],
+                "interfaceTypes": [],
+                "typeGroups": [],
+            },
+            "load action type",
+        )
+
+    def _require_null_branch(self, args: Mapping[str, Any], tool: str) -> None:
+        if args.get("ontologyBranchRid"):
             raise UnverifiedContract(
-                "ontology_sql_query",
-                f"bulkLoadEntities returned no objectType.id for {rid!r}: "
-                f"{str(payload)[:200]!r}",
+                tool,
+                "a non-null ontologyBranchRid was never captured for this "
+                "tool; only default-branch loads were observed",
             )
-        self._object_type_id_cache[rid] = object_type_id
-        return object_type_id
+
+    def _exec_load_object_types(self, name: str, args: Mapping[str, Any]) -> str:
+        entries = args.get("objectTypes")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError(
+                "load_object_types requires a non-empty 'objectTypes' list"
+            )
+        loaded: List[Any] = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                raise ValueError(f"malformed objectTypes entry: {entry!r}")
+            self._require_null_branch(entry, name)
+            locator = entry.get("objectTypeLocator")
+            if not isinstance(locator, Mapping) or not isinstance(
+                locator.get("objectTypeRid"), str
+            ):
+                raise UnverifiedContract(
+                    name,
+                    f"only the objectTypeRid locator arm was captured; got {locator!r}",
+                )
+            loaded.append(self._bulk_load_object_type(locator["objectTypeRid"]))
+        return json.dumps({"objectTypes": loaded}, indent=1, default=str)
+
+    def _exec_load_action_types(self, name: str, args: Mapping[str, Any]) -> str:
+        entries = args.get("actionTypes")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError(
+                "load_action_types requires a non-empty 'actionTypes' list"
+            )
+        loaded: List[Any] = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                raise ValueError(f"malformed actionTypes entry: {entry!r}")
+            self._require_null_branch(entry, name)
+            rid = entry.get("actionTypeRid")
+            if not isinstance(rid, str) or not rid:
+                raise ValueError(f"actionTypes entry has no actionTypeRid: {entry!r}")
+            loaded.append(self._bulk_load_action_type(rid))
+        return json.dumps({"actionTypes": loaded}, indent=1, default=str)
+
+    def _link_type_main(self, link_type_rid: str) -> Dict[str, Any]:
+        """The pinned LinkTypeMainQuery read for one link type RID."""
+        result = self._client().graphql(
+            "LinkTypeMainQuery",
+            LINK_TYPE_MAIN_QUERY,
+            {"linkTypeRid": link_type_rid},
+        )
+        if (
+            result.errors
+            or result.status != "ok"
+            or not isinstance(result.data, Mapping)
+        ):
+            raise UnverifiedContract(
+                "load_link_types",
+                f"LinkTypeMainQuery failed for {link_type_rid}: "
+                f"{result.errors or result.reason or result.status}",
+            )
+        return dict(result.data)
+
+    def _exec_load_link_types(self, name: str, args: Mapping[str, Any]) -> str:
+        entries = args.get("linkTypes")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("load_link_types requires a non-empty 'linkTypes' list")
+        loaded: List[Any] = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                raise ValueError(f"malformed linkTypes entry: {entry!r}")
+            self._require_null_branch(entry, name)
+            rid = entry.get("linkTypeRid")
+            if not isinstance(rid, str) or not rid:
+                raise ValueError(f"linkTypes entry has no linkTypeRid: {entry!r}")
+            loaded.append(self._link_type_main(rid))
+        return json.dumps({"linkTypes": loaded}, indent=1, default=str)
+
+    def _exec_get_link_types_for_object_type(
+        self, name: str, args: Mapping[str, Any]
+    ) -> str:
+        self._require_null_branch(args, name)
+        object_type_rid = _require_str(args, "objectTypeRid", name)
+        result = self._client().graphql(
+            "AssociatedLinkTypesForObjectTypeMainQuery",
+            ASSOCIATED_LINK_TYPES_QUERY,
+            {"objectTypeRid": object_type_rid},
+        )
+        if (
+            result.errors
+            or result.status != "ok"
+            or not isinstance(result.data, Mapping)
+        ):
+            raise UnverifiedContract(
+                name,
+                f"AssociatedLinkTypesForObjectTypeMainQuery failed: "
+                f"{result.errors or result.reason or result.status}",
+            )
+        object_type = result.data.get("objectTypeV2")
+        latest = object_type.get("latest") if isinstance(object_type, Mapping) else None
+        links = (
+            latest.get("linksIncludingLinksToObjectTypesWithoutSearchableDatasources")
+            if isinstance(latest, Mapping)
+            else None
+        )
+        if not isinstance(links, list):
+            raise UnverifiedContract(
+                name,
+                "AssociatedLinkTypesForObjectTypeMainQuery returned no link "
+                f"list: {str(result.data)[:200]!r}",
+            )
+        rids: List[str] = []
+        for link in links:
+            node = link.get("linkType") if isinstance(link, Mapping) else None
+            inner = node.get("linkType") if isinstance(node, Mapping) else None
+            rid = inner.get("rid") if isinstance(inner, Mapping) else None
+            if isinstance(rid, str):
+                rids.append(rid)
+        return json.dumps(
+            {
+                "objectTypeRid": object_type_rid,
+                "linkTypeRids": rids,
+                "linkTypes": [self._link_type_main(rid) for rid in rids],
+            },
+            indent=1,
+            default=str,
+        )
+
+    def _exec_get_action_types_for_object_type(
+        self, name: str, args: Mapping[str, Any]
+    ) -> str:
+        self._require_null_branch(args, name)
+        object_type_rid = _require_str(args, "objectTypeRid", name)
+        result = self._client().graphql(
+            "AssociatedActionTypeRidsMainQuery",
+            ASSOCIATED_ACTION_TYPE_RIDS_QUERY,
+            {"objectTypeRid": object_type_rid},
+        )
+        if (
+            result.errors
+            or result.status != "ok"
+            or not isinstance(result.data, Mapping)
+        ):
+            raise UnverifiedContract(
+                name,
+                f"AssociatedActionTypeRidsMainQuery failed: "
+                f"{result.errors or result.reason or result.status}",
+            )
+        object_type = result.data.get("objectTypeV2")
+        latest = object_type.get("latest") if isinstance(object_type, Mapping) else None
+        page = (
+            latest.get("associatedActionTypesV2")
+            if isinstance(latest, Mapping)
+            else None
+        )
+        if not isinstance(page, Mapping) or "reason" in page:
+            raise UnverifiedContract(
+                name,
+                f"AssociatedActionTypeRidsMainQuery returned no action type "
+                f"page: {str(result.data)[:200]!r}",
+            )
+        values = page.get("values")
+        rids = [
+            str(v.get("actionTypeRid"))
+            for v in (values if isinstance(values, list) else [])
+            if isinstance(v, Mapping) and v.get("actionTypeRid")
+        ]
+        output: Dict[str, Any] = {
+            "objectTypeRid": object_type_rid,
+            "actionTypeRids": rids,
+            "actionTypes": [self._bulk_load_action_type(rid) for rid in rids],
+        }
+        if page.get("nextPageToken"):
+            output["_truncated"] = (
+                "the association page carried a nextPageToken, but "
+                "pagination was never captured; only the first page is "
+                "returned"
+            )
+        return json.dumps(output, indent=1, default=str)
+
+    def _exec_load_object_sets(self, name: str, args: Mapping[str, Any]) -> str:
+        self._require_null_branch(args, name)
+        rids = args.get("objectSetRids")
+        if not isinstance(rids, list) or not rids:
+            raise ValueError(
+                "load_object_sets requires a non-empty 'objectSetRids' list"
+            )
+        loaded = []
+        for rid in rids:
+            if not isinstance(rid, str) or not rid:
+                raise ValueError(f"malformed object set RID: {rid!r}")
+            loaded.append(
+                self._conjure(
+                    "GET", _OBJECT_SET_PATH.format(rid=rid), None, "load object set"
+                )
+            )
+        return json.dumps({"objectSets": loaded}, indent=1, default=str)
+
+    def _exec_load_functions(self, name: str, args: Mapping[str, Any]) -> str:
+        entries = args.get("functions")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("load_functions requires a non-empty 'functions' list")
+        loaded: List[Any] = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                raise ValueError(f"malformed functions entry: {entry!r}")
+            self._require_null_branch(entry, name)
+            function_rid = entry.get("functionRid")
+            if not isinstance(function_rid, str) or not function_rid:
+                raise ValueError(f"functions entry has no functionRid: {entry!r}")
+            version = entry.get("version")
+            if version is None:
+                version = self._latest_function_version(function_rid)
+            loaded.append(
+                self._conjure(
+                    "GET",
+                    _FUNCTION_SPECS_PATH.format(rid=function_rid, version=version),
+                    None,
+                    "load function spec",
+                )
+            )
+        return json.dumps({"functions": loaded}, indent=1, default=str)
+
+    def _exec_load_code_repo(self, name: str, args: Mapping[str, Any]) -> str:
+        _require_main_branch(args.get("branch"), name)
+        repository_rid = _require_str(args, "repositoryRid", name)
+        resolved = self._conjure(
+            "GET",
+            _STEMMA_RESOLVE_PATH.format(rid=repository_rid),
+            None,
+            "resolve repository master ref",
+        )
+        root = self._conjure(
+            "GET",
+            f"{_STEMMA_CONTENTS_PATH.format(rid=repository_rid, path='%2F')}"
+            f"?{_STEMMA_COMMITISH}",
+            None,
+            "load repository root listing",
+        )
+        agents_md: Optional[str] = None
+        status, payload, _raw = self._client().conjure(
+            "GET",
+            f"{_STEMMA_CONTENTS_PATH.format(rid=repository_rid, path='AGENTS.md')}"
+            f"?{_STEMMA_COMMITISH}",
+            json_body=None,
+        )
+        if 200 <= status < 300 and isinstance(payload, Mapping):
+            contents = payload.get("fileContents")
+            if isinstance(contents, str):
+                agents_md = base64.b64decode(contents).decode("utf-8", "replace")
+        return json.dumps(
+            {
+                "repositoryRid": repository_rid,
+                "resolvedRef": resolved,
+                "rootContents": root,
+                "agentsMd": agents_md,
+            },
+            indent=1,
+            default=str,
+        )
+
+    def _exec_load_pull_request(self, name: str, args: Mapping[str, Any]) -> str:
+        pull_request_rid = _require_str(args, "pullRequestRid", name)
+        payload = self._repository().get_pull_request(pull_request_rid)
+        return json.dumps(payload, indent=1, default=str)
+
+    def _container_deployment(self, repository_rid: str, tool: str) -> str:
+        """Resolve repository -> container -> running deployment (captured chain)."""
+        if repository_rid in self._container_deployment_cache:
+            return self._container_deployment_cache[repository_rid]
+        result = self._client().graphql(
+            "GetContainersForRepository",
+            GET_CONTAINERS_FOR_REPOSITORY_QUERY,
+            {"repositoryRid": repository_rid},
+        )
+        if (
+            result.errors
+            or result.status != "ok"
+            or not isinstance(result.data, Mapping)
+        ):
+            raise UnverifiedContract(
+                tool,
+                f"GetContainersForRepository failed: "
+                f"{result.errors or result.reason or result.status}",
+            )
+        repository = result.data.get("stemmaRepository")
+        containers = (
+            repository.get("containers") if isinstance(repository, Mapping) else None
+        )
+        container_rid: Optional[str] = None
+        for container in containers if isinstance(containers, list) else []:
+            if not isinstance(container, Mapping):
+                continue
+            metadata = container.get("metadata")
+            trashed = (
+                metadata.get("trashedStatus") if isinstance(metadata, Mapping) else None
+            )
+            if container.get("imageType") == "CODE" and trashed == "NOT_TRASHED":
+                rid = container.get("rid")
+                if isinstance(rid, str):
+                    container_rid = rid
+                    break
+        if container_rid is None:
+            raise UnverifiedContract(
+                tool,
+                "GetContainersForRepository returned no non-trashed CODE "
+                f"container for {repository_rid}: {str(result.data)[:200]!r}",
+            )
+        created = self._conjure(
+            "POST",
+            _CONTAINER_DEPLOYMENTS_PATH.format(container_rid=container_rid),
+            None,
+            "create container deployment",
+        )
+        deployment_rid = created.get("deploymentRid")
+        if not isinstance(deployment_rid, str) or not deployment_rid:
+            raise UnverifiedContract(
+                tool,
+                f"container deployment creation returned no deploymentRid: "
+                f"{str(created)[:200]!r}",
+            )
+        deadline = time.monotonic() + self._container_boot_timeout
+        while True:
+            status_payload = self._conjure(
+                "GET",
+                _DEPLOYMENT_STATUS_PATH.format(deployment_rid=deployment_rid),
+                None,
+                "poll container deployment status",
+            )
+            status = status_payload.get("status")
+            state = status.get("type") if isinstance(status, Mapping) else None
+            if state == "running":
+                break
+            if state not in {"starting", "initializing", "launching"}:
+                raise UnverifiedContract(
+                    tool,
+                    f"container deployment reached uncaptured state "
+                    f"{state!r}: {str(status_payload)[:200]!r}",
+                )
+            if time.monotonic() >= deadline:
+                raise FoundryApiError(
+                    f"container deployment {deployment_rid} did not reach "
+                    f"'running' within {self._container_boot_timeout:.0f}s",
+                )
+            time.sleep(self._container_poll_interval)
+        self._container_deployment_cache[repository_rid] = deployment_rid
+        return deployment_rid
+
+    def _exec_container_git_status(self, name: str, args: Mapping[str, Any]) -> str:
+        repository_rid = _require_str(args, "repositoryRid", name)
+        deployment_rid = self._container_deployment(repository_rid, name)
+        payload = self._conjure(
+            "GET",
+            _DEPLOYMENT_GIT_STATUS_PATH.format(deployment_rid=deployment_rid),
+            None,
+            "load container git status",
+        )
+        return json.dumps(payload, indent=1, default=str)
+
+    def _exec_container_execute_terminal_command(
+        self, name: str, args: Mapping[str, Any]
+    ) -> str:
+        repository_rid = _require_str(args, "repositoryRid", name)
+        command = _require_str(args, "command", name)
+        deployment_rid = self._container_deployment(repository_rid, name)
+        body: Dict[str, Any] = {"command": command}
+        directory = args.get("directory")
+        if isinstance(directory, str) and directory:
+            body["directory"] = directory
+        result = self._conjure(
+            "POST",
+            _DEPLOYMENT_EXECUTE_COMMAND_PATH.format(deployment_rid=deployment_rid),
+            body,
+            "execute terminal command",
+        )
+        exit_code = result.get("exitCode")
+        stdout = result.get("stdout") or ""
+        stderr = result.get("stderr") or ""
+        return (
+            f"Terminal command executed: {command} with exit code {exit_code}\n\n"
+            f"stdout:\n```console\n{stdout}\n```\n\n"
+            f"stderr:\n```console\n{stderr}\n```"
+        )
 
     def _exec_ontology_sql_query(self, name: str, args: Mapping[str, Any]) -> str:
         queries = args.get("queries")
@@ -1065,6 +2319,31 @@ class AgentLoop:
         suite_rid = _require_str(args, "evaluationSuiteRid", name)
         payload = self._evals().get_evaluation_suite_config_v2(suite_rid)
         return json.dumps(payload, indent=1, default=str)
+
+    def _exec_get_evaluation_suites_for_target(
+        self, name: str, args: Mapping[str, Any]
+    ) -> str:
+        _require_main_branch(args.get("branch"), name)
+        target = args.get("target")
+        if (
+            not isinstance(target, Mapping)
+            or target.get("type") != "function"
+            or not isinstance(target.get("rid"), str)
+        ):
+            raise UnverifiedContract(
+                name,
+                f"only the function target arm was captured; got {target!r}",
+            )
+        function_rid = target["rid"]
+        rids = self._evals().list_evaluation_suites_for_target(function_rid)
+        suites = {
+            rid: self._evals().get_evaluation_suite_config_v2(rid) for rid in rids
+        }
+        return json.dumps(
+            {"evaluationSuiteRids": rids, "evaluationSuites": suites},
+            indent=1,
+            default=str,
+        )
 
     def _exec_run_evaluation_suite(self, name: str, args: Mapping[str, Any]) -> str:
         _require_main_branch(args.get("branch"), name)
@@ -1392,21 +2671,50 @@ class AgentLoop:
         if not isinstance(questions, list) or not questions:
             raise ValueError("request_clarification_from_user requires 'questions'")
         if self._clarification_handler is None:
-            return (
+            answer = (
                 "The operator cannot answer clarification questions in this "
                 "run (non-interactive). Make reasonable assumptions, document "
                 "them in your response, and proceed without asking again."
             )
-        return self._clarification_handler(questions)
+        else:
+            answer = self._clarification_handler(questions)
+        if self._consecutive_clarifications >= 2:
+            answer += (
+                "\n\n<cliDirective>\nYou have asked for clarification "
+                f"{self._consecutive_clarifications} times in a row without "
+                "making progress. STOP asking: make reasonable assumptions, "
+                "state them explicitly, and answer best-effort with the "
+                "information you already have. Further clarification "
+                "requests without intermediate tool use will not be "
+                f"answered. You have {self._turns_remaining} turn(s) "
+                "remaining in this run.\n</cliDirective>"
+            )
+        return answer
 
     def _exec_change_mode(self, name: str, args: Mapping[str, Any]) -> str:
         mode_config = args.get("modeConfig")
         if not isinstance(mode_config, Mapping):
             raise ValueError("change_mode requires a 'modeConfig' object")
-        self._mode = str(mode_config.get("type"))
-        return (
+        mode_type = str(mode_config.get("type"))
+        self._mode = mode_type
+        payload = (
             f"<modeChange>{json.dumps(mode_config, separators=(',', ':'))}</modeChange>"
         )
+        tool_set = MODE_TOOL_SETS.get(mode_type)
+        if tool_set is not None:
+            self._active_tools = set(tool_set)
+            payload += (
+                f"\nMode '{mode_type}' is now active; the next request "
+                f"exposes the captured {len(tool_set)}-tool set for this mode."
+            )
+        else:
+            payload += (
+                f"\nThe tool set for mode '{mode_type}' was never captured, "
+                "so the CLI loop keeps the current tool set. Known modes: "
+                "functionsEditing (51 tools). To expose the full captured "
+                "catalog regardless of mode, restart with --all-tools."
+            )
+        return payload
 
     def _exec_enable_capabilities(self, name: str, args: Mapping[str, Any]) -> str:
         return self._set_capabilities(name, args, enable=True)
@@ -1756,6 +3064,15 @@ class AgentLoop:
                     function_tool_call_item(call_uuid, tool_name, raw_arguments)
                 )
                 self._progress(f"turn {turns}: tool call {tool_name}")
+                self._turns_remaining = max_turns - turns
+                if tool_name == "request_clarification_from_user":
+                    self._consecutive_clarifications += 1
+                    if self._consecutive_clarifications >= 2:
+                        self._progress(
+                            "clarification loop guard: injecting best-effort directive"
+                        )
+                else:
+                    self._consecutive_clarifications = 0
                 payload, state, tool_request = self._execute_tool(
                     tool_name, raw_arguments
                 )
@@ -1979,18 +3296,27 @@ def _serialize_ontology_sql(
 
 __all__ = [
     "ACTION_TYPE_PARAMETERS_QUERY",
+    "ALL_TOOL_NAMES",
+    "ASSOCIATED_ACTION_TYPE_RIDS_QUERY",
+    "ASSOCIATED_LINK_TYPES_QUERY",
     "AgentLoop",
+    "BASE_TOOL_NAMES",
     "CAPABILITY_TOOL_MAP",
     "CONTEXT_TOKEN_THRESHOLD",
     "CompletedResponse",
     "DEFAULT_MAX_TURNS",
     "DEFAULT_MODEL",
     "DEFAULT_TOOL_NAMES",
+    "EXTENSION_TOOL_REGISTRY",
+    "GET_CONTAINERS_FOR_REPOSITORY_QUERY",
     "LATEST_FUNCTION_VERSION_QUERY",
+    "LINK_TYPE_MAIN_QUERY",
     "LlmResponseShapeError",
     "LlmSession",
+    "MODE_TOOL_SETS",
     "TOOL_REGISTRY",
     "ToolRegistration",
+    "UNCAPTURED_MODE_TYPES",
     "UnverifiedContract",
     "build_assistant_message_item",
     "build_tool_usage_item",

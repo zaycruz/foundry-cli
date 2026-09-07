@@ -455,3 +455,83 @@ class TestRunCommand:
 
         assert result.exit_code == 1
         assert "Error running the AI FDE agent loop" in result.stdout
+
+
+class TestRunUx:
+    def setup_method(self):
+        self.runner = CliRunner()
+
+    def _report(self, final_text="## Findings\n\nThe run failed because of X."):
+        return {
+            "threadId": THREAD_ID,
+            "status": "completed",
+            "turns": 3,
+            "toolsCalled": 2,
+            "toolCalls": [],
+            "finalText": final_text,
+            "usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2},
+            "model": "GPT_5_6_SOL",
+        }
+
+    @patch("foundry_cli.commands.ai_fde.AgentLoop")
+    def test_all_tools_flag_passed_through(self, mock_loop_class):
+        mock_loop = Mock()
+        mock_loop_class.return_value = mock_loop
+        mock_loop.run.return_value = self._report()
+
+        result = self.runner.invoke(
+            root_app,
+            ["ai-fde", "run", "investigate", "--all-tools", "--format", "json"],
+        )
+
+        assert result.exit_code == 0
+        assert mock_loop_class.call_args.kwargs["all_tools"] is True
+
+    @patch("foundry_cli.commands.ai_fde.AgentLoop")
+    def test_all_tools_defaults_to_false(self, mock_loop_class):
+        mock_loop = Mock()
+        mock_loop_class.return_value = mock_loop
+        mock_loop.run.return_value = self._report()
+
+        result = self.runner.invoke(
+            root_app, ["ai-fde", "run", "investigate", "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        assert mock_loop_class.call_args.kwargs["all_tools"] is False
+
+    @patch("foundry_cli.commands.ai_fde.AgentLoop")
+    def test_default_output_prints_final_text_as_markdown(self, mock_loop_class):
+        mock_loop = Mock()
+        mock_loop_class.return_value = mock_loop
+        mock_loop.run.return_value = self._report()
+
+        result = self.runner.invoke(root_app, ["ai-fde", "run", "investigate"])
+
+        assert result.exit_code == 0
+        # The assistant text is the stdout payload (no run-report table).
+        assert "Findings" in result.stdout
+        assert "The run failed because of X." in result.stdout
+        assert "toolCalls" not in result.stdout
+
+    @patch("foundry_cli.commands.ai_fde.AgentLoop")
+    def test_json_format_yields_structured_report(self, mock_loop_class):
+        mock_loop = Mock()
+        mock_loop_class.return_value = mock_loop
+        mock_loop.run.return_value = self._report()
+
+        result = self.runner.invoke(
+            root_app, ["ai-fde", "run", "investigate", "--format", "json"]
+        )
+
+        assert result.exit_code == 0
+        assert '"toolCalls"' in result.stdout
+        assert '"threadId"' in result.stdout
+
+    def test_help_documents_rid_identification_and_all_tools(self):
+        result = self.runner.invoke(root_app, ["ai-fde", "run", "--help"])
+
+        assert result.exit_code == 0
+        assert "no resource-search tool" in result.output
+        assert "RID" in result.output
+        assert "--all-tools" in result.output

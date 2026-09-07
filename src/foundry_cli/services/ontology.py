@@ -2462,6 +2462,7 @@ class ObjectTypeService(BaseService):
     def _format_object_type_info(self, obj_type: Any) -> Dict[str, Any]:
         """Format object type information for consistent output."""
         return {
+            "rid": getattr(obj_type, "rid", None),
             "api_name": obj_type.api_name,
             "display_name": getattr(obj_type, "display_name", None),
             "description": getattr(obj_type, "description", None),

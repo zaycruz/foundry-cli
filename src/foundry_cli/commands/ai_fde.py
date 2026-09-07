@@ -141,11 +141,17 @@ def run_agent_loop(
     yes: bool = typer.Option(
         False, "--yes", help="Approve every write tool call without prompting"
     ),
+    all_tools: bool = typer.Option(
+        False,
+        "--all-tools",
+        help="Expose the full 72-tool captured catalog from turn 1 "
+        "regardless of mode (fail-closed tools stay fail-closed)",
+    ),
     tools: Optional[str] = typer.Option(
         None,
         "--tools",
         help="CSV subset of registered tool names to offer the model "
-        f"(default: all {len(TOOL_REGISTRY)} registered)",
+        f"(default: the 8 base tools; {len(TOOL_REGISTRY)} registered)",
     ),
     model: str = typer.Option(DEFAULT_MODEL, "--model", help="LLM completion model"),
     profile: Optional[str] = _profile_option(),
@@ -161,12 +167,29 @@ def run_agent_loop(
     assistant-message items back into the thread, and repeats until the
     model stops calling tools or --max-turns is hit.
 
-    Approval gate: write tools (execute_action, run_evaluation_suite)
-    never run silently. Interactive runs prompt per write; --yes approves
-    all; --agent / non-interactive runs without --yes decline writes while
-    read tools still execute. Tools whose endpoint mapping was never
-    captured (load_documentation, load_documentation_bundles) are
-    registered spec-only and fail closed.
+    IDENTIFYING RESOURCES: AI FDE has no resource-search tool — not even
+    in the full 72-tool catalog. The UI identifies resources through user
+    @-mentions; this loop cannot. Name RIDs explicitly in the instruction
+    whenever they are known (e.g. ri.evals..evaluation-suite.<uuid>,
+    ri.stemma.main.repository.<uuid>), or the agent will have to ask.
+
+    Tool exposure: by default the model sees the captured 8-tool base set
+    (no mode selected) and must use change_mode to unlock richer tool
+    sets — change_mode actually swaps the offered tools per the captured
+    mode mapping (functionsEditing -> 51 tools). --all-tools exposes the
+    full 72-tool catalog from turn 1. Tools whose endpoint mapping was
+    never captured (schedules, ci_checks, logic family, documentation,
+    and others) stay registered spec-only and fail closed with a typed
+    error the model can react to.
+
+    Approval gate: write tools (execute_action, run_evaluation_suite,
+    container_execute_terminal_command) never run silently. Interactive
+    runs prompt per write; --yes approves all; --agent / non-interactive
+    runs without --yes decline writes while read tools still execute.
+
+    Output: the final assistant text prints as Markdown to stdout;
+    progress streams to stderr. Use -f json for the structured run
+    report (threadId, status, turns, toolCalls, usage).
     """
     tool_names: Optional[list] = None
     if tools:
@@ -198,6 +221,7 @@ def run_agent_loop(
             model=model,
             approve=approve,
             tool_names=tool_names,
+            all_tools=all_tools,
             progress=_progress,
             confirm=_confirm if approve == "interactive" else None,
             clarification_handler=(_clarify if not non_interactive_enabled() else None),
@@ -209,18 +233,38 @@ def run_agent_loop(
             max_turns=max_turns,
         )
 
-        _emit(
-            report,
-            "run_ai_fde_agent_loop",
-            format,
-            output,
-            thread_id=report.get("threadId"),
-            status=report.get("status"),
-            turns=report.get("turns"),
-            tools_called=report.get("toolsCalled"),
-            approve=approve,
-            write_verified=True,
-        )
+        if agent_mode_enabled() or format == "agent" or format != "table":
+            _emit(
+                report,
+                "run_ai_fde_agent_loop",
+                format,
+                output,
+                thread_id=report.get("threadId"),
+                status=report.get("status"),
+                turns=report.get("turns"),
+                tools_called=report.get("toolsCalled"),
+                approve=approve,
+                write_verified=True,
+            )
+        else:
+            # Human default: the assistant's final answer is the payload;
+            # print it as full-width Markdown (the run report table mangles
+            # long text). Run metadata goes to stderr; -f json yields the
+            # structured report.
+            err_console.print(
+                f"[dim]thread {report.get('threadId')} — "
+                f"{report.get('status')} in {report.get('turns')} turn(s), "
+                f"{report.get('toolsCalled')} tool call(s)[/dim]"
+            )
+            final_text = report.get("finalText") or ""
+            if final_text:
+                from rich.markdown import Markdown
+
+                console.print(Markdown(final_text))
+            else:
+                console.print("[yellow]The agent produced no final text.[/yellow]")
+            if output:
+                Path(output).write_text(final_text)
     except Exception as e:
         _handle_error(e, "running the AI FDE agent loop")
 

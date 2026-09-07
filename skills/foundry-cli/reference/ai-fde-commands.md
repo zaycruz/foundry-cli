@@ -150,7 +150,8 @@ pfoundry ai-fde settings update --definition settings-modification.json
 
 ```bash
 pfoundry ai-fde run "INSTRUCTION" [--thread THREAD_ID] [--name NAME]
-  [--max-turns N] [--yes] [--tools CSV] [--model MODEL] [--format FORMAT]
+  [--max-turns N] [--yes] [--all-tools] [--tools CSV] [--model MODEL]
+  [--format FORMAT]
 
 # Reimplements the Foundry UI's client-side agent loop: sends INSTRUCTION
 # to a new (or --thread-resumed) thread, calls the LLM (PUT
@@ -159,28 +160,82 @@ pfoundry ai-fde run "INSTRUCTION" [--thread THREAD_ID] [--name NAME]
 # executes the returned tool calls against captured internal contracts,
 # writes tool-usage and assistant-message items back into the thread, and
 # repeats until the model stops calling tools or --max-turns is hit
-# (default 25). Progress (turns, tool calls, approvals) streams to stderr;
-# the final run report {threadId, status, turns, toolsCalled, toolCalls,
-# finalText, usage, model} goes to stdout.
+# (default 25). Progress (turns, tool calls, approvals) streams to stderr.
+# Default stdout is the final assistant text rendered as Markdown; use
+# -f json for the structured run report {threadId, status, turns,
+# toolsCalled, toolCalls, finalText, usage, model}.
 #
-# Approval gate: write tools (execute_action, run_evaluation_suite) never
-# run silently. Interactive runs prompt per write tool; --yes approves
-# all; --agent / non-interactive runs without --yes decline writes while
-# read tools still execute.
+# IDENTIFYING RESOURCES: the captured AI FDE catalog has NO
+# resource-search tool — not even the full 72 (the UI identifies
+# resources via user @-mentions, which this loop cannot do). The CLI
+# therefore adds pfoundry_* extension tools (below) so the agent can
+# resolve names to RIDs itself; naming RIDs explicitly in the
+# instruction is still the most reliable path.
 #
-# Registered tools (specs captured verbatim from the UI): live read tools
-# ontology_sql_query, list_evaluation_runs, load_evaluation_runs,
-# get_test_case_results, get_evaluation_suite_definition, load_skill;
-# live state tools change_mode, enable_capabilities, disable_capabilities,
-# manage_context, request_clarification_from_user; live write tools
-# execute_action (validate-then-apply, plan-first) and
-# run_evaluation_suite; FAIL-CLOSED (spec registered, executor raises a
-# typed UnverifiedContract error because no endpoint was ever captured):
-# load_documentation, load_documentation_bundles. --tools restricts the
-# offered subset, e.g. --tools list_evaluation_runs,load_evaluation_runs.
+# CLI EXTENSION TOOLS (pfoundry-native, NOT captured AI FDE tools —
+# marked cliExtension in the registry and advertised as CLI-provided in
+# the instructions): always exposed, never mode-gated, all read-risk.
+# - pfoundry_search_resources {query, limit?} — title search -> RID
+#   (wraps the same SearchService as `pfoundry search`). NOTE: ontology
+#   object types are NOT Compass resources; use the next tool for them.
+# - pfoundry_search_object_types {query, ontologyRid?, limit?} — find
+#   object types by case-insensitive substring of api_name/display_name
+#   (wraps OntologyService.list_ontologies +
+#   ObjectTypeService.list_object_types); without ontologyRid every
+#   visible ontology is searched and hits are tagged with it.
+# - pfoundry_search_builds {datasetRid?, branch?, createdAfter?, limit?}
+#   — recent builds newest-first (wraps OrchestrationService around SDK
+#   Build.search/Build.jobs); datasetRid filtering is client-side over
+#   job outputs (the SDK filter vocabulary has no dataset member) and
+#   the result reports how many builds were scanned.
+# - pfoundry_get_dataset_transactions {datasetRid, branch?, limit?} —
+#   dataset transaction history (wraps DatasetService.get_transactions /
+#   get_branch_transactions).
+# - pfoundry_get_resource {rid} — Compass resource metadata (wraps
+#   ResourceService.get_resource).
+# Extension calls flow through the same write-back/report machinery as
+# captured tools, and executor errors come back as tool output (the loop
+# never crashes on a failing extension call).
+#
+# Tool exposure: the full captured 72-tool catalog is registered verbatim.
+# By default the model sees the captured 8-tool base set (no mode
+# selected); change_mode swaps the offered set per the mined mode mapping
+# (functionsEditing -> 51 tools; the executeAction capability adds
+# execute_action + await_automation_execution; other modes were never
+# captured and keep the current set). --all-tools exposes all 72 from
+# turn 1; --tools restricts to a CSV subset.
+#
+# Live executors (25): ontology_sql_query, evals reads
+# (list_evaluation_runs, load_evaluation_runs, get_test_case_results,
+# get_evaluation_suite_definition, get_evaluation_suites_for_target),
+# run_evaluation_suite, execute_action (validate-then-apply),
+# load_object_types, load_action_types, load_link_types,
+# get_action_types_for_object_type, get_link_types_for_object_type,
+# load_object_sets, load_functions, load_code_repo, load_pull_request,
+# container_git_status, container_execute_terminal_command, load_skill,
+# and the state tools (change_mode, enable_capabilities,
+# disable_capabilities, manage_context, request_clarification_from_user).
+# The other 47 fail closed with a typed UnverifiedContract tool result
+# (evidence: services/ai_fde_loop.py docstring): the schedules family and
+# ci_checks (never exercised; no endpoint captured), the logic family,
+# documentation tools, container file writes, and more. Fail-closed write
+# tools never prompt for approval.
+#
+# Approval gate: live write tools (execute_action, run_evaluation_suite,
+# container_execute_terminal_command) never run silently. Interactive
+# runs prompt per write tool; --yes approves all; --agent /
+# non-interactive runs without --yes decline writes while read tools
+# still execute.
+#
+# Clarification loop guard: after 2 consecutive
+# request_clarification_from_user calls with no other tool use between,
+# the loop injects a directive telling the agent to make reasonable
+# assumptions and answer best-effort (with a remaining-turns countdown).
+# Interactive prompting still happens when stdin is a TTY.
 
 # Examples
 pfoundry ai-fde run "Why did the latest evaluation run fail?" --yes
+pfoundry ai-fde run "Check CI for repo ri.stemma.main.repository.00000000-0000-0000-0000-000000000001" --all-tools
 pfoundry ai-fde run "Summarize run history" --tools list_evaluation_runs
 pfoundry ai-fde run "Follow up on the fix" --thread 00000000-0000-0000-0000-000000000001
 ```

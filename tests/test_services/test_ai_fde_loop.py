@@ -12,7 +12,15 @@ import pytest
 
 from foundry_cli.services.ai_fde_loop import (
     ACTION_TYPE_PARAMETERS_QUERY,
+    ALL_TOOL_NAMES,
+    ASSOCIATED_ACTION_TYPE_RIDS_QUERY,
+    ASSOCIATED_LINK_TYPES_QUERY,
+    GET_CONTAINERS_FOR_REPOSITORY_QUERY,
     LATEST_FUNCTION_VERSION_QUERY,
+    LINK_TYPE_MAIN_QUERY,
+    MODE_TOOL_SETS,
+    EXTENSION_TOOL_REGISTRY,
+    TOOL_REGISTRY,
     AgentLoop,
     CompletedResponse,
     LlmResponseShapeError,
@@ -22,6 +30,8 @@ from foundry_cli.services.ai_fde_loop import (
     hidden_item_output,
     wrap_context_item,
 )
+from foundry_cli.services.ai_fde_extension_tools import ExtensionToolExecutor
+from foundry_cli.services.ai_fde_tool_specs import TOOL_SPECS, TOOL_SPECS_JSON
 from foundry_cli.services.errors import FoundryApiError
 
 THREAD_ID = "00000000-0000-0000-0000-000000000001"
@@ -289,7 +299,15 @@ class TestAgentLoopBasics:
         )
         loop.run("hello")
         tools = llm.complete.call_args.kwargs["tools"]
-        assert [t["function"]["name"] for t in tools] == ["list_evaluation_runs"]
+        # The captured subset plus the always-on CLI extension tools.
+        assert [t["function"]["name"] for t in tools] == [
+            "list_evaluation_runs",
+            "pfoundry_search_resources",
+            "pfoundry_search_builds",
+            "pfoundry_get_dataset_transactions",
+            "pfoundry_get_resource",
+            "pfoundry_search_object_types",
+        ]
 
     def test_unknown_tool_name_rejected(self):
         with pytest.raises(ValueError, match="unknown tools"):
@@ -393,7 +411,7 @@ class TestToolCallFlow:
     def test_documentation_executor_raises_typed_error(self):
         loop, _, _ = make_loop([_text_output("x")])
         with pytest.raises(UnverifiedContract) as exc_info:
-            loop._exec_unverified_documentation("load_documentation", {})
+            loop._exec_fail_closed("load_documentation", {})
         assert exc_info.value.tool == "load_documentation"
 
 
@@ -913,10 +931,43 @@ class TestStateTools:
         payload = loop._exec_change_mode(
             "change_mode", {"modeConfig": {"type": "functionsEditing", "evals": True}}
         )
-        assert payload == (
+        assert payload.startswith(
             '<modeChange>{"type":"functionsEditing","evals":true}</modeChange>'
         )
         assert loop._mode == "functionsEditing"
+
+    def test_change_mode_swaps_to_captured_tool_set(self):
+        loop, _, llm = make_loop(
+            [
+                _call_output(
+                    "change_mode",
+                    json.dumps(
+                        {"modeConfig": {"type": "functionsEditing", "evals": True}}
+                    ),
+                ),
+                _text_output("done"),
+            ]
+        )
+        loop.run("switch mode")
+        # The first request exposes the captured 8-tool base set...
+        first_tools = llm.complete.call_args_list[0].kwargs["tools"]
+        assert len(first_tools) == 13  # 8 captured base + 5 CLI extensions
+        # ...and after change_mode the next request exposes the captured
+        # 51-tool functionsEditing set.
+        second_tools = llm.complete.call_args_list[1].kwargs["tools"]
+        assert len(second_tools) == 56  # 51 captured + 5 CLI extensions
+        names = {t["function"]["name"] for t in second_tools}
+        assert set(MODE_TOOL_SETS["functionsEditing"]) <= names
+        assert set(EXTENSION_TOOL_REGISTRY) <= names
+
+    def test_change_mode_uncaptured_mode_keeps_current_set(self):
+        loop, _, _ = make_loop([_text_output("x")])
+        before = set(loop._active_tools)
+        payload = loop._exec_change_mode(
+            "change_mode", {"modeConfig": {"type": "exploration"}}
+        )
+        assert "never captured" in payload
+        assert loop._active_tools == before
 
     def test_enable_disable_capabilities_adjust_tool_set(self):
         loop, _, _ = make_loop(
@@ -927,11 +978,14 @@ class TestStateTools:
             "enable_capabilities", {"capabilities": ["executeAction"]}
         )
         assert '<enableCapabilities>["executeAction"]</enableCapabilities>' in payload
+        # The captured executeAction enablement added BOTH tools.
         assert "execute_action" in loop._active_tools
+        assert "await_automation_execution" in loop._active_tools
         loop._exec_disable_capabilities(
             "disable_capabilities", {"capabilities": ["executeAction"]}
         )
         assert "execute_action" not in loop._active_tools
+        assert "await_automation_execution" not in loop._active_tools
 
     def test_unknown_capability_is_reported_not_invented(self):
         loop, _, _ = make_loop([_text_output("x")])
@@ -1178,3 +1232,1115 @@ class TestSerializers:
         item = build_tool_usage_item("cid", "tool", {"a": 1}, "rejected")
         assert item["content"][0]["toolResponse"]["state"] == "rejected"
         assert item["fallbackMessage"] == {"role": "USER", "contents": []}
+
+
+LINK_TYPE_RID = "ri.ontology.main.relation.00000000-0000-0000-0000-000000000010"
+OBJECT_SET_RID = "ri.object-set.main.object-set.00000000-0000-0000-0000-000000000011"
+REPOSITORY_RID = "ri.stemma.main.repository.00000000-0000-0000-0000-000000000012"
+PULL_REQUEST_RID = (
+    "ri.pull-request.main.pull-request.00000000-0000-0000-0000-000000000013"
+)
+CONTAINER_RID = (
+    "ri.foundry-container-service.main.container.00000000-0000-0000-0000-000000000014"
+)
+DEPLOYMENT_RID = (
+    "ri.foundry-container-service.main.deployment.00000000-0000-0000-0000-000000000015"
+)
+SCHEDULE_RID = "ri.orchestration.main.schedule.00000000-0000-0000-0000-000000000016"
+
+
+def _graphql_ok(data):
+    return Mock(errors=[], status="ok", reason=None, data=data)
+
+
+class TestFullCatalog:
+    def test_registry_covers_all_72_captured_specs(self):
+        assert len(TOOL_SPECS) == 72
+        assert set(TOOL_REGISTRY) == set(TOOL_SPECS)
+
+    def test_specs_byte_equal_to_captured_artifact(self):
+        """The parsed blob must round-trip and match the captured request.
+
+        The hash pins the canonical JSON of the 72-spec map extracted
+        verbatim from the richest captured streamCompletionChunk request
+        (170 input items, 72 tools); any hand edit changes the digest.
+        """
+        import hashlib
+
+        assert TOOL_SPECS == json.loads(TOOL_SPECS_JSON)
+        canon = json.dumps(
+            TOOL_SPECS, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        assert (
+            hashlib.sha256(canon.encode()).hexdigest()
+            == "3efef39513333c91635f2df16d1ef64f011a5d98719b3351384ff6ff448eeb1d"
+        )
+
+    def test_search_language_model_functions_keeps_richest_variant(self):
+        # Two schema variants were captured; the catalog keeps the
+        # enum-constrained variant from the richest request.
+        props = TOOL_SPECS["search_language_model_functions"]["function"]["parameters"][
+            "properties"
+        ]
+        assert "enum" in props["modelClass"]["anyOf"][0]
+        assert "enum" in props["provider"]["anyOf"][0]
+
+    def test_mode_tool_sets_match_capture(self):
+        assert set(MODE_TOOL_SETS) == {"functionsEditing"}
+        assert len(MODE_TOOL_SETS["functionsEditing"]) == 51
+        # The base 8 are a subset of every captured richer set.
+        base = {
+            "change_mode",
+            "disable_capabilities",
+            "enable_capabilities",
+            "load_documentation",
+            "load_documentation_bundles",
+            "load_skill",
+            "manage_context",
+            "request_clarification_from_user",
+        }
+        assert base <= set(MODE_TOOL_SETS["functionsEditing"])
+
+    def test_fail_closed_write_tools_keep_write_risk(self):
+        for name in (
+            "create_schedule",
+            "replace_schedule",
+            "delete_schedule",
+            "pause_schedule",
+            "unpause_schedule",
+            "run_schedule",
+        ):
+            registration = TOOL_REGISTRY[name]
+            assert registration.risk == "write"
+            assert not registration.live
+
+
+class TestAllToolsExposure:
+    def test_all_tools_exposes_full_catalog_from_turn_1(self):
+        loop, _, llm = make_loop([_text_output("done")], all_tools=True)
+        loop.run("hello")
+        tools = llm.complete.call_args.kwargs["tools"]
+        assert len(tools) == 77  # 72 captured + 5 CLI extensions
+        names = {t["function"]["name"] for t in tools}
+        assert set(ALL_TOOL_NAMES) <= names
+        assert set(EXTENSION_TOOL_REGISTRY) <= names
+
+    def test_default_exposes_captured_base_set(self):
+        loop, _, llm = make_loop([_text_output("done")])
+        loop.run("hello")
+        tools = llm.complete.call_args.kwargs["tools"]
+        assert len(tools) == 13  # 8 captured base + 5 CLI extensions
+
+    def test_fail_closed_result_is_fed_back_to_model(self):
+        loop, _, llm = make_loop(
+            [
+                _call_output("get_dataset_schedules", '{"datasetRid": "ri.x"}'),
+                _text_output("cannot list schedules"),
+            ],
+            all_tools=True,
+        )
+        loop.run("list schedules")
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        output_text = output_item["item"]["functionToolCallOutput"]["output"]
+        assert "not executable" in output_text
+        assert "schedule" in output_text
+
+    def test_fail_closed_write_tool_does_not_prompt_for_approval(self):
+        confirm = Mock(return_value=True)
+        loop, _, _ = make_loop(
+            [
+                _call_output("create_schedule", '{"displayName": "x"}'),
+                _text_output("done"),
+            ],
+            all_tools=True,
+            approve="interactive",
+            confirm=confirm,
+        )
+        loop.run("make a schedule")
+        confirm.assert_not_called()
+
+
+class TestClarificationGuard:
+    def _clarification_call(self):
+        return _call_output(
+            "request_clarification_from_user",
+            json.dumps({"questions": [{"question": "which one?"}]}),
+        )
+
+    def test_second_consecutive_clarification_injects_directive(self):
+        loop, _, llm = make_loop(
+            [
+                self._clarification_call(),
+                self._clarification_call(),
+                _text_output("best-effort answer"),
+            ]
+        )
+        loop.run("ambiguous task", max_turns=10)
+        third_input = llm.complete.call_args_list[2].kwargs["input_items"]
+        outputs = [
+            i["item"]["functionToolCallOutput"]["output"]
+            for i in third_input
+            if i["item"]["type"] == "functionToolCallOutput"
+        ]
+        assert any("<cliDirective>" in o for o in outputs)
+        directive = next(o for o in outputs if "<cliDirective>" in o)
+        assert "best-effort" in directive
+        assert "8 turn(s) remaining" in directive  # 10 max - 2 turns elapsed
+
+    def test_first_clarification_has_no_directive(self):
+        loop, _, llm = make_loop([self._clarification_call(), _text_output("done")])
+        loop.run("ambiguous task")
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        assert (
+            "<cliDirective>"
+            not in (output_item["item"]["functionToolCallOutput"]["output"])
+        )
+
+    def test_other_tool_between_clarifications_resets_guard(self):
+        evals = Mock()
+        evals.get_execution_history.return_value = {"executionsPage": []}
+        loop, _, llm = make_loop(
+            [
+                self._clarification_call(),
+                _call_output(
+                    "list_evaluation_runs",
+                    json.dumps({"evaluationSuiteRid": SUITE_RID, "pageToken": None}),
+                ),
+                self._clarification_call(),
+                _text_output("done"),
+            ],
+            evals_service=evals,
+        )
+        loop.run("ambiguous task")
+        fourth_input = llm.complete.call_args_list[3].kwargs["input_items"]
+        outputs = [
+            i["item"]["functionToolCallOutput"]["output"]
+            for i in fourth_input
+            if i["item"]["type"] == "functionToolCallOutput"
+        ]
+        assert not any("<cliDirective>" in o for o in outputs)
+
+    def test_interactive_handler_still_runs_under_guard(self):
+        handler = Mock(return_value="the operator's answer")
+        loop, _, llm = make_loop(
+            [
+                self._clarification_call(),
+                self._clarification_call(),
+                _text_output("done"),
+            ],
+            clarification_handler=handler,
+        )
+        loop.run("ambiguous task")
+        assert handler.call_count == 2
+        third_input = llm.complete.call_args_list[2].kwargs["input_items"]
+        outputs = [
+            i["item"]["functionToolCallOutput"]["output"]
+            for i in third_input
+            if i["item"]["type"] == "functionToolCallOutput"
+        ]
+        assert any("the operator's answer" in o for o in outputs)
+        assert any("<cliDirective>" in o for o in outputs)
+
+
+class TestOntologyLoadExecutors:
+    def test_load_object_types_uses_captured_identifier_form(self):
+        client = Mock()
+        client.conjure.return_value = (
+            200,
+            {
+                "objectTypes": [
+                    {"objectType": {"id": "ns.ot-1", "rid": OBJECT_TYPE_RID}}
+                ]
+            },
+            "{}",
+        )
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = loop._exec_load_object_types(
+            "load_object_types",
+            {
+                "objectTypes": [
+                    {
+                        "objectTypeLocator": {"objectTypeRid": OBJECT_TYPE_RID},
+                        "ontologyBranchRid": None,
+                    }
+                ],
+                "includePropertySourceMapping": False,
+                "includeApiNames": True,
+            },
+        )
+        verb, path = client.conjure.call_args.args[:2]
+        assert verb == "POST"
+        assert path == "ontology-metadata/api/ontology/ontology/bulkLoadEntities"
+        body = client.conjure.call_args.kwargs["json_body"]
+        assert body["objectTypes"] == [
+            {"identifier": {"objectTypeRid": OBJECT_TYPE_RID, "type": "objectTypeRid"}}
+        ]
+        assert body["includeObjectTypesWithoutSearchableDatasources"] is True
+        assert (
+            json.loads(payload)["objectTypes"][0]["objectTypes"][0]["objectType"]["id"]
+            == "ns.ot-1"
+        )
+
+    def test_load_object_types_branch_fails_closed(self):
+        loop, _, _ = make_loop([_text_output("x")], internal_client=Mock())
+        with pytest.raises(UnverifiedContract, match="ontologyBranchRid"):
+            loop._exec_load_object_types(
+                "load_object_types",
+                {
+                    "objectTypes": [
+                        {
+                            "objectTypeLocator": {"objectTypeRid": OBJECT_TYPE_RID},
+                            "ontologyBranchRid": "ri.ontology.main.branch.x",
+                        }
+                    ]
+                },
+            )
+
+    def test_load_action_types_uses_captured_rid_form(self):
+        client = Mock()
+        client.conjure.return_value = (
+            200,
+            {"actionTypes": [{"actionType": {"actionTypeLogic": {}}}]},
+            "{}",
+        )
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = loop._exec_load_action_types(
+            "load_action_types",
+            {"actionTypes": [{"actionTypeRid": ACTION_TYPE_RID}]},
+        )
+        body = client.conjure.call_args.kwargs["json_body"]
+        assert body == {
+            "actionTypes": [{"rid": ACTION_TYPE_RID}],
+            "loadRedacted": True,
+            "datasourceTypes": [],
+            "objectTypes": [],
+            "linkTypes": [],
+            "sharedPropertyTypes": [],
+            "interfaceTypes": [],
+            "typeGroups": [],
+        }
+        assert json.loads(payload)["actionTypes"]
+
+    def test_load_link_types_uses_pinned_graphql(self):
+        client = Mock()
+        client.graphql.return_value = _graphql_ok({"linkType": {"latest": {}}})
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = loop._exec_load_link_types(
+            "load_link_types",
+            {"linkTypes": [{"linkTypeRid": LINK_TYPE_RID, "ontologyBranchRid": None}]},
+        )
+        name, query, variables = client.graphql.call_args.args
+        assert name == "LinkTypeMainQuery"
+        assert query == LINK_TYPE_MAIN_QUERY
+        assert variables == {"linkTypeRid": LINK_TYPE_RID}
+        assert json.loads(payload)["linkTypes"]
+
+    def test_get_link_types_for_object_type_chains_captured_reads(self):
+        client = Mock()
+        client.graphql.side_effect = [
+            _graphql_ok(
+                {
+                    "objectTypeV2": {
+                        "latest": {
+                            "linksIncludingLinksToObjectTypesWithoutSearchableDatasources": [
+                                {"linkType": {"linkType": {"rid": LINK_TYPE_RID}}}
+                            ]
+                        }
+                    }
+                }
+            ),
+            _graphql_ok({"linkType": {"latest": {"definition": {}}}}),
+        ]
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = json.loads(
+            loop._exec_get_link_types_for_object_type(
+                "get_link_types_for_object_type",
+                {"objectTypeRid": OBJECT_TYPE_RID, "ontologyBranchRid": None},
+            )
+        )
+        first = client.graphql.call_args_list[0]
+        assert first.args[0] == "AssociatedLinkTypesForObjectTypeMainQuery"
+        assert first.args[1] == ASSOCIATED_LINK_TYPES_QUERY
+        assert first.args[2] == {"objectTypeRid": OBJECT_TYPE_RID}
+        assert payload["linkTypeRids"] == [LINK_TYPE_RID]
+        assert len(payload["linkTypes"]) == 1
+
+    def test_get_action_types_for_object_type_chains_captured_reads(self):
+        client = Mock()
+        client.graphql.return_value = _graphql_ok(
+            {
+                "objectTypeV2": {
+                    "latest": {
+                        "associatedActionTypesV2": {
+                            "values": [{"actionTypeRid": ACTION_TYPE_RID}],
+                            "nextPageToken": None,
+                        }
+                    }
+                }
+            }
+        )
+        client.conjure.return_value = (200, {"actionTypes": [{"actionType": {}}]}, "{}")
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = json.loads(
+            loop._exec_get_action_types_for_object_type(
+                "get_action_types_for_object_type",
+                {"objectTypeRid": OBJECT_TYPE_RID, "ontologyBranchRid": None},
+            )
+        )
+        name, query, variables = client.graphql.call_args.args
+        assert name == "AssociatedActionTypeRidsMainQuery"
+        assert query == ASSOCIATED_ACTION_TYPE_RIDS_QUERY
+        assert variables == {"objectTypeRid": OBJECT_TYPE_RID}
+        assert payload["actionTypeRids"] == [ACTION_TYPE_RID]
+        assert "_truncated" not in payload
+
+    def test_get_action_types_marks_uncaptured_pagination(self):
+        client = Mock()
+        client.graphql.return_value = _graphql_ok(
+            {
+                "objectTypeV2": {
+                    "latest": {
+                        "associatedActionTypesV2": {
+                            "values": [{"actionTypeRid": ACTION_TYPE_RID}],
+                            "nextPageToken": "page-2",
+                        }
+                    }
+                }
+            }
+        )
+        client.conjure.return_value = (200, {"actionTypes": []}, "{}")
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = json.loads(
+            loop._exec_get_action_types_for_object_type(
+                "get_action_types_for_object_type",
+                {"objectTypeRid": OBJECT_TYPE_RID, "ontologyBranchRid": None},
+            )
+        )
+        assert "_truncated" in payload
+
+
+class TestLoadExecutors:
+    def test_load_object_sets(self):
+        client = Mock()
+        client.conjure.return_value = (200, {"objectSet": {"objectSet": {}}}, "{}")
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = loop._exec_load_object_sets(
+            "load_object_sets",
+            {"objectSetRids": [OBJECT_SET_RID], "ontologyBranchRid": None},
+        )
+        verb, path = client.conjure.call_args.args[:2]
+        assert verb == "GET"
+        assert path == f"object-set-service/api/objectSets/{OBJECT_SET_RID}"
+        assert json.loads(payload)["objectSets"]
+
+    def test_load_functions_pinned_version(self):
+        client = Mock()
+        client.conjure.return_value = (200, {"spec": {"version": "2.18.0"}}, "{}")
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = loop._exec_load_functions(
+            "load_functions",
+            {
+                "functions": [
+                    {
+                        "functionRid": FUNCTION_RID,
+                        "ontologyBranchRid": None,
+                        "version": "2.18.0",
+                    }
+                ]
+            },
+        )
+        verb, path = client.conjure.call_args.args[:2]
+        assert verb == "GET"
+        assert path == f"function-registry/api/functions/{FUNCTION_RID}/specs/2.18.0"
+        assert json.loads(payload)["functions"]
+
+    def test_load_functions_null_version_resolves_latest(self):
+        client = Mock()
+        client.graphql.return_value = _graphql_ok(
+            {"function": {"latestVersion": {"version": "3.0.0"}}}
+        )
+        client.conjure.return_value = (200, {"spec": {"version": "3.0.0"}}, "{}")
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        loop._exec_load_functions(
+            "load_functions",
+            {"functions": [{"functionRid": FUNCTION_RID, "version": None}]},
+        )
+        assert client.graphql.call_args.args[0] == "LatestFunctionVersionQuery"
+        _, path = client.conjure.call_args.args[:2]
+        assert path.endswith("/specs/3.0.0")
+
+    def test_load_code_repo_captured_triple(self):
+        client = Mock()
+        agents_md = base64.b64encode(b"# AGENTS\n").decode()
+        client.conjure.side_effect = [
+            (200, {"objectHash": "abc", "peeledCommitHash": "abc"}, "{}"),
+            (200, {"metadata": {"type": "DIRECTORY"}, "directoryContents": []}, "{}"),
+            (200, {"metadata": {"type": "FILE"}, "fileContents": agents_md}, "{}"),
+        ]
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = json.loads(
+            loop._exec_load_code_repo(
+                "load_code_repo",
+                {"repositoryRid": REPOSITORY_RID, "branch": {"mainBranch": True}},
+            )
+        )
+        paths = [c.args[1] for c in client.conjure.call_args_list]
+        assert paths[0] == (
+            f"stemma/api/repos/{REPOSITORY_RID}/resolve/refs%2Fheads%2Fmaster"
+        )
+        assert paths[1] == (
+            f"stemma/api/repos/{REPOSITORY_RID}/paths/contents/%2F"
+            "?commitish=refs%2Fheads%2Fmaster"
+        )
+        assert paths[2] == (
+            f"stemma/api/repos/{REPOSITORY_RID}/paths/contents/AGENTS.md"
+            "?commitish=refs%2Fheads%2Fmaster"
+        )
+        assert payload["agentsMd"] == "# AGENTS\n"
+
+    def test_load_code_repo_missing_agents_md_is_null(self):
+        client = Mock()
+        client.conjure.side_effect = [
+            (200, {"objectHash": "abc"}, "{}"),
+            (200, {"metadata": {"type": "DIRECTORY"}}, "{}"),
+            (404, {"error": "not found"}, "{}"),
+        ]
+        loop, _, _ = make_loop([_text_output("x")], internal_client=client)
+        payload = json.loads(
+            loop._exec_load_code_repo(
+                "load_code_repo",
+                {"repositoryRid": REPOSITORY_RID, "branch": {"mainBranch": True}},
+            )
+        )
+        assert payload["agentsMd"] is None
+
+    def test_load_code_repo_non_main_branch_fails_closed(self):
+        loop, _, _ = make_loop([_text_output("x")], internal_client=Mock())
+        with pytest.raises(UnverifiedContract, match="mainBranch"):
+            loop._exec_load_code_repo(
+                "load_code_repo",
+                {"repositoryRid": REPOSITORY_RID, "branch": {"globalBranchRid": "x"}},
+            )
+
+    def test_load_pull_request_delegates_to_repository_service(self):
+        repository = Mock()
+        repository.get_pull_request.return_value = {"rid": PULL_REQUEST_RID}
+        loop, _, _ = make_loop([_text_output("x")], repository_service=repository)
+        payload = loop._exec_load_pull_request(
+            "load_pull_request", {"pullRequestRid": PULL_REQUEST_RID}
+        )
+        repository.get_pull_request.assert_called_once_with(PULL_REQUEST_RID)
+        assert json.loads(payload)["rid"] == PULL_REQUEST_RID
+
+    def test_get_evaluation_suites_for_target_function_arm(self):
+        evals = Mock()
+        evals.list_evaluation_suites_for_target.return_value = [SUITE_RID]
+        evals.get_evaluation_suite_config_v2.return_value = {"evaluationSuites": {}}
+        loop, _, _ = make_loop([_text_output("x")], evals_service=evals)
+        payload = json.loads(
+            loop._exec_get_evaluation_suites_for_target(
+                "get_evaluation_suites_for_target",
+                {
+                    "target": {"type": "function", "rid": FUNCTION_RID},
+                    "branch": {"mainBranch": True},
+                },
+            )
+        )
+        evals.list_evaluation_suites_for_target.assert_called_once_with(FUNCTION_RID)
+        assert payload["evaluationSuiteRids"] == [SUITE_RID]
+        assert SUITE_RID in payload["evaluationSuites"]
+
+    def test_get_evaluation_suites_for_target_logic_arm_fails_closed(self):
+        loop, _, _ = make_loop([_text_output("x")], evals_service=Mock())
+        with pytest.raises(UnverifiedContract, match="function"):
+            loop._exec_get_evaluation_suites_for_target(
+                "get_evaluation_suites_for_target",
+                {
+                    "target": {"type": "logic", "rid": "ri.eddie.main.logic.x"},
+                    "branch": {"mainBranch": True},
+                },
+            )
+
+
+class TestContainerExecutors:
+    def _container_client(self):
+        client = Mock()
+        client.graphql.return_value = _graphql_ok(
+            {
+                "stemmaRepository": {
+                    "containers": [
+                        {
+                            "imageType": "CODE",
+                            "rid": CONTAINER_RID,
+                            "metadata": {"trashedStatus": "NOT_TRASHED"},
+                        }
+                    ]
+                }
+            }
+        )
+        client.conjure.side_effect = [
+            (200, {"deploymentRid": DEPLOYMENT_RID}, "{}"),
+            (200, {"status": {"type": "starting", "starting": {}}}, "{}"),
+            (200, {"status": {"type": "running", "running": {}}}, "{}"),
+            (
+                200,
+                {
+                    "gitStatus": {
+                        "head": {"commitish": "refs/heads/master"},
+                        "fileChanges": {"added": []},
+                    }
+                },
+                "{}",
+            ),
+        ]
+        return client
+
+    def test_container_git_status_full_chain(self):
+        client = self._container_client()
+        loop, _, _ = make_loop(
+            [_text_output("x")], internal_client=client, container_poll_interval=0
+        )
+        payload = json.loads(
+            loop._exec_container_git_status(
+                "container_git_status", {"repositoryRid": REPOSITORY_RID}
+            )
+        )
+        name, query, variables = client.graphql.call_args.args
+        assert name == "GetContainersForRepository"
+        assert query == GET_CONTAINERS_FOR_REPOSITORY_QUERY
+        assert variables == {"repositoryRid": REPOSITORY_RID}
+        paths = [c.args[1] for c in client.conjure.call_args_list]
+        assert paths[0] == (
+            f"foundry-container-service/api/containers/{CONTAINER_RID}/deployments"
+        )
+        assert paths[-1] == (
+            f"foundry-container-service/api/deployments/{DEPLOYMENT_RID}/git/status"
+        )
+        assert payload["gitStatus"]["head"]["commitish"] == "refs/heads/master"
+
+    def test_container_deployment_is_cached_per_repo(self):
+        client = self._container_client()
+        loop, _, _ = make_loop(
+            [_text_output("x")], internal_client=client, container_poll_interval=0
+        )
+        args = {"repositoryRid": REPOSITORY_RID}
+        loop._exec_container_git_status("container_git_status", args)
+        client.conjure.side_effect = [
+            (200, {"gitStatus": {"head": {}, "fileChanges": {}}}, "{}"),
+        ]
+        loop._exec_container_git_status("container_git_status", args)
+        # Second call goes straight to git/status on the cached deployment.
+        assert client.conjure.call_args.args[1].endswith("/git/status")
+
+    def test_terminal_command_captured_serialization(self):
+        client = Mock()
+        client.graphql.return_value = _graphql_ok(
+            {
+                "stemmaRepository": {
+                    "containers": [
+                        {
+                            "imageType": "CODE",
+                            "rid": CONTAINER_RID,
+                            "metadata": {"trashedStatus": "NOT_TRASHED"},
+                        }
+                    ]
+                }
+            }
+        )
+        client.conjure.side_effect = [
+            (200, {"deploymentRid": DEPLOYMENT_RID}, "{}"),
+            (200, {"status": {"type": "running", "running": {}}}, "{}"),
+            (200, {"exitCode": 0, "stdout": "false\n", "stderr": ""}, "{}"),
+        ]
+        loop, _, _ = make_loop(
+            [_text_output("x")], internal_client=client, container_poll_interval=0
+        )
+        payload = loop._exec_container_execute_terminal_command(
+            "container_execute_terminal_command",
+            {
+                "repositoryRid": REPOSITORY_RID,
+                "branch": {"mainBranch": True},
+                "command": "ls",
+            },
+        )
+        verb, path = client.conjure.call_args.args[:2]
+        assert verb == "POST"
+        assert path == (
+            f"foundry-container-service/api/deployments/{DEPLOYMENT_RID}"
+            "/terminal/execute-command"
+        )
+        assert client.conjure.call_args.kwargs["json_body"] == {"command": "ls"}
+        assert payload.startswith("Terminal command executed: ls with exit code 0")
+        assert "false" in payload
+
+    def test_terminal_command_is_approval_gated(self):
+        loop, _, llm = make_loop(
+            [
+                _call_output(
+                    "container_execute_terminal_command",
+                    json.dumps(
+                        {"repositoryRid": REPOSITORY_RID, "command": "rm -rf x"}
+                    ),
+                ),
+                _text_output("skipped"),
+            ],
+            approve="never",
+            internal_client=Mock(),
+        )
+        report = loop.run("delete things")
+        assert report["toolCalls"][0]["state"] == "rejected"
+
+
+class TestFailClosedFamilies:
+    @pytest.mark.parametrize(
+        "tool",
+        [
+            "get_dataset_schedules",
+            "run_schedule",
+            "pause_schedule",
+            "unpause_schedule",
+            "create_schedule",
+            "replace_schedule",
+            "delete_schedule",
+        ],
+    )
+    def test_schedules_family_fails_closed(self, tool):
+        loop, _, _ = make_loop([_text_output("x")], internal_client=Mock())
+        with pytest.raises(UnverifiedContract, match="schedule"):
+            loop._exec_fail_closed(tool, {})
+
+    def test_ci_checks_fails_closed(self):
+        loop, _, _ = make_loop([_text_output("x")], internal_client=Mock())
+        with pytest.raises(UnverifiedContract, match="ci_checks"):
+            loop._exec_fail_closed("ci_checks", {})
+
+    def test_container_get_file_contents_fails_closed(self):
+        loop, _, _ = make_loop([_text_output("x")], internal_client=Mock())
+        with pytest.raises(UnverifiedContract, match="elided"):
+            loop._exec_fail_closed("container_get_file_contents", {})
+
+    @pytest.mark.parametrize(
+        "tool",
+        [
+            "create_logic_function",
+            "list_logic_blocks",
+            "preview_run_logic_function",
+            "await_automation_execution",
+            "function_preview",
+            "publish_functions",
+            "create_or_update_pull_request",
+            "get_evaluation_suite_project_scope_readiness",
+        ],
+    )
+    def test_other_uncaptured_tools_fail_closed(self, tool):
+        loop, _, _ = make_loop([_text_output("x")], internal_client=Mock())
+        with pytest.raises(UnverifiedContract) as exc_info:
+            loop._exec_fail_closed(tool, {})
+        assert exc_info.value.tool == tool
+
+
+class TestExtensionToolRegistration:
+    def test_captured_catalog_and_extensions_coexist(self):
+        from foundry_cli.services.ai_fde_extension_tools import EXTENSION_TOOL_SPECS
+
+        assert len(TOOL_REGISTRY) == 72
+        assert len(EXTENSION_TOOL_REGISTRY) == 5
+        assert not (set(TOOL_REGISTRY) & set(EXTENSION_TOOL_SPECS))
+        for registration in EXTENSION_TOOL_REGISTRY.values():
+            assert registration.cli_extension is True
+            assert registration.risk == "read"
+            assert registration.live is True
+        for registration in TOOL_REGISTRY.values():
+            assert registration.cli_extension is False
+
+    def test_extensions_always_exposed(self):
+        # Default base set: 8 captured + 4 extensions.
+        loop, _, llm = make_loop([_text_output("done")])
+        loop.run("hello")
+        names = {t["function"]["name"] for t in llm.complete.call_args.kwargs["tools"]}
+        assert len(names) == 13
+        assert {
+            "pfoundry_search_resources",
+            "pfoundry_search_builds",
+            "pfoundry_get_dataset_transactions",
+            "pfoundry_get_resource",
+            "pfoundry_search_object_types",
+        } <= names
+
+    def test_extensions_exposed_with_tool_subset_and_all_tools(self):
+        loop, _, llm = make_loop(
+            [_text_output("done")], tool_names=["list_evaluation_runs"]
+        )
+        loop.run("hello")
+        names = {t["function"]["name"] for t in llm.complete.call_args.kwargs["tools"]}
+        assert len(names) == 6  # 1 captured + 5 extensions
+
+        loop2, _, llm2 = make_loop([_text_output("done")], all_tools=True)
+        loop2.run("hello")
+        names2 = {
+            t["function"]["name"] for t in llm2.complete.call_args.kwargs["tools"]
+        }
+        assert len(names2) == 77  # 72 captured + 5 extensions
+
+    def test_extension_calls_count_in_report(self):
+        search = Mock()
+        search.search.return_value = {"status": "ok", "results": []}
+        extensions = ExtensionToolExecutor(profile="test", search_service=search)
+        loop, _, _ = make_loop(
+            [
+                _call_output(
+                    "pfoundry_search_resources",
+                    json.dumps({"query": "otc pipeline", "limit": 5}),
+                ),
+                _text_output("found it"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("find the pipeline")
+        assert report["toolsCalled"] == 1
+        assert report["toolCalls"][0]["name"] == "pfoundry_search_resources"
+        assert report["toolCalls"][0]["state"] == "completed"
+        search.search.assert_called_once_with("otc pipeline", limit=5)
+
+    def test_extension_error_comes_back_as_tool_output(self):
+        resource = Mock()
+        resource.get_resource.side_effect = RuntimeError("compass exploded")
+        extensions = ExtensionToolExecutor(profile="test", resource_service=resource)
+        loop, _, llm = make_loop(
+            [
+                _call_output("pfoundry_get_resource", json.dumps({"rid": "ri.x.y.z"})),
+                _text_output("recovered"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("get the thing")
+        assert report["status"] == "completed"  # no loop crash
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        output_text = output_item["item"]["functionToolCallOutput"]["output"]
+        assert "pfoundry_get_resource" in output_text
+        assert "compass exploded" in output_text
+
+
+class TestExtensionExecutors:
+    def _executor(self, **services):
+        return ExtensionToolExecutor(profile="test", **services)
+
+    def test_search_resources_delegates(self):
+        search = Mock()
+        search.search.return_value = {
+            "status": "ok",
+            "results": [
+                {"rid": "ri.foundry.main.dataset.00000000-0000-0000-0000-000000000020"}
+            ],
+        }
+        executor = self._executor(search_service=search)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_resources", {"query": "otc", "limit": None}
+            )
+        )
+        search.search.assert_called_once_with("otc", limit=25)  # default
+        assert payload["status"] == "ok"
+
+    def test_search_builds_without_dataset_filter(self):
+        orchestration = Mock()
+        orchestration.search_builds.return_value = {
+            "builds": [
+                {"rid": "ri.foundry.main.build.00000000-0000-0000-0000-000000000021"}
+            ],
+            "next_page_token": None,
+        }
+        executor = self._executor(orchestration_service=orchestration)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_builds",
+                {
+                    "datasetRid": None,
+                    "branch": "master",
+                    "createdAfter": "2026-09-01T00:00:00Z",
+                    "limit": 5,
+                },
+            )
+        )
+        kwargs = orchestration.search_builds.call_args.kwargs
+        assert kwargs["page_size"] == 5
+        assert kwargs["where"] == {
+            "type": "and",
+            "items": [
+                {
+                    "type": "gte",
+                    "field": "STARTED_TIME",
+                    "value": "2026-09-01T00:00:00Z",
+                },
+                {"type": "eq", "field": "BRANCH_NAME", "value": "master"},
+            ],
+        }
+        assert kwargs["order_by"] == {
+            "fields": [{"field": "STARTED_TIME", "direction": "DESC"}]
+        }
+        assert len(payload["builds"]) == 1
+
+    def test_search_builds_dataset_filter_scans_job_outputs(self):
+        dataset_rid = "ri.foundry.main.dataset.00000000-0000-0000-0000-000000000022"
+        orchestration = Mock()
+        orchestration.search_builds.return_value = {
+            "builds": [
+                {"rid": "ri.foundry.main.build.00000000-0000-0000-0000-000000000023"},
+                {"rid": "ri.foundry.main.build.00000000-0000-0000-0000-000000000024"},
+            ],
+            "next_page_token": None,
+        }
+        orchestration.get_build_jobs.side_effect = [
+            {"jobs": [{"rid": "job-1", "outputs": [{"dataset_rid": dataset_rid}]}]},
+            {"jobs": [{"rid": "job-2", "outputs": [{"dataset_rid": "ri.other"}]}]},
+        ]
+        executor = self._executor(orchestration_service=orchestration)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_builds",
+                {
+                    "datasetRid": dataset_rid,
+                    "branch": None,
+                    "createdAfter": None,
+                    "limit": 5,
+                },
+            )
+        )
+        assert len(payload["builds"]) == 1
+        assert payload["builds"][0]["matching_dataset_outputs"][0]["job_rid"] == "job-1"
+        assert payload["builds_scanned"] == 2
+
+    def test_get_dataset_transactions_limits_client_side(self):
+        dataset = Mock()
+        dataset.get_transactions.return_value = [
+            {"transaction_rid": f"t-{i}"} for i in range(3)
+        ]
+        executor = self._executor(dataset_service=dataset)
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_get_dataset_transactions",
+                {"datasetRid": "ri.foundry.main.dataset.x", "branch": None, "limit": 2},
+            )
+        )
+        assert payload["total_count"] == 3
+        assert payload["returned_count"] == 2
+        assert len(payload["transactions"]) == 2
+
+    def test_get_dataset_transactions_branch_path(self):
+        dataset = Mock()
+        dataset.get_branch_transactions.return_value = [{"transaction_rid": "t-1"}]
+        executor = self._executor(dataset_service=dataset)
+        executor.execute(
+            "pfoundry_get_dataset_transactions",
+            {"datasetRid": "ri.foundry.main.dataset.x", "branch": "dev", "limit": None},
+        )
+        dataset.get_branch_transactions.assert_called_once_with(
+            "ri.foundry.main.dataset.x", "dev"
+        )
+
+    def test_get_resource_delegates(self):
+        resource = Mock()
+        resource.get_resource.return_value = {"rid": "ri.x", "name": "thing"}
+        executor = self._executor(resource_service=resource)
+        payload = json.loads(executor.execute("pfoundry_get_resource", {"rid": "ri.x"}))
+        resource.get_resource.assert_called_once_with("ri.x")
+        assert payload["name"] == "thing"
+
+    def test_invalid_limit_is_a_tool_error_not_a_crash(self):
+        search = Mock()
+        extensions = ExtensionToolExecutor(profile="test", search_service=search)
+        loop, _, llm = make_loop(
+            [
+                _call_output(
+                    "pfoundry_search_resources",
+                    json.dumps({"query": "x", "limit": -3}),
+                ),
+                _text_output("ok"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("search")
+        assert report["status"] == "completed"
+        search.search.assert_not_called()
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        assert (
+            "positive integer"
+            in (output_item["item"]["functionToolCallOutput"]["output"])
+        )
+
+
+class TestSearchObjectTypesExecutor:
+    ONTOLOGY_RID = "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000030"
+    OTHER_ONTOLOGY_RID = (
+        "ri.ontology.main.ontology.00000000-0000-0000-0000-000000000031"
+    )
+
+    def _object_types(self):
+        return [
+            {
+                "api_name": "InventoryDiscrepancyV2",
+                "display_name": "[OTC] OTC Pipeline",
+                "description": "One row per discrepancy. " * 30,
+                "primary_key": "discrepancyId",
+            },
+            {
+                "api_name": "ResolutionTree",
+                "display_name": "[OTC] Resolution Tree",
+                "description": "Decision tree nodes.",
+                "primary_key": "nodeId",
+            },
+        ]
+
+    def test_substring_matches_api_name_and_display_name(self):
+        object_types = Mock()
+        object_types.list_object_types.return_value = self._object_types()
+        executor = ExtensionToolExecutor(
+            profile="test", object_type_service=object_types
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "pipeline", "ontologyRid": self.ONTOLOGY_RID, "limit": None},
+            )
+        )
+        object_types.list_object_types.assert_called_once_with(self.ONTOLOGY_RID)
+        assert payload["hit_count"] == 1
+        hit = payload["object_types"][0]
+        assert hit["apiName"] == "InventoryDiscrepancyV2"  # matched display_name
+        assert hit["displayName"] == "[OTC] OTC Pipeline"
+        assert hit["primaryKey"] == "discrepancyId"
+        assert hit["ontologyRid"] == self.ONTOLOGY_RID
+        assert len(hit["description"]) <= 200  # truncated
+
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {
+                    "query": "resolutiontree",
+                    "ontologyRid": self.ONTOLOGY_RID,
+                    "limit": None,
+                },
+            )
+        )
+        assert payload["hit_count"] == 1  # matched api_name, case-insensitive
+        assert payload["object_types"][0]["apiName"] == "ResolutionTree"
+
+    def test_all_ontologies_enumeration_tags_hits(self):
+        ontology = Mock()
+        ontology.list_ontologies.return_value = [
+            {"rid": self.ONTOLOGY_RID},
+            {"rid": self.OTHER_ONTOLOGY_RID},
+        ]
+        object_types = Mock()
+        object_types.list_object_types.side_effect = [
+            self._object_types(),
+            [
+                {
+                    "api_name": "PipelineRun",
+                    "display_name": "Pipeline Run",
+                    "description": None,
+                    "primary_key": "runId",
+                }
+            ],
+        ]
+        executor = ExtensionToolExecutor(
+            profile="test",
+            ontology_service=ontology,
+            object_type_service=object_types,
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "pipeline", "ontologyRid": None, "limit": None},
+            )
+        )
+        assert payload["ontologies_searched"] == 2
+        assert payload["hit_count"] == 2
+        assert {h["ontologyRid"] for h in payload["object_types"]} == {
+            self.ONTOLOGY_RID,
+            self.OTHER_ONTOLOGY_RID,
+        }
+        assert payload["errors"] == []
+
+    def test_per_ontology_failure_is_recorded_not_raised(self):
+        ontology = Mock()
+        ontology.list_ontologies.return_value = [
+            {"rid": self.ONTOLOGY_RID},
+            {"rid": self.OTHER_ONTOLOGY_RID},
+        ]
+        object_types = Mock()
+        object_types.list_object_types.side_effect = [
+            RuntimeError("permission denied"),
+            self._object_types(),
+        ]
+        executor = ExtensionToolExecutor(
+            profile="test",
+            ontology_service=ontology,
+            object_type_service=object_types,
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "pipeline", "ontologyRid": None, "limit": None},
+            )
+        )
+        assert payload["hit_count"] == 1
+        assert payload["errors"] == [
+            {"ontologyRid": self.ONTOLOGY_RID, "error": "permission denied"}
+        ]
+
+    def test_limit_applied_client_side(self):
+        object_types = Mock()
+        object_types.list_object_types.return_value = self._object_types()
+        executor = ExtensionToolExecutor(
+            profile="test", object_type_service=object_types
+        )
+        payload = json.loads(
+            executor.execute(
+                "pfoundry_search_object_types",
+                {"query": "otc", "ontologyRid": self.ONTOLOGY_RID, "limit": 1},
+            )
+        )
+        assert payload["hit_count"] == 2
+        assert payload["returned_count"] == 1
+        assert len(payload["object_types"]) == 1
+
+    def test_error_comes_back_as_tool_output(self):
+        ontology = Mock()
+        ontology.list_ontologies.side_effect = RuntimeError("ontology list blew up")
+        extensions = ExtensionToolExecutor(profile="test", ontology_service=ontology)
+        loop, _, llm = make_loop(
+            [
+                _call_output(
+                    "pfoundry_search_object_types",
+                    json.dumps(
+                        {"query": "pipeline", "ontologyRid": None, "limit": None}
+                    ),
+                ),
+                _text_output("recovered"),
+            ],
+            extension_executor=extensions,
+        )
+        report = loop.run("find the object type")
+        assert report["status"] == "completed"
+        assert report["toolCalls"][0]["name"] == "pfoundry_search_object_types"
+        second_input = llm.complete.call_args_list[1].kwargs["input_items"]
+        output_item = next(
+            i for i in second_input if i["item"]["type"] == "functionToolCallOutput"
+        )
+        assert (
+            "ontology list blew up"
+            in (output_item["item"]["functionToolCallOutput"]["output"])
+        )
