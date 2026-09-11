@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch
 
-from pltr.services.space import SpaceService
+from foundry_cli.services.space import SpaceService
 
 
 class TestSpaceService:
@@ -20,7 +20,7 @@ class TestSpaceService:
     @pytest.fixture
     def mock_auth_manager(self, mock_client):
         """Create a mock auth manager."""
-        with patch("pltr.services.base.AuthManager") as MockAuthManager:
+        with patch("foundry_cli.services.base.AuthManager") as MockAuthManager:
             mock_auth_manager = Mock()
             mock_auth_manager.get_client.return_value = mock_client
             MockAuthManager.return_value = mock_auth_manager
@@ -165,7 +165,7 @@ class TestSpaceService:
 
         result = space_service.list_spaces()
 
-        mock_client.filesystem.Space.list.assert_called_once_with(preview=True)
+        mock_client.filesystem.Space.list.assert_called_once_with()
         assert len(result) == 2
         assert result[0]["rid"] == "ri.compass.main.space.123"
         assert result[1]["rid"] == "ri.compass.main.space.456"
@@ -185,7 +185,6 @@ class TestSpaceService:
         )
 
         mock_client.filesystem.Space.list.assert_called_once_with(
-            preview=True,
             organization_rid="ri.compass.main.organization.789",
             page_size=10,
             page_token="token123",
@@ -281,8 +280,7 @@ class TestSpaceService:
         mock_space.organization_rid = "ri.compass.main.organization.456"
         mock_space.root_folder_rid = "ri.compass.main.folder.789"
         mock_space.created_by = "user123"
-        mock_space.created_time = Mock()
-        mock_space.created_time.time = "2023-01-01T00:00:00Z"
+        mock_space.created_time = "2023-01-01T00:00:00Z"
 
         result = space_service._format_space_info(mock_space)
 

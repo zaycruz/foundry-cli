@@ -14,11 +14,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pltr.auth.base import ProfileNotFoundError
-from pltr.auth.manager import AuthManager
-from pltr.auth.oauth import OAuthClientProvider
-from pltr.auth.token import TokenAuthProvider
-from pltr.utils.agent_output import AgentPolicyError, configure_agent_settings
+from foundry_cli.auth.base import ProfileNotFoundError
+from foundry_cli.auth.manager import AuthManager
+from foundry_cli.auth.oauth import OAuthClientProvider
+from foundry_cli.auth.token import TokenAuthProvider
+from foundry_cli.utils.agent_output import AgentPolicyError, configure_agent_settings
 
 
 class TestReplaceKeepsUnsuppliedFields:
@@ -46,7 +46,7 @@ class TestReplaceKeepsUnsuppliedFields:
             patcher.stop()
 
     def test_project_update_preserves_description_on_name_only_change(self):
-        from pltr.services.project import ProjectService
+        from foundry_cli.services.project import ProjectService
 
         service, client, current = self._service(ProjectService, "keep me")
         client.Project.get.return_value = current
@@ -60,7 +60,7 @@ class TestReplaceKeepsUnsuppliedFields:
         )
 
     def test_project_update_preserves_name_on_description_only_change(self):
-        from pltr.services.project import ProjectService
+        from foundry_cli.services.project import ProjectService
 
         service, client, current = self._service(ProjectService, "old")
         client.Project.get.return_value = current
@@ -72,7 +72,7 @@ class TestReplaceKeepsUnsuppliedFields:
         assert kwargs["description"] == "new text"
 
     def test_space_update_preserves_description_on_name_only_change(self):
-        from pltr.services.space import SpaceService
+        from foundry_cli.services.space import SpaceService
 
         service, client, current = self._service(SpaceService, "keep me")
         client.Space.get.return_value = current
@@ -84,7 +84,7 @@ class TestReplaceKeepsUnsuppliedFields:
         assert kwargs["description"] == "keep me"
 
     def test_explicit_values_are_not_overwritten_by_the_read_back(self):
-        from pltr.services.project import ProjectService
+        from foundry_cli.services.project import ProjectService
 
         service, client, current = self._service(ProjectService, "old")
         client.Project.get.return_value = current
@@ -180,14 +180,14 @@ class TestConfigureIsAnswerableByAnAgent:
         configure_agent_settings()
 
     def test_missing_flag_raises_a_policy_error_naming_the_flag(self):
-        from pltr.commands.configure import _require_flag
+        from foundry_cli.commands.configure import _require_flag
 
         configure_agent_settings(non_interactive=True)
         with pytest.raises(AgentPolicyError, match="--token"):
             _require_flag("--token")
 
     def test_interactive_runs_still_prompt(self):
-        from pltr.commands.configure import _require_flag
+        from foundry_cli.commands.configure import _require_flag
 
         configure_agent_settings()
         assert _require_flag("--token") is None
@@ -195,7 +195,7 @@ class TestConfigureIsAnswerableByAnAgent:
     def test_force_flag_exists_on_the_command(self):
         import click
         from typer.main import get_command
-        from pltr.cli import app
+        from foundry_cli.cli import app
 
         root = get_command(app)
         configure_group = root.commands["configure"]
@@ -219,8 +219,8 @@ class TestConfigureRefusalsAreReadable:
     def test_missing_flag_leaves_an_envelope_behind(self):
         from io import StringIO
 
-        from pltr.commands.configure import _require_flag
-        from pltr.utils.agent_output import flush_agent_output
+        from foundry_cli.commands.configure import _require_flag
+        from foundry_cli.utils.agent_output import flush_agent_output
 
         with pytest.raises(AgentPolicyError):
             _require_flag("--token")
@@ -236,11 +236,11 @@ class TestConfigureRefusalsAreReadable:
         from typer.testing import CliRunner
         from unittest.mock import MagicMock, patch
 
-        from pltr.cli import app
+        from foundry_cli.cli import app
 
         storage = MagicMock()
         storage.return_value.profile_exists.return_value = False
-        with patch("pltr.commands.configure.CredentialStorage", storage):
+        with patch("foundry_cli.commands.configure.CredentialStorage", storage):
             result = CliRunner().invoke(
                 app,
                 [

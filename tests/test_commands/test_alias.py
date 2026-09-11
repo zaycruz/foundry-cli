@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from pltr.commands.alias import app
+from foundry_cli.commands.alias import app
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def setup_alias_env(temp_config_dir, monkeypatch):
             self.config_dir = temp_config_dir
 
     # Patch the Settings import in config.aliases module
-    monkeypatch.setattr("pltr.config.aliases.Settings", MockSettings)
+    monkeypatch.setattr("foundry_cli.config.aliases.Settings", MockSettings)
 
     return temp_config_dir
 

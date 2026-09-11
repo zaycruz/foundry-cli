@@ -1,1 +1,1 @@
-"""Tests for pltr."""
+"""Tests for foundry_cli."""

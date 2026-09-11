@@ -4,8 +4,8 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from pltr.auth.base import ProfileNotFoundError
-from pltr.services.compass import CompassService
+from foundry_cli.auth.base import ProfileNotFoundError
+from foundry_cli.services.compass import CompassService
 
 
 def _service() -> tuple[CompassService, Mock]:

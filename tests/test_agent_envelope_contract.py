@@ -22,8 +22,8 @@ import pytest
 from typer.testing import CliRunner
 from typer.main import get_command
 
-from pltr.cli import app
-from pltr.utils.agent_output import (
+from foundry_cli.cli import app
+from foundry_cli.utils.agent_output import (
     AGENT_SCHEMA_VERSION,
     agent_envelope,
     buffer_agent_message,
@@ -59,7 +59,7 @@ def _walk(
 ) -> Iterator[Tuple[str, ...]]:
     """Yield the argv path of every leaf command on the app."""
     if isinstance(command, click.Group):
-        # A group that runs without a subcommand (`pltr capabilities`) is an
+        # A group that runs without a subcommand (`foundry capabilities`) is an
         # invocable command in its own right. Walking only leaves let one
         # escape this contract entirely.
         if path and command.invoke_without_command:
@@ -112,6 +112,46 @@ def invocation_args(path: Tuple[str, ...]) -> List[str]:
     return args
 
 
+def _offline_documentation_service() -> MagicMock:
+    """Keep the all-command contract test offline."""
+    service = MagicMock()
+    service.topic.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+        "pages": [],
+    }
+    service.fetch_page.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+    }
+    service.summaries.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+        "sections": [],
+    }
+    service.search.return_value = {
+        "status": "unavailable",
+        "reason": "documentation network disabled in contract test",
+        "results": [],
+    }
+    return service
+
+
+def _offline_developer_console_service() -> MagicMock:
+    """Keep developer-console commands offline in the contract test."""
+    service = MagicMock()
+    unavailable = {
+        "status": "unavailable",
+        "reason": "developer-console network disabled in contract test",
+    }
+    service.get_connection_context.return_value = unavailable
+    service.generate_react_scaffold.return_value = unavailable
+    service.generate_sdk.return_value = unavailable
+    service.get_sdk.return_value = unavailable
+    service.install_sdk_package.return_value = unavailable
+    return service
+
+
 def test_app_exposes_commands():
     """A silent zero-command walk would make every assertion below vacuous."""
     assert len(all_command_paths()) > 100
@@ -127,7 +167,17 @@ def test_agent_stdout_is_one_envelope(path: Tuple[str, ...]):
     # command down its error branch. That branch is exactly where the
     # concatenated-envelope bug lived, so it is the right thing to measure.
     argv = ["--agent", *path, *invocation_args(path)]
-    with patch("pltr.auth.storage.CredentialStorage", MagicMock()):
+    with (
+        patch("foundry_cli.auth.storage.CredentialStorage", MagicMock()),
+        patch(
+            "foundry_cli.commands.docs._service",
+            return_value=_offline_documentation_service(),
+        ),
+        patch(
+            "foundry_cli.commands.dev_console.DeveloperConsoleService",
+            return_value=_offline_developer_console_service(),
+        ),
+    ):
         result = runner.invoke(app, argv, catch_exceptions=True)
 
     stdout = result.stdout
@@ -138,7 +188,7 @@ def test_agent_stdout_is_one_envelope(path: Tuple[str, ...]):
         # envelope: treating empty stdout as compliant is how commands went
         # silent unnoticed.
         assert result.exit_code == 2, (
-            f"`pltr {' '.join(argv)}` exited {result.exit_code} but wrote "
+            f"`foundry {' '.join(argv)}` exited {result.exit_code} but wrote "
             "nothing to stdout; an agent has no result to read"
         )
         return
@@ -147,7 +197,7 @@ def test_agent_stdout_is_one_envelope(path: Tuple[str, ...]):
         parsed = json.loads(stdout)
     except json.JSONDecodeError as error:  # pragma: no cover - failure path
         pytest.fail(
-            f"`pltr --agent {' '.join(path)}` wrote stdout that is not one JSON "
+            f"`foundry --agent {' '.join(path)}` wrote stdout that is not one JSON "
             f"document ({error}). First 400 chars:\n{stdout[:400]}"
         )
 
@@ -164,7 +214,17 @@ def test_most_commands_reach_their_body():
         if path[0] in NOT_INVOCABLE:
             continue
         argv = ["--agent", *path, *invocation_args(path)]
-        with patch("pltr.auth.storage.CredentialStorage", MagicMock()):
+        with (
+            patch("foundry_cli.auth.storage.CredentialStorage", MagicMock()),
+            patch(
+                "foundry_cli.commands.docs._service",
+                return_value=_offline_documentation_service(),
+            ),
+            patch(
+                "foundry_cli.commands.dev_console.DeveloperConsoleService",
+                return_value=_offline_developer_console_service(),
+            ),
+        ):
             result = runner.invoke(app, argv, catch_exceptions=True)
         if result.stdout.strip():
             reached += 1
@@ -260,7 +320,7 @@ class TestAdvertisedBypassFlagsExist:
     def _declared_flags() -> dict:
         import click
         from typer.main import get_command
-        from pltr.cli import app
+        from foundry_cli.cli import app
 
         flags: dict = {}
 
@@ -285,7 +345,7 @@ class TestAdvertisedBypassFlagsExist:
         import pathlib
 
         sites = []
-        for path in sorted(pathlib.Path("src/pltr/commands").glob("*.py")):
+        for path in sorted(pathlib.Path("src/foundry_cli/commands").glob("*.py")):
             # encoding pinned: Windows defaults to cp1252 and chokes on the
             # non-ASCII characters in some command prompts
             tree = ast.parse(path.read_text(encoding="utf-8"))

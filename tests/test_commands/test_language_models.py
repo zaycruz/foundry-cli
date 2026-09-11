@@ -4,7 +4,7 @@ import pytest
 import json
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestLanguageModelsCommands:
@@ -19,7 +19,7 @@ class TestLanguageModelsCommands:
     def mock_service(self):
         """Create mock LanguageModelsService."""
         with patch(
-            "pltr.services.language_models.LanguageModelsService"
+            "foundry_cli.services.language_models.LanguageModelsService"
         ) as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
@@ -48,7 +48,7 @@ class TestLanguageModelsCommands:
 
     def test_language_models_list_auth_error(self, runner, mock_service):
         """Test list command with authentication error."""
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         mock_service.list_available_models.side_effect = ProfileNotFoundError(
             "Profile not found"
@@ -61,7 +61,7 @@ class TestLanguageModelsCommands:
 
     def test_language_models_list_missing_credentials_error(self, runner, mock_service):
         """Test list command with missing credentials."""
-        from pltr.auth.base import MissingCredentialsError
+        from foundry_cli.auth.base import MissingCredentialsError
 
         mock_service.list_available_models.side_effect = MissingCredentialsError(
             "Missing credentials"
@@ -155,7 +155,7 @@ class TestLanguageModelsCommands:
 
     def test_language_models_status_auth_error(self, runner, mock_service):
         """Test status command with auth error."""
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         model_id = "ri.language-model-service..language-model.example"
         mock_service.get_model_enrollment_status.side_effect = ProfileNotFoundError(
@@ -179,7 +179,7 @@ class TestLanguageModelsCommands:
 
     def test_language_models_enroll_auth_error(self, runner, mock_service):
         """Test enroll command with auth error."""
-        from pltr.auth.base import MissingCredentialsError
+        from foundry_cli.auth.base import MissingCredentialsError
 
         model_id = "ri.language-model-service..language-model.example"
         mock_service.enroll_model.side_effect = MissingCredentialsError(
@@ -352,7 +352,7 @@ class TestLanguageModelsCommands:
     def test_anthropic_messages_auth_error(self, runner, mock_service):
         """Test anthropic messages with authentication error."""
         # Setup
-        from pltr.auth.base import ProfileNotFoundError
+        from foundry_cli.auth.base import ProfileNotFoundError
 
         model_id = "ri.language-models.main.model.abc123"
         mock_service.send_message.side_effect = ProfileNotFoundError(
@@ -767,7 +767,7 @@ class TestLanguageModelsCommands:
     def test_openai_embeddings_auth_error(self, runner, mock_service):
         """Test openai embeddings with authentication error."""
         # Setup
-        from pltr.auth.base import MissingCredentialsError
+        from foundry_cli.auth.base import MissingCredentialsError
 
         model_id = "ri.language-models.main.model.xyz789"
         mock_service.generate_embeddings.side_effect = MissingCredentialsError(

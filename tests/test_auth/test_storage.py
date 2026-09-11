@@ -4,8 +4,8 @@ Tests for credential storage.
 
 import pytest
 import json
-from pltr.auth.storage import CredentialStorage
-from pltr.auth.base import ProfileNotFoundError
+from foundry_cli.auth.storage import CredentialStorage
+from foundry_cli.auth.base import ProfileNotFoundError
 
 
 class TestCredentialStorage:
@@ -14,7 +14,7 @@ class TestCredentialStorage:
     def test_init(self, mock_keyring):
         """Test initialization."""
         storage = CredentialStorage()
-        assert storage.SERVICE_NAME == "pltr-cli"
+        assert storage.SERVICE_NAME == "foundry-cli"
         assert storage.keyring is not None
 
     def test_save_profile(self, mock_keyring):
@@ -30,7 +30,7 @@ class TestCredentialStorage:
 
         # Verify keyring.set_password was called correctly
         mock_keyring["set"].assert_called_once_with(
-            "pltr-cli", "test_profile", json.dumps(credentials)
+            "foundry-cli", "test_profile", json.dumps(credentials)
         )
 
     def test_get_profile_success(self, mock_credential_storage):
@@ -77,7 +77,7 @@ class TestCredentialStorage:
 
         storage.delete_profile("test_profile")
 
-        mock_keyring["delete"].assert_called_once_with("pltr-cli", "test_profile")
+        mock_keyring["delete"].assert_called_once_with("foundry-cli", "test_profile")
 
     def test_delete_profile_not_found(self, mock_keyring):
         """Test deleting a non-existent profile."""
@@ -110,7 +110,7 @@ class TestCredentialStorage:
         mock_keyring["get"].return_value = None
 
         assert storage.profile_exists("nonexistent") is False
-        mock_keyring["get"].assert_called_once_with("pltr-cli", "nonexistent")
+        mock_keyring["get"].assert_called_once_with("foundry-cli", "nonexistent")
 
     def test_list_profiles_placeholder(self, mock_keyring):
         """Test list_profiles returns empty list (placeholder implementation)."""

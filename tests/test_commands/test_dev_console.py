@@ -7,16 +7,16 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
-from pltr.services.dev_console import SdkDefinitionDriftError
-from pltr.services.foundry_internal_client import TokenExpiredError
+from foundry_cli.cli import app
+from foundry_cli.services.dev_console import SdkDefinitionDriftError
+from foundry_cli.services.foundry_internal_client import TokenExpiredError
 
 APP_RID = "ri.third-party-applications.main.third-party-application.my-app"
 REPO_RID = "ri.artifacts.main.repository.sdk-repo"
 
 runner = CliRunner()
 
-SERVICE = "pltr.commands.dev_console.DeveloperConsoleService"
+SERVICE = "foundry_cli.commands.dev_console.DeveloperConsoleService"
 
 
 def _definition_result():
@@ -94,7 +94,7 @@ def test_definition_agent_mode_emits_single_envelope():
 
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.stdout)
-    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["schema_version"] == "foundry-agent-v1"
     assert envelope["data"]["application_rid"] == APP_RID
     assert envelope["meta"]["result_type"] == "osdk-definition"
 
@@ -187,7 +187,7 @@ def test_install_agent_mode_carries_status_and_warnings():
 
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.stdout)
-    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["schema_version"] == "foundry-agent-v1"
     assert envelope["meta"]["result_type"] == "sdk-install"
     assert envelope["meta"]["status"] == "dry-run"
     assert "registry-unverified" in envelope["warnings"]
@@ -261,7 +261,7 @@ def test_connect_agent_mode_emits_single_envelope():
 
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.stdout)
-    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["schema_version"] == "foundry-agent-v1"
     assert envelope["meta"]["result_type"] == "dev-console-connect"
     assert envelope["data"]["application_rid"] == APP_RID
     assert "headless read-only form" in envelope["warnings"]
@@ -424,7 +424,7 @@ def test_sdk_generate_agent_mode_carries_status_and_errors():
 
     assert result.exit_code == 2, result.output
     envelope = json.loads(result.stdout)
-    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["schema_version"] == "foundry-agent-v1"
     assert envelope["meta"]["result_type"] == "sdk-generate"
     assert envelope["meta"]["status"] == "timeout"
     assert envelope["errors"][0]["type"] == "timeout"
@@ -592,6 +592,6 @@ def test_convert_agent_mode_emits_single_envelope(tmp_path):
 
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.stdout)
-    assert envelope["schema_version"] == "pltr-agent-v1"
+    assert envelope["schema_version"] == "foundry-agent-v1"
     assert envelope["meta"]["result_type"] == "convert-osdk-react"
     assert envelope["meta"]["status"] == "generated"

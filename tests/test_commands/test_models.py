@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestModelsCommands:
@@ -17,7 +17,7 @@ class TestModelsCommands:
     @pytest.fixture
     def mock_service(self):
         """Create mock ModelsService."""
-        with patch("pltr.commands.models.ModelsService") as MockService:
+        with patch("foundry_cli.commands.models.ModelsService") as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
             yield mock_svc

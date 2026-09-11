@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 runner = CliRunner()
@@ -34,7 +34,7 @@ TOPIC_RESULT = {
 
 
 def test_topic_command_renders_verbatim_markdown():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.topic.return_value = TOPIC_RESULT
         result = runner.invoke(app, ["docs", "python-transforms"])
     assert result.exit_code == 0, result.output
@@ -44,7 +44,7 @@ def test_topic_command_renders_verbatim_markdown():
 
 
 def test_topic_command_json_format():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.topic.return_value = TOPIC_RESULT
         result = runner.invoke(app, ["docs", "compute", "--format", "json"])
     assert result.exit_code == 0, result.output
@@ -54,7 +54,7 @@ def test_topic_command_json_format():
 
 
 def test_topic_unavailable_exits_nonzero():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.topic.return_value = {
             "status": "unavailable",
             "topic": "ml",
@@ -69,7 +69,7 @@ def test_topic_unavailable_exits_nonzero():
 
 
 def test_page_command():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.fetch_page.return_value = PAGE
         result = runner.invoke(
             app, ["docs", "page", "/foundry/transforms-python/overview/"]
@@ -83,7 +83,7 @@ def test_page_command():
 
 
 def test_page_not_found_exits_nonzero():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.fetch_page.return_value = {
             "status": "unavailable",
             "reason": "HTTP 404",
@@ -96,7 +96,7 @@ def test_page_not_found_exits_nonzero():
 
 
 def test_summaries_command():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.summaries.return_value = {
             "status": "ok",
             "page_count": 3,
@@ -121,7 +121,7 @@ def test_summaries_command():
 
 
 def test_search_command_shows_partial_coverage():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.search.return_value = {
             "status": "ok",
             "query": "incremental",
@@ -151,18 +151,18 @@ def test_search_command_shows_partial_coverage():
 
 
 def test_agent_mode_emits_single_envelope():
-    with patch("pltr.commands.docs.DocumentationService") as service:
+    with patch("foundry_cli.commands.docs.DocumentationService") as service:
         service.return_value.fetch_page.return_value = PAGE
         result = runner.invoke(app, ["--agent", "docs", "page", "/foundry/x/"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["data"]["markdown"] == "# Python transforms\n\nReal body."
     assert payload["meta"]["result_type"] == "docs-page"
 
 
 def test_all_eleven_subcommands_registered():
-    from pltr.capabilities import registered_command_paths
+    from foundry_cli.capabilities import registered_command_paths
 
     paths = registered_command_paths()
     expected = {

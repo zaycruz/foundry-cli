@@ -1,0 +1,232 @@
+"""
+Folder service wrapper for Foundry SDK filesystem API.
+"""
+
+from typing import Any, Optional, Dict, List
+
+from foundry_sdk.v2.filesystem.models import GetFoldersBatchRequestElement
+
+from .base import BaseService
+
+
+class FolderService(BaseService):
+    """Service wrapper for Foundry folder operations using filesystem API."""
+
+    def _get_service(self) -> Any:
+        """Get the Foundry filesystem service."""
+        return self.client.filesystem
+
+    def create_folder(
+        self, display_name: str, parent_folder_rid: str
+    ) -> Dict[str, Any]:
+        """
+        Create a new folder.
+
+        Args:
+            display_name: Folder display name
+            parent_folder_rid: Parent folder RID (use 'ri.compass.main.folder.0' for root)
+
+        Returns:
+            Created folder information
+        """
+        try:
+            folder = self.service.Folder.create(
+                display_name=display_name,
+                parent_folder_rid=parent_folder_rid,
+            )
+            return self._format_folder_info(folder)
+        except Exception as e:
+            detail = self._format_error_detail(e)
+            raise RuntimeError(f"Failed to create folder '{display_name}': {detail}")
+
+    def get_folder(self, folder_rid: str) -> Dict[str, Any]:
+        """
+        Get information about a specific folder.
+
+        Args:
+            folder_rid: Folder Resource Identifier
+
+        Returns:
+            Folder information dictionary
+        """
+        try:
+            folder = self.service.Folder.get(folder_rid)
+            return self._format_folder_info(folder)
+        except Exception as e:
+            detail = self._format_error_detail(e)
+            raise RuntimeError(f"Failed to get folder {folder_rid}: {detail}")
+
+    def move_folder(
+        self,
+        folder_rid: str,
+        parent_folder_rid: str,
+        display_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Move a folder to a new parent, optionally renaming it.
+
+        Args:
+            folder_rid: Folder Resource Identifier
+            parent_folder_rid: Destination parent folder RID
+            display_name: New display name (preserves the current name if omitted)
+
+        Returns:
+            Updated folder information
+        """
+        try:
+            current_folder = self.service.Folder.get(folder_rid)
+            resolved_display_name = (
+                display_name
+                if display_name is not None
+                else current_folder.display_name
+            )
+
+            folder = self.service.Folder.replace(
+                folder_rid=folder_rid,
+                display_name=resolved_display_name,
+                parent_folder_rid=parent_folder_rid,
+                preview=True,
+            )
+            return self._format_folder_info(folder)
+        except Exception as e:
+            detail = self._format_error_detail(e)
+            raise RuntimeError(f"Failed to move folder {folder_rid}: {detail}")
+
+    def list_children(
+        self,
+        folder_rid: str,
+        page_size: Optional[int] = None,
+        page_token: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List all child resources of a folder.
+
+        Args:
+            folder_rid: Folder Resource Identifier
+            page_size: Number of items per page (optional)
+            page_token: Pagination token (optional)
+
+        Returns:
+            List of child resources
+        """
+        try:
+            children = []
+            # The children method returns an iterator
+            for child in self.service.Folder.children(
+                folder_rid, page_size=page_size, page_token=page_token
+            ):
+                children.append(self._format_resource_info(child))
+            return children
+        except Exception as e:
+            detail = self._format_error_detail(e)
+            raise RuntimeError(
+                f"Failed to list children of folder {folder_rid}: {detail}"
+            )
+
+    def get_folders_batch(self, folder_rids: List[str]) -> List[Dict[str, Any]]:
+        """
+        Get multiple folders in a single request.
+
+        Args:
+            folder_rids: List of folder RIDs (max 1000)
+
+        Returns:
+            List of folder information dictionaries
+        """
+        if len(folder_rids) > 1000:
+            raise ValueError("Maximum batch size is 1000 folders")
+
+        try:
+            elements = [
+                GetFoldersBatchRequestElement(folder_rid=rid) for rid in folder_rids
+            ]
+            response = self.service.Folder.get_batch(body=elements)
+            folders = []
+            for folder in response.folders:
+                folders.append(self._format_folder_info(folder))
+            return folders
+        except Exception as e:
+            detail = self._format_error_detail(e)
+            raise RuntimeError(f"Failed to get folders batch: {detail}")
+
+    def _format_folder_info(self, folder: Any) -> Dict[str, Any]:
+        """
+        Format folder information for consistent output.
+
+        Args:
+            folder: Folder object from Foundry SDK
+
+        Returns:
+            Formatted folder information dictionary
+        """
+        return {
+            "rid": getattr(folder, "rid", None),
+            "display_name": getattr(folder, "display_name", None),
+            "description": getattr(folder, "description", None),
+            "created": self._format_timestamp(getattr(folder, "created", None)),
+            "modified": self._format_timestamp(getattr(folder, "modified", None)),
+            "parent_folder_rid": getattr(folder, "parent_folder_rid", None),
+            "type": "folder",
+        }
+
+    def _format_resource_info(self, resource: Any) -> Dict[str, Any]:
+        """
+        Format resource information (can be folder, dataset, etc.).
+
+        Args:
+            resource: Resource object from Foundry SDK
+
+        Returns:
+            Formatted resource information dictionary
+        """
+        resource_type = getattr(resource, "type", "unknown")
+        base_info = {
+            "rid": getattr(resource, "rid", None),
+            "display_name": getattr(resource, "display_name", None),
+            "type": resource_type,
+        }
+
+        # Add type-specific fields
+        if resource_type == "folder":
+            base_info["description"] = getattr(resource, "description", None)
+        elif resource_type == "dataset":
+            base_info["name"] = getattr(resource, "name", None)
+
+        return base_info
+
+    def _format_timestamp(self, timestamp: Any) -> Optional[str]:
+        """
+        Format timestamp for display.
+
+        Args:
+            timestamp: Timestamp object from SDK
+
+        Returns:
+            Formatted timestamp string or None
+        """
+        if timestamp is None:
+            return None
+
+        # The SDK deserializes timestamps as datetime.datetime; serialize to
+        # ISO-8601. A str passes through unchanged (some SDK models return a
+        # pre-formatted string). Never fall back to a repr of a bound method.
+        if isinstance(timestamp, str):
+            return timestamp
+        if hasattr(timestamp, "isoformat"):
+            return timestamp.isoformat()
+        return str(timestamp)
+
+    @staticmethod
+    def _format_error_detail(error: Exception) -> str:
+        """Format exception details, including fallback for empty SDK error strings."""
+        message = str(error).strip()
+        if message:
+            return message
+
+        args = getattr(error, "args", ())
+        if args:
+            joined = " ".join(str(arg) for arg in args if arg is not None)
+            if joined:
+                return joined
+
+        return error.__class__.__name__

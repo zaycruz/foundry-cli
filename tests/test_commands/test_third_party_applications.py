@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 class TestThirdPartyApplicationsCommands:
@@ -21,7 +21,7 @@ class TestThirdPartyApplicationsCommands:
     def mock_service(self):
         """Create mock ThirdPartyApplicationsService."""
         with patch(
-            "pltr.commands.third_party_applications.ThirdPartyApplicationsService"
+            "foundry_cli.commands.third_party_applications.ThirdPartyApplicationsService"
         ) as MockService:
             mock_svc = Mock()
             MockService.return_value = mock_svc
@@ -145,7 +145,7 @@ class TestThirdPartyApplicationsCommands:
         mock_service.get_application.return_value = app_result
 
         with patch(
-            "pltr.commands.third_party_applications.formatter"
+            "foundry_cli.commands.third_party_applications.formatter"
         ) as mock_formatter:
             result = runner.invoke(
                 app,
@@ -178,7 +178,7 @@ class TestThirdPartyApplicationsCommands:
         mock_service.get_application.return_value = app_result
 
         with patch(
-            "pltr.commands.third_party_applications.formatter"
+            "foundry_cli.commands.third_party_applications.formatter"
         ) as mock_formatter:
             result = runner.invoke(
                 app,
@@ -206,7 +206,7 @@ class TestThirdPartyApplicationsCommands:
         mock_service.get_application.return_value = app_result
 
         with patch(
-            "pltr.commands.third_party_applications.formatter"
+            "foundry_cli.commands.third_party_applications.formatter"
         ) as mock_formatter:
             result = runner.invoke(
                 app,

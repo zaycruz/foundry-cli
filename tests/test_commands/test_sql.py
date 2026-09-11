@@ -6,8 +6,8 @@ import pytest
 from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
-from pltr.commands.sql import app
-from pltr.services.sql import SqlService
+from foundry_cli.commands.sql import app
+from foundry_cli.services.sql import SqlService
 
 
 class TestSqlCommands:
@@ -33,7 +33,7 @@ class TestSqlCommands:
         }
         mock_service.execute_query.return_value = query_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(
@@ -60,7 +60,7 @@ class TestSqlCommands:
         }
         mock_service.execute_query.return_value = query_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(
@@ -101,8 +101,8 @@ class TestSqlCommands:
         mock_service.execute_query.return_value = query_result
 
         with (
-            patch("pltr.commands.sql.SqlService") as mock_service_class,
-            patch("pltr.commands.sql.OutputFormatter") as mock_formatter_class,
+            patch("foundry_cli.commands.sql.SqlService") as mock_service_class,
+            patch("foundry_cli.commands.sql.OutputFormatter") as mock_formatter_class,
         ):
             mock_service_class.return_value = mock_service
             mock_formatter = Mock()
@@ -129,7 +129,7 @@ class TestSqlCommands:
         # Setup
         mock_service.execute_query.side_effect = RuntimeError("Query execution failed")
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["execute", "INVALID SQL"])
@@ -144,7 +144,7 @@ class TestSqlCommands:
         submit_result = {"query_id": "submitted-123", "status": "running"}
         mock_service.submit_query.return_value = submit_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["submit", "SELECT * FROM large_table"])
@@ -163,7 +163,7 @@ class TestSqlCommands:
         submit_result = {"query_id": "immediate-456", "status": "succeeded"}
         mock_service.submit_query.return_value = submit_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["submit", "SELECT 1"])
@@ -178,7 +178,7 @@ class TestSqlCommands:
         status_result = {"query_id": "running-789", "status": "running"}
         mock_service.get_query_status.return_value = status_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["status", "running-789"])
@@ -194,7 +194,7 @@ class TestSqlCommands:
         status_result = {"query_id": "succeeded-101", "status": "succeeded"}
         mock_service.get_query_status.return_value = status_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["status", "succeeded-101"])
@@ -202,7 +202,7 @@ class TestSqlCommands:
         # Assert
         assert result.exit_code == 0
         assert "Status: succeeded" in result.stdout
-        assert "pltr sql results" in result.stdout
+        assert "foundry sql results" in result.stdout
 
     def test_status_command_failed(self, runner, mock_service):
         """Test status command for failed query."""
@@ -214,7 +214,7 @@ class TestSqlCommands:
         }
         mock_service.get_query_status.return_value = status_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["status", "failed-202"])
@@ -230,7 +230,7 @@ class TestSqlCommands:
         results_data = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
         mock_service.get_query_results.return_value = results_data
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(
@@ -250,8 +250,8 @@ class TestSqlCommands:
         mock_service.get_query_results.return_value = results_data
 
         with (
-            patch("pltr.commands.sql.SqlService") as mock_service_class,
-            patch("pltr.commands.sql.OutputFormatter") as mock_formatter_class,
+            patch("foundry_cli.commands.sql.SqlService") as mock_service_class,
+            patch("foundry_cli.commands.sql.OutputFormatter") as mock_formatter_class,
         ):
             mock_service_class.return_value = mock_service
             mock_formatter = Mock()
@@ -279,7 +279,7 @@ class TestSqlCommands:
         cancel_result = {"query_id": "cancel-505", "status": "canceled"}
         mock_service.cancel_query.return_value = cancel_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["cancel", "cancel-505"])
@@ -300,8 +300,8 @@ class TestSqlCommands:
         mock_service.execute_query.return_value = export_result
 
         with (
-            patch("pltr.commands.sql.SqlService") as mock_service_class,
-            patch("pltr.commands.sql.OutputFormatter") as mock_formatter_class,
+            patch("foundry_cli.commands.sql.SqlService") as mock_service_class,
+            patch("foundry_cli.commands.sql.OutputFormatter") as mock_formatter_class,
         ):
             mock_service_class.return_value = mock_service
             mock_formatter = Mock()
@@ -335,8 +335,8 @@ class TestSqlCommands:
         mock_service.execute_query.return_value = export_result
 
         with (
-            patch("pltr.commands.sql.SqlService") as mock_service_class,
-            patch("pltr.commands.sql.OutputFormatter") as mock_formatter_class,
+            patch("foundry_cli.commands.sql.SqlService") as mock_service_class,
+            patch("foundry_cli.commands.sql.OutputFormatter") as mock_formatter_class,
         ):
             mock_service_class.return_value = mock_service
             mock_formatter = Mock()
@@ -362,7 +362,7 @@ class TestSqlCommands:
         results_data = {"final": "result"}
         mock_service.get_query_results.return_value = results_data
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(
@@ -383,7 +383,7 @@ class TestSqlCommands:
         wait_result = {"query_id": "wait-909", "status": "succeeded"}
         mock_service.wait_for_completion.return_value = wait_result
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(
@@ -398,7 +398,7 @@ class TestSqlCommands:
 
         # Assert
         assert result.exit_code == 0
-        assert "pltr sql results" in result.stdout
+        assert "foundry sql results" in result.stdout
         mock_service.get_query_results.assert_not_called()
 
     def test_command_error_handling(self, runner, mock_service):
@@ -408,7 +408,7 @@ class TestSqlCommands:
             "Database connection failed"
         )
 
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
 
             result = runner.invoke(app, ["execute", "SELECT 1"])
@@ -420,7 +420,7 @@ class TestSqlCommands:
 
     def test_service_initialization_with_profile(self, runner, mock_service):
         """Test service initialization with custom profile."""
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
             mock_service.execute_query.return_value = {
                 "query_id": "profile-test",
@@ -438,7 +438,7 @@ class TestSqlCommands:
 
     def test_fallback_branches_parsing(self, runner, mock_service):
         """Test parsing of fallback branches parameter."""
-        with patch("pltr.commands.sql.SqlService") as mock_service_class:
+        with patch("foundry_cli.commands.sql.SqlService") as mock_service_class:
             mock_service_class.return_value = mock_service
             mock_service.submit_query.return_value = {
                 "query_id": "branches-test",

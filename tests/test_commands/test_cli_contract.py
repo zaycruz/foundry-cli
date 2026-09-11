@@ -4,7 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
-from pltr.cli import app
+from foundry_cli.cli import app
 
 
 runner = CliRunner()
@@ -15,7 +15,7 @@ def test_global_agent_flag_returns_structured_auth_error() -> None:
 
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["errors"]
     assert payload["errors"][0]["type"] == "error"
 
@@ -34,7 +34,7 @@ def test_non_interactive_mutation_requires_explicit_confirmation() -> None:
 
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert "explicit --force" in payload["errors"][0]["message"]
 
 
