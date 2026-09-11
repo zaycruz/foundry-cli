@@ -22,12 +22,12 @@ def test_agent_configure_storage_failure_returns_safe_envelope(failure_stage):
         storage.profile_exists.side_effect = failure
     with (
         patch(
-            "pltr.commands.configure.CredentialStorage",
+            "foundry_cli.commands.configure.CredentialStorage",
             side_effect=failure if failure_stage == "storage" else None,
             return_value=storage,
         ),
         patch(
-            "pltr.commands.configure.ProfileManager",
+            "foundry_cli.commands.configure.ProfileManager",
             side_effect=failure if failure_stage == "manager" else None,
             return_value=manager,
         ),
@@ -36,7 +36,7 @@ def test_agent_configure_storage_failure_returns_safe_envelope(failure_stage):
 
     assert result.exit_code == 1
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "pltr-agent-v1"
+    assert payload["schema_version"] == "foundry-agent-v1"
     assert payload["errors"] == [
         {"type": "error", "message": "Could not access profile configuration"}
     ]
