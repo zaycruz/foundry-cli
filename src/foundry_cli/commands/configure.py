@@ -61,15 +61,24 @@ def configure(
     ),
 ):
     """Configure authentication for Palantir Foundry."""
-    storage = CredentialStorage()
-    profile_manager = ProfileManager()
-
     # Ensure profile is not None
     if not profile:
         profile = "default"
 
+    try:
+        storage = CredentialStorage()
+        profile_manager = ProfileManager()
+        profile_exists = storage.profile_exists(profile)
+    except Exception:
+        if agent_mode_enabled():
+            buffer_agent_message(
+                "Could not access profile configuration", level="error"
+            )
+            raise typer.Exit(1)
+        raise
+
     # Check if profile already exists
-    if storage.profile_exists(profile):
+    if profile_exists:
         if not require_confirmation(
             f"Profile '{profile}' already exists. Overwrite?",
             confirmed=force,

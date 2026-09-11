@@ -13,6 +13,38 @@ from foundry_cli.cli import app
 runner = CliRunner()
 
 
+@pytest.mark.parametrize("failure_stage", ["storage", "manager", "profile_exists"])
+def test_agent_configure_storage_failure_returns_safe_envelope(failure_stage):
+    storage = MagicMock()
+    manager = MagicMock()
+    failure = RuntimeError("token=do-not-expose")
+    if failure_stage == "profile_exists":
+        storage.profile_exists.side_effect = failure
+    with (
+        patch(
+            "foundry_cli.commands.configure.CredentialStorage",
+            side_effect=failure if failure_stage == "storage" else None,
+            return_value=storage,
+        ),
+        patch(
+            "foundry_cli.commands.configure.ProfileManager",
+            side_effect=failure if failure_stage == "manager" else None,
+            return_value=manager,
+        ),
+    ):
+        result = runner.invoke(app, ["--agent", "configure", "configure"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == "foundry-agent-v1"
+    assert payload["errors"] == [
+        {"type": "error", "message": "Could not access profile configuration"}
+    ]
+    assert "do-not-expose" not in result.stdout + result.stderr
+    storage.save_profile.assert_not_called()
+    manager.add_profile.assert_not_called()
+
+
 def profile_manager(
     profiles: list[str],
     *,
