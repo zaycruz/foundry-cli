@@ -85,6 +85,16 @@ class ResultsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mu.verdict(results, ["m.x_f__mutmut_*"])
 
+    def test_no_mutant_in_scope_passes_only_when_mutmut_ran_cleanly(self):
+        # Decorated functions get no mutants: a clean run passes but says so.
+        self.assertIn("Nothing was measured", mu.nothing_in_scope(0, ""))
+        # A file where every function is decorated: mutmut makes no mutant and exits 1.
+        stopped = "Stopping early, because we could not find any test case for any mutant. It seems ..."
+        self.assertIn("Nothing was measured", mu.nothing_in_scope(1, stopped))
+        # A run that crashed before making mutants must not pass.
+        with self.assertRaises(ValueError):
+            mu.nothing_in_scope(1, "failed to collect stats. runner returned 2")
+
     def test_verdict_fails_over_free_survivors_under_the_floor(self):
         results = {"m.x_f__mutmut_%d" % i: "survived" for i in range(3)}
         self.assertTrue(mu.verdict(results, ["m.x_f__mutmut_*"])[0])

@@ -23,11 +23,12 @@ come from `uv.lock` (`uv sync --locked --dev`).
 | `lint-ratchet` | `scripts/ci/lint_ratchet.py` (ruff `--isolated` + complexipy) | a touched file gets worse on a Tier 2 rule, an added file has any Tier 2 finding, or a touched file gains a `# noqa` |
 | `test` | `pytest --cov` | any test fails. It also writes `coverage.xml` |
 | `test-matrix` | `pytest tests/` on Linux, macOS, Windows x Python 3.10, 3.11, 3.12, 3.13 | any test fails on any combination (the old CI matrix) |
+| `test-matrix-ok` | aggregate of `test-matrix` | any `test-matrix` leg did not succeed. The one required check for the matrix |
 | `diff-coverage` | `diff-cover coverage.xml --fail-under=80` | less than 80 % of the changed executable lines in `src/foundry_cli` are covered. A file no test imports counts as 0 % |
 | `build` | `uv build` | the sdist or wheel does not build |
 | `dead-code` | `scripts/ci/dead_code.py` (vulture + deptry, at the base and at HEAD) | the change adds an unused function, class, variable, or import, or dependency drift (unused, missing, transitive, misplaced) |
 | `duplication` | `jscpd --baseline-from-ref <merge base> --fail-on-new-clones 0` | the change adds a clone of 10 or more lines and 70 or more tokens |
-| `mutation` | `scripts/ci/mutation.py` (mutmut 3.7.0 on the functions that contain added lines) | more than 2 mutants go undetected **and** the score is below 70 %. A timed-out mutant counts as undetected. Pull requests only. **Advisory** |
+| `mutation` | `scripts/ci/mutation.py` (mutmut 3.7.0 on the functions that contain added lines) | more than 2 mutants go undetected **and** the score is below 70 %. A timed-out mutant counts as undetected. The check exits 2 (fails) when no mutant in scope gets a verdict, or when mutmut fails and makes none. Pull requests only. **Advisory** |
 | `secrets` | gitleaks 8.30.1: the working tree, then `<merge base>..HEAD` | any finding |
 | `deps` | `pip-audit --skip-editable` on the locked dev environment | any known vulnerability (no severity filter) |
 | `bench` | `scripts/ci/bench.py` | does nothing until `bench/` exists. **Advisory** |
@@ -43,8 +44,11 @@ the title changes.
 
 **Required checks (target):** `typecheck`, `lint`, `lint-ratchet`, `test`,
 `diff-coverage`, `build`, `dead-code`, `duplication`, `secrets`, `deps`, `pr-size`,
-`regression-proof`. `test-matrix` is a matrix job; its checks are named per
-combination, so it is required through `ci-ok` only. `mutation` becomes required after 2
+`regression-proof`, and `test-matrix-ok`. `engineering/scripts/ci-job-names.sh
+--repo-gates` prints every name except `test-matrix-ok`, which is repo-specific: add it by
+hand. `test-matrix` legs are named per combination, so `test-matrix-ok` stands for them.
+`publish.yml`'s jobs are named `release-test` and `release-build` so they do not share
+the `test` and `build` check names. `mutation` becomes required after 2
 weeks if its p90 job time is 10 minutes or less (ADR-0003 §5). `bench` becomes required
 after the standard §10.2 criteria are met. Record each promotion here.
 
@@ -58,8 +62,11 @@ kept so that pull requests stay mergeable until the ruleset changes:
 - `security.yml` is unchanged. `secrets` runs the same two scans (tree and PR range),
   but with the merge-base `.gitleaks.toml`.
 
-When the ruleset requires the target checks above, delete the `ci-ok` job and
-`security.yml` in one follow-up PR.
+**Until the ruleset changes, `pr-size` and `regression-proof` are enforced nowhere.**
+The ruleset requires only `ci-ok` and `secret and environment-data scan`, and `ci-ok`
+covers `ci.yml` only. So change the ruleset to the target checks right after this
+adoption merges (adoption workflow step 8), before any other PR merges. Then delete the
+`ci-ok` job and `security.yml` in one follow-up PR. `test-matrix-ok` stays.
 
 **Code-owner review.** `.github/CODEOWNERS` names `@zaycruz @King-Mayster`. Only
 `@zaycruz` is a collaborator on this repository. Do not enable "Require review from
@@ -143,8 +150,14 @@ move it to Tier 1 in `ruff.toml`.
 
 The gate files (`pyproject.toml`, `uv.lock`, `ruff.toml`, `mypy.ini`, `.jscpd.json`,
 `.gitleaks.toml`, `.gitleaksignore`, `.gitattributes`, `.github/**`, `scripts/ci/**`,
-`bench/**`, `tests/conftest.py`, and the gate docs `AGENTS.md`, `CLAUDE.md`, and this
+`bench/**`, every `conftest.py`, and the gate docs `AGENTS.md`, `CLAUDE.md`, and this
 file) are code-owned (`.github/CODEOWNERS`).
+
+So are the files that the tools read **before** those configs, although the repo has
+none of them: `.ruff.toml` (beats `ruff.toml`), `.mypy.ini` (beats `mypy.ini`),
+`pytest.ini`, `.pytest.ini`, `tox.ini`, `setup.cfg` (each can beat
+`[tool.pytest.ini_options]`), and `.coveragerc` (an `omit` there takes a module out of
+`diff-coverage`). Adding one of them overrides a gate config, so it needs a code owner.
 
 Some gates measure a PR with merge-base files, so a change to them does not apply to the
 PR that makes it.

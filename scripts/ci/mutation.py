@@ -23,6 +23,13 @@ infinite-loop mutant is rare on a diff; FREE_SURVIVORS absorbs a few.
 same reason: a crashed run must not score 100 %. When no mutant in scope gets
 a verdict at all (every one segfault / suspicious / skipped), the check exits 2.
 
+mutmut does not mutate decorated functions (only @staticmethod/@classmethod
+are allowed) or anything in a decorated class, so a change to, say, a CLI
+command can have no mutants in scope. That passes, but says that nothing was
+measured. It passes only when `mutmut run` exited 0 or stopped because no test
+reached any mutant (with none in scope, there was none to make); any other
+failed run exits 2 instead of reporting 100 %.
+
 The repo's [tool.mutmut] must not set source_paths (or the deprecated
 paths_to_mutate): this script inserts it for the run and restores
 pyproject.toml afterwards, also on SIGTERM (a cancelled CI run). mutmut's
@@ -112,6 +119,21 @@ def verdict(results: Dict[str, str], globs: List[str]) -> Tuple[bool, float, Lis
     return len(undetected) > FREE_SURVIVORS and score < MIN_SCORE, score, undetected
 
 
+# What mutmut 3.7 prints (and exits 1) when the changed files have no mutant
+# any test reaches. With no mutant in scope, this means there was none to make.
+NO_MUTANT_TESTED = "could not find any test case for any mutant"
+
+
+def nothing_in_scope(run_exit: int, run_output: str) -> str:
+    """The PASS message when no mutant matched the scope; ValueError if mutmut failed."""
+    if run_exit != 0 and NO_MUTANT_TESTED not in run_output:
+        raise ValueError("`mutmut run` exited %d and made no mutant in the changed functions; the run did not measure anything" % run_exit)
+    return (
+        "mutation: PASS; mutmut made no mutants in the changed function(s): it skips decorated\n"
+        "functions and code with nothing to mutate. Nothing was measured."
+    )
+
+
 def with_source_paths(pyproject: str, files: List[str]) -> str:
     """pyproject.toml text with source_paths set under [tool.mutmut]."""
     if re.search(r"^\s*(source_paths|paths_to_mutate)\s*=", pyproject, re.MULTILINE):
@@ -127,13 +149,18 @@ def with_source_paths(pyproject: str, files: List[str]) -> str:
 # --------------------------------------------------------------------------
 
 
-def mutmut(args: List[str]) -> str:
+def mutmut(args: List[str]) -> Tuple[int, str]:
     done = subprocess.run([sys.executable, "-m", "mutmut"] + args, cwd=str(REPO_ROOT), stdout=subprocess.PIPE, text=True, check=False)
-    return done.stdout
+    return done.returncode, done.stdout
 
 
-def report(results: Dict[str, str], score: float, undetected: List[str]) -> None:
-    print("mutation: score %.1f%% on changed functions; %d undetected" % (score, len(undetected)))
+def report(results: Dict[str, str], globs: List[str], score: float, undetected: List[str]) -> None:
+    scoped = [name for name in results if matches(name, globs)]
+    killed = sum(1 for name in scoped if results[name] in DETECTED)
+    print(
+        "mutation: score %.1f%% on changed functions (%d killed, %d undetected, %d mutants in scope)"
+        % (score, killed, len(undetected), len(scoped))
+    )
     for name in undetected:
         print("  %s: %s" % (name, results[name]))
     timeouts = sum(1 for name in undetected if results[name] == "timeout")
@@ -167,13 +194,16 @@ def main() -> int:
     shutil.rmtree(REPO_ROOT / "mutants", ignore_errors=True)
     try:
         pyproject.write_text(with_source_paths(original, list(scope)))
-        mutmut(["run"] + globs)
-        results = parse_results(mutmut(["results", "--all", "true"]))
+        run_exit, run_output = mutmut(["run"] + globs)
+        results = parse_results(mutmut(["results", "--all", "true"])[1])
     finally:
         pyproject.write_text(original)
         shutil.rmtree(REPO_ROOT / "mutants", ignore_errors=True)
+    if not any(matches(name, globs) for name in results):
+        print(nothing_in_scope(run_exit, run_output))
+        return 0
     failed, score, undetected = verdict(results, globs)
-    report(results, score, undetected)
+    report(results, globs, score, undetected)
     if not failed:
         print("mutation: PASS (floor %d%%, %d free survivors)." % (MIN_SCORE, FREE_SURVIVORS))
         return 0

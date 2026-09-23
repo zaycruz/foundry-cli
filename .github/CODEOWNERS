@@ -9,6 +9,17 @@ pyproject.toml         @zaycruz @King-Mayster
 uv.lock                @zaycruz @King-Mayster
 ruff.toml              @zaycruz @King-Mayster
 mypy.ini               @zaycruz @King-Mayster
+# Files the tools read BEFORE the ones above: adding one overrides the gate
+# config (`.ruff.toml` beats ruff.toml; pytest.ini beats [tool.pytest]; a
+# .coveragerc `omit` takes a new module out of diff-coverage). Keep them owned
+# even when the repo has none.
+.ruff.toml             @zaycruz @King-Mayster
+.mypy.ini              @zaycruz @King-Mayster
+pytest.ini             @zaycruz @King-Mayster
+.pytest.ini            @zaycruz @King-Mayster
+tox.ini                @zaycruz @King-Mayster
+setup.cfg              @zaycruz @King-Mayster
+.coveragerc            @zaycruz @King-Mayster
 .jscpd.json            @zaycruz @King-Mayster
 .gitleaks.toml         @zaycruz @King-Mayster
 .gitleaksignore        @zaycruz @King-Mayster
@@ -19,7 +30,8 @@ CLAUDE.md              @zaycruz @King-Mayster
 docs/engineering/ci-gates.md @zaycruz @King-Mayster
 .github/**             @zaycruz @King-Mayster
 scripts/ci/**          @zaycruz @King-Mayster
-# conftest.py decides what every test sees; add it if the repo has a root one.
-tests/conftest.py      @zaycruz @King-Mayster
+# A conftest.py decides what the tests under it see (it can skip or deselect
+# them). Unanchored, so it matches every conftest.py in the repo.
+conftest.py            @zaycruz @King-Mayster
 # A PR that shrinks a benchmark can hide its own regression (standard §10).
 bench/**               @zaycruz @King-Mayster
