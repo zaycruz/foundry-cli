@@ -150,6 +150,8 @@ credentials.json
 /folders.json
 /*.csv
 /*.json
+# CI quality gates: jscpd's config is a root JSON file.
+!/.jscpd.json
 
 # ruff
 .ruff_cache/
@@ -159,5 +161,12 @@ credentials.json
 /artifacts/
 /data/
 
-/docs/
+/docs/*
+# The CI gates doc is the one tracked file under docs/ (CODEOWNERS-protected).
+!/docs/engineering/
+/docs/engineering/*
+!/docs/engineering/ci-gates.md
 .omo/
+
+# mutmut working copy (scripts/ci/mutation.py)
+mutants/

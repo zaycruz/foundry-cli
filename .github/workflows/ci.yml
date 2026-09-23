@@ -1,108 +1,333 @@
 name: CI
 
+# Raava CI quality gates v2, Python — template from
+# engineering/standards/templates/ci-gates/python/ci.yml.
+# Standard: engineering/standards/ci-quality-gates-standard.md (ADR-0001, ADR-0003)
+#
+# Every job is a separate required check so a failure names the thing that
+# broke. Job names match the Node and Rust templates so branch protection is
+# uniform across the org. `pr-size` and `regression-proof` live in
+# pr-policy.yml. Actions are pinned to full commit SHAs; downloaded binaries by
+# version and sha256. The toolchain comes from uv.lock (`uv sync --locked`).
+#
+# Per-repo edits allowed: `on.push.branches`; the mypy target in `typecheck`;
+# delete `build` if the repo publishes nothing.
+#
+# foundry-cli additions (docs/engineering/ci-gates.md): `ruff format --check`
+# in `lint`; a working-tree gitleaks scan in `secrets`; `test-matrix` (the old
+# 3-OS x 4-Python matrix); `ci-ok`, a TRANSITIONAL aggregate kept only because
+# the current repository ruleset requires a check named `ci-ok`.
+
 on:
-  push:
-    branches: [ main ]
   pull_request:
-    branches: [ main ]
+  push:
+    branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON: '3.12' # REPO-SPECIFIC: the version the repo develops on (publish.yml also uses 3.12)
+
 jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      - run: uv run mypy src/foundry_cli # REPO-SPECIFIC: package path (mypy.ini)
+
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      # Tier 1 only (ruff.toml). Tier 2 is the lint-ratchet job.
+      - run: uv run ruff check .
+      # REPO-SPECIFIC: formatting was enforced by the old lint-and-format job.
+      - run: uv run ruff format --check .
+      # Tier 1 ReDoS: regexploit finds regex literals with exponential
+      # backtracking (ruff has no such rule). It exits 0 on findings, so the
+      # step greps its report. No inline suppression exists: fix the regex.
+      # Fails closed: a regex regexploit could not analyse (it prints an error
+      # and goes on) or a missing "Processed N regexes" line also fails.
+      - name: redos
+        run: |
+          out="$(git ls-files -z '*.py' | xargs -0 -r uv run regexploit-py)"
+          echo "$out"
+          if grep -qE '^(Vulnerable regex|Error finding ReDoS)' <<<"$out"; then exit 1; fi
+          grep -qE '^Processed [0-9]+ regexes' <<<"$out"
+
+  lint-ratchet:
+    name: lint-ratchet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      # The PR's versions of the gate scripts are tested here...
+      - name: Gate scripts' own unit tests
+        run: uv run python -m unittest discover -s scripts/ci/tests -v
+      # ...but the gate itself runs as it stands at the merge base (the
+      # merge-base action restores scripts/ci/, including ci_git.py), so a PR
+      # cannot rewrite the ratchet to pass itself.
+      - id: base
+        uses: ./.github/actions/merge-base
+        with:
+          base-gate-scripts: 'true'
+      # ruff and complexipy come from uv.lock, like every other gate tool.
+      - name: Tier-2 ratchet
+        env:
+          RATCHET_BASE: ${{ steps.base.outputs.ref }}
+        run: uv run python scripts/ci/lint_ratchet.py
+
   test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      # [tool.coverage.run] source = the package, so files no test imports
+      # report as 0% (see pyproject.gates.toml).
+      - run: uv run pytest --cov --cov-report=xml:coverage.xml --cov-report=term
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage.xml
+          retention-days: 1
+          if-no-files-found: error
+
+  # REPO-SPECIFIC: the published CLI supports Python 3.10-3.13 on Linux, macOS
+  # and Windows (pyproject classifiers). The old ci.yml ran the suite on every
+  # combination; this keeps that. Coverage and every gate run once, in `test`.
+  test-matrix:
+    name: test-matrix (${{ matrix.os }}, ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
-    env:
-      CODECOV_ENABLED: ${{ secrets.CODECOV_TOKEN != '' }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+        python: ['3.10', '3.11', '3.12', '3.13']
+    env:
+      UV_PYTHON: ${{ matrix.python }}
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      - run: uv run pytest -q -p no:cacheprovider tests/
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install dependencies
-      run: |
-        uv sync --locked --dev
-
-    - name: Run linting with ruff
-      run: |
-        uv run ruff check .
-
-    - name: Run type checking with mypy
-      run: |
-        uv run mypy src/foundry_cli
-
-    - name: Run tests with coverage
-      run: |
-        # Run all tests including integration tests (import issues fixed)
-        uv run pytest tests/ --cov=foundry_cli --cov-report=xml --cov-report=term
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: false
-        token: ${{ secrets.CODECOV_TOKEN }}
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && env.CODECOV_ENABLED == 'true'
-
-    - name: Note Codecov upload skipped
-      if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && env.CODECOV_ENABLED == 'false'
-      run: |
-        printf '%s\n' '### Codecov upload skipped' 'CODECOV_TOKEN is unavailable; coverage was generated but not uploaded.' >> "$GITHUB_STEP_SUMMARY"
-
-  lint-and-format:
-    runs-on: ubuntu-latest
+  # Changed executable lines >= 80% covered. Not a global percentage.
+  diff-coverage:
+    name: diff-coverage
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage
+      - id: base
+        uses: ./.github/actions/merge-base
+      - env:
+          MERGE_BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          pipx run --spec diff-cover==10.6.0 diff-cover coverage.xml \
+            --compare-branch="$MERGE_BASE" --fail-under=80 \
+            --exclude '*/tests/*' '*/test_*.py' '*_test.py' '*/scripts/ci/*'
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v3
-      with:
-        version: "latest"
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv build
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+  # vulture + deptry at the merge base and at HEAD; new findings fail.
+  dead-code:
+    name: dead-code
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      - id: base
+        uses: ./.github/actions/merge-base
+        with:
+          base-gate-scripts: 'true'
+      - env:
+          RATCHET_BASE: ${{ steps.base.outputs.ref }}
+        run: uv run python scripts/ci/dead_code.py
 
-    - name: Install dependencies
-      run: |
-        uv sync --locked --dev
+  # jscpd (a Rust binary shipped on npm; node is preinstalled on the runner).
+  # Same thresholds and base-config rule as the Node template.
+  duplication:
+    name: duplication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - id: base
+        uses: ./.github/actions/merge-base
+      - env:
+          MERGE_BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          config=.jscpd.json
+          if git cat-file -e "$MERGE_BASE:.jscpd.json" 2>/dev/null; then
+            git show "$MERGE_BASE:.jscpd.json" > "$RUNNER_TEMP/jscpd.base.json"
+            config="$RUNNER_TEMP/jscpd.base.json"
+          fi
+          npx --yes jscpd@5.3.1 . --config "$config" --reporters console \
+            --baseline-from-ref "$MERGE_BASE" --fail-on-new-clones 0
 
-    - name: Check code formatting with ruff
-      run: |
-        uv run ruff format --check .
+  # mutmut on the functions this PR touches. Pull requests only.
+  mutation:
+    name: mutation
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      - id: base
+        uses: ./.github/actions/merge-base
+        with:
+          base-gate-scripts: 'true'
+      - env:
+          RATCHET_BASE: ${{ steps.base.outputs.ref }}
+        run: uv run python scripts/ci/mutation.py
 
-    - name: Audit locked runtime dependencies
-      run: |
-        uv export --locked --format requirements-txt --no-dev --no-hashes --no-emit-project --output-file "${RUNNER_TEMP}/runtime-requirements.txt"
-        uv run pip-audit --disable-pip --no-deps --strict --format json --progress-spinner off --requirement "${RUNNER_TEMP}/runtime-requirements.txt"
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - id: base
+        uses: ./.github/actions/merge-base
+      - name: Install gitleaks 8.30.1
+        run: |
+          set -euo pipefail
+          url=https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          curl -fsSL "$url" -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan the change
+        env:
+          MERGE_BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          config=()
+          if git cat-file -e "$MERGE_BASE:.gitleaks.toml" 2>/dev/null; then
+            git show "$MERGE_BASE:.gitleaks.toml" > "$RUNNER_TEMP/gitleaks.base.toml"
+            config=(--config "$RUNNER_TEMP/gitleaks.base.toml")
+          else
+            rm -f .gitleaks.toml # a PR cannot introduce its own allowlist
+          fi
+          # gitleaks also reads .gitleaksignore (finding fingerprints) from the
+          # checkout: only the base version counts.
+          rm -f .gitleaksignore
+          if git cat-file -e "$MERGE_BASE:.gitleaksignore" 2>/dev/null; then
+            git show "$MERGE_BASE:.gitleaksignore" > .gitleaksignore
+          fi
+          # REPO-SPECIFIC (from the old security.yml): what the branch would
+          # ship. Pre-gate history carries dated notes the rules flag, so
+          # history is range-scanned only (freeze the past, gate everything new).
+          "$RUNNER_TEMP/gitleaks" dir ${config[@]+"${config[@]}"} --no-banner --redact --exit-code 1 .
+          if [ "$(git rev-parse HEAD)" = "$MERGE_BASE" ]; then echo "secrets: no new commits"; exit 0; fi
+          "$RUNNER_TEMP/gitleaks" git ${config[@]+"${config[@]}"} --no-banner --redact \
+            --log-opts="$MERGE_BASE..HEAD" --exit-code 1 .
 
+  # Known-vulnerable dependencies in the locked environment. pip-audit has no
+  # severity filter: any known vulnerability fails (ADR-0003).
+  deps:
+    name: deps
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked --dev
+      - run: uv run pip-audit --skip-editable
 
+  # Opt-in benchmark gate: does nothing unless the repo has a bench/ directory.
+  # Counts the instructions each benchmark executes (valgrind cachegrind), at
+  # the merge base and at HEAD on this runner, and fails above +10 %. Advisory:
+  # not a required check until the repo promotes it (standard §10, ADR-0006).
+  bench:
+    name: bench
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - if: hashFiles('bench/**') != ''
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - if: hashFiles('bench/**') != ''
+        run: uv sync --locked --dev && sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
+      - id: base
+        uses: ./.github/actions/merge-base
+        with:
+          base-gate-scripts: 'true'
+      - env:
+          RATCHET_BASE: ${{ steps.base.outputs.ref }}
+        run: |
+          if [ ! -d bench ]; then echo "bench: no bench/ directory; nothing to measure."; exit 0; fi
+          if [ ! -f scripts/ci/bench.py ]; then echo "bench: the merge base has no scripts/ci/bench.py yet; skipped."; exit 0; fi
+          uv run python scripts/ci/bench.py
+
+  # TRANSITIONAL. The repository ruleset "main protection" requires `ci-ok`
+  # (and security.yml's `secret and environment-data scan`). Once the ruleset
+  # requires the gate names above instead, delete this job and security.yml
+  # (docs/engineering/ci-gates.md, "Transition").
   ci-ok:
-    # Single required status check for branch protection. Keeps the ruleset
-    # stable when the matrix changes.
-    runs-on: ubuntu-latest
-    needs: [test, lint-and-format]
+    name: ci-ok
     if: always()
+    # mutation and bench are advisory (docs/engineering/ci-gates.md), so not here.
+    needs: [typecheck, lint, lint-ratchet, test, test-matrix, diff-coverage, build, dead-code, duplication, secrets, deps]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-    - name: Fail unless every upstream job succeeded
-      run: |
-        if [ "${{ needs.test.result }}" != "success" ] || [ "${{ needs.lint-and-format.result }}" != "success" ]; then
-          echo "test=${{ needs.test.result }} lint-and-format=${{ needs.lint-and-format.result }}" >&2
-          exit 1
-        fi
+      - env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          # Every job above must succeed.
+          python3 - <<'PY'
+          import json, os, sys
+          bad = {job: r["result"] for job, r in json.loads(os.environ["RESULTS"]).items()
+                 if r["result"] != "success"}
+          print("ci-ok: " + (", ".join("%s=%s" % kv for kv in sorted(bad.items())) or "all gates passed"))
+          sys.exit(1 if bad else 0)
+          PY

@@ -1,0 +1,25 @@
+# Files that define or can weaken the quality gates (Python).
+#
+# The gates' only sanctioned escape hatch is editing these files in a reviewed
+# PR, so a named human must approve that edit. Enable "Require review from
+# Code Owners" in branch protection (../branch-protection.sh does this).
+# ADJUST the owner handles per repo: at least two humans with write access.
+
+pyproject.toml         @zaycruz @King-Mayster
+uv.lock                @zaycruz @King-Mayster
+ruff.toml              @zaycruz @King-Mayster
+mypy.ini               @zaycruz @King-Mayster
+.jscpd.json            @zaycruz @King-Mayster
+.gitleaks.toml         @zaycruz @King-Mayster
+.gitleaksignore        @zaycruz @King-Mayster
+.gitattributes         @zaycruz @King-Mayster
+# Gate docs: the rules agents follow and the repo's gates doc (thresholds, required checks).
+AGENTS.md              @zaycruz @King-Mayster
+CLAUDE.md              @zaycruz @King-Mayster
+docs/engineering/ci-gates.md @zaycruz @King-Mayster
+.github/**             @zaycruz @King-Mayster
+scripts/ci/**          @zaycruz @King-Mayster
+# conftest.py decides what every test sees; add it if the repo has a root one.
+tests/conftest.py      @zaycruz @King-Mayster
+# A PR that shrinks a benchmark can hide its own regression (standard §10).
+bench/**               @zaycruz @King-Mayster

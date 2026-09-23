@@ -1,0 +1,75 @@
+name: PR policy
+
+# Raava CI quality gates v2, Python — template from
+# engineering/standards/templates/ci-gates/python/pr-policy.yml (ADR-0003).
+# Label- and title-dependent checks; both always report, so both can be
+# required. `pull_request`, never `pull_request_target`.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pr-size:
+    name: pr-size
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - id: base
+        uses: ./.github/actions/merge-base
+        with:
+          base-gate-scripts: 'true'
+      # stdlib only: no install needed.
+      - env:
+          RATCHET_BASE: ${{ steps.base.outputs.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/pr_size.py
+
+  regression-proof:
+    name: regression-proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      # Before --detect: the base script decides whether this is a fix PR, so
+      # a PR cannot edit the detector to skip itself.
+      - id: base
+        uses: ./.github/actions/merge-base
+        with:
+          base-gate-scripts: 'true'
+      - id: kind
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: python3 scripts/ci/regression_proof.py --detect >> "$GITHUB_OUTPUT"
+      - if: steps.kind.outputs.fix == 'true'
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - if: steps.kind.outputs.fix == 'true'
+        run: uv sync --locked --dev
+      - if: steps.kind.outputs.fix == 'true'
+        env:
+          RATCHET_BASE: ${{ steps.base.outputs.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: uv run python scripts/ci/regression_proof.py
+      - if: steps.kind.outputs.fix != 'true'
+        run: echo "regression-proof skip, not a fix PR"
