@@ -78,6 +78,13 @@ class ResultsTests(unittest.TestCase):
         results = {"m.x_f__mutmut_%d" % i: "not checked" for i in range(5)}
         self.assertEqual(mu.verdict(results, ["m.x_f__mutmut_*"])[:2], (True, 0.0))
 
+    def test_a_run_where_no_mutant_got_a_verdict_cannot_pass(self):
+        # macOS: mutmut's fork segfaults every mutant; that used to score 100%.
+        results = {"m.x_f__mutmut_%d" % i: "segfault" for i in range(5)}
+        results["m.x_g__mutmut_1"] = "killed"  # out of scope
+        with self.assertRaises(ValueError):
+            mu.verdict(results, ["m.x_f__mutmut_*"])
+
     def test_verdict_fails_over_free_survivors_under_the_floor(self):
         results = {"m.x_f__mutmut_%d" % i: "survived" for i in range(3)}
         self.assertTrue(mu.verdict(results, ["m.x_f__mutmut_*"])[0])

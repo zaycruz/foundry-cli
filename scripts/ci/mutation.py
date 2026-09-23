@@ -20,7 +20,8 @@ slow or starved of CPU times out on every mutant, and counting that as
 pi-palantir case, 2026-09-23: 12/12 Timeout, a false 100 %). A real
 infinite-loop mutant is rare on a diff; FREE_SURVIVORS absorbs a few.
 "not checked" (mutmut stopped before it ran the mutant) is undetected for the
-same reason: a crashed run must not score 100 %.
+same reason: a crashed run must not score 100 %. When no mutant in scope gets
+a verdict at all (every one segfault / suspicious / skipped), the check exits 2.
 
 The repo's [tool.mutmut] must not set source_paths (or the deprecated
 paths_to_mutate): this script inserts it for the run and restores
@@ -101,6 +102,12 @@ def verdict(results: Dict[str, str], globs: List[str]) -> Tuple[bool, float, Lis
     detected = sum(1 for s in scoped.values() if s in DETECTED)
     undetected = sorted(n for n, s in scoped.items() if s in UNDETECTED)
     valid = detected + len(undetected)
+    if scoped and valid == 0:
+        # Every mutant crashed or was skipped: the run measured nothing. Fail
+        # closed (exit 2) instead of scoring 100 %. Seen on macOS, where mutmut's
+        # fork after pandas/pyarrow start threads segfaults every mutant.
+        statuses = ", ".join(sorted(set(scoped.values())))
+        raise ValueError("no verdict for any of the %d mutants in scope (%s); the run did not measure anything" % (len(scoped), statuses))
     score = 100.0 if valid == 0 else round(detected * 1000.0 / valid) / 10
     return len(undetected) > FREE_SURVIVORS and score < MIN_SCORE, score, undetected
 
