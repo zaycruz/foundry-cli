@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import sys
+import types
 from pathlib import Path
 
-from foundry_cli.services.platform_sdk import PlatformSdkService
+import pytest
+
+from foundry_cli.services.platform_sdk import (
+    PlatformSdkError,
+    PlatformSdkService,
+    _default_sdk_root,
+)
 
 
 CLIENT_PY = """
@@ -148,3 +156,34 @@ class TestInstalledPackage:
         )
         assert result["status"] == "ok"
         assert "full Ontology metadata" in result["docstring"]
+
+
+class TestDefaultSdkRoot:
+    """Locating the installed SDK's v2 package (no network)."""
+
+    def test_returns_the_v2_directory_next_to_the_package(self, tmp_path, monkeypatch):
+        (tmp_path / "v2").mkdir()
+        fake = types.ModuleType("foundry_sdk")
+        fake.__file__ = str(tmp_path / "__init__.py")
+        monkeypatch.setitem(sys.modules, "foundry_sdk", fake)
+        assert _default_sdk_root() == tmp_path.resolve() / "v2"
+
+    def test_missing_package_raises_with_the_install_hint(self, monkeypatch):
+        # A None entry in sys.modules makes `import foundry_sdk` raise ImportError.
+        monkeypatch.setitem(sys.modules, "foundry_sdk", None)
+        with pytest.raises(PlatformSdkError) as info:
+            _default_sdk_root()
+        assert (
+            str(info.value)
+            == "foundry-platform-sdk is not installed in this environment"
+        )
+        assert isinstance(info.value.__cause__, ImportError)
+
+    def test_missing_v2_directory_names_the_path(self, tmp_path, monkeypatch):
+        fake = types.ModuleType("foundry_sdk")
+        fake.__file__ = str(tmp_path / "__init__.py")
+        monkeypatch.setitem(sys.modules, "foundry_sdk", fake)
+        with pytest.raises(PlatformSdkError) as info:
+            _default_sdk_root()
+        expected = tmp_path.resolve() / "v2"
+        assert str(info.value) == f"foundry_sdk v2 package not found at {expected}"

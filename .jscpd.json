@@ -1,0 +1,14 @@
+{
+  "minLines": 10,
+  "minTokens": 70,
+  "format": ["python"],
+  "ignore": [
+    "**/.venv/**",
+    "**/mutants/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/*_pb2.py",
+    "**/migrations/**"
+  ],
+  "noTips": true
+}

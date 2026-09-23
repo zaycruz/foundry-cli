@@ -10,6 +10,24 @@ These instructions are model-agnostic and apply to every coding agent working in
 - Prefer removing unsupported behavior over returning misleading results.
 - Treat Foundry identifiers as RIDs unless a command explicitly accepts an API name.
 
+## Quality gates
+
+CI runs the Raava CI quality gates (details, local commands, and which gates use
+merge-base config: `docs/engineering/ci-gates.md`). Before you open a pull request:
+
+- Run `uv run ruff check . && uv run ruff format --check .`, `uv run mypy src/foundry_cli`,
+  `uv run pytest`, and `uv run python scripts/ci/lint_ratchet.py`.
+- A touched file may not get worse on a Tier 2 rule (complexity, cognitive complexity,
+  arguments, nesting, `Any`, length, assertion-free tests). Refactor; do not add `# noqa`.
+- New code needs tests that check results: 80 % of changed lines covered, and mutants in
+  the functions you change must be caught.
+- Do not add unused code, dependencies, copied blocks, or a regex with exponential
+  backtracking.
+- A fix PR (`fix:` title or `fix` label) needs a test that fails before the fix.
+- Keep a PR under 400 added non-test lines. Only a code owner who is not the author may
+  apply `large-change`.
+- Do not edit a gate file (`.github/CODEOWNERS` lists them) to make your own PR pass.
+
 ## Mandatory Foundry change-impact gate
 
 Before planning, proposing, or applying a change to a Foundry ontology resource, action, query, dataset, application, or other Compass resource:

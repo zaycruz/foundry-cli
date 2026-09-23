@@ -21,7 +21,7 @@ class PlatformSdkError(RuntimeError):
 
 def _default_sdk_root() -> Path:
     try:
-        import foundry_sdk  # noqa: PLC0415
+        import foundry_sdk
     except ImportError as exc:
         raise PlatformSdkError(
             "foundry-platform-sdk is not installed in this environment"
