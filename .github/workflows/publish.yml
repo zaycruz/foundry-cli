@@ -9,6 +9,7 @@ on:
 
 jobs:
   test:
+    name: release-test
     # A tag must not publish over a failing suite. This is one platform, not the
     # full CI matrix -- a Windows-only regression could still ship. The matrix
     # runs on the merge that precedes the tag.
@@ -33,6 +34,7 @@ jobs:
         run: uv run pytest -q
 
   build:
+    name: release-build
     needs: test
     runs-on: ubuntu-latest
     steps:

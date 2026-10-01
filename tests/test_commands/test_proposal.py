@@ -260,13 +260,16 @@ def test_close_yes_refreshes_before_write_and_forwards_profile(proposal_service)
     service.require_capability.side_effect = lambda *args, **kwargs: calls.append(
         "capability"
     )
-    service.get.side_effect = lambda *args, **kwargs: calls.append("get") or {
-        "id": "gp-1"
-    }
-    service.close.side_effect = lambda *args, **kwargs: calls.append("close") or {
-        "id": "gp-1",
-        "state": "CLOSED",
-    }
+    service.get.side_effect = lambda *args, **kwargs: (
+        calls.append("get") or {"id": "gp-1"}
+    )
+    service.close.side_effect = lambda *args, **kwargs: (
+        calls.append("close")
+        or {
+            "id": "gp-1",
+            "state": "CLOSED",
+        }
+    )
 
     result = runner.invoke(
         app,

@@ -5,3 +5,6 @@ Read and follow `AGENTS.md`.
 `AGENTS.md` is the canonical repository instruction file. The canonical,
 model-agnostic skill bundle is `skills/foundry-cli/`. Do not duplicate its rules
 or create a Claude-specific skill source tree.
+
+The CI quality gates are in `AGENTS.md` ("Quality gates") and
+`docs/engineering/ci-gates.md`.

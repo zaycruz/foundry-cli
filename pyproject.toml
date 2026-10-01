@@ -95,16 +95,54 @@ exclude = [
 ]
 
 [dependency-groups]
+# Gate tools are exact pins (Raava CI quality gates, ADR-0003): the gates'
+# behaviour is the tool's behaviour. pyproject.toml is CODEOWNERS-protected.
 dev = [
     "bandit>=1.8.6",
-    "mypy>=1.17.1",
-    "pip-audit>=2.10.1",
+    "complexipy==8.0.1",
+    "deptry==0.25.1",
+    "mutmut==3.7.0",
+    "mypy==2.3.1",
+    "pip-audit==2.10.1",
     "pre-commit>=4.3.0",
     "pydocstyle>=6.3.0",
-    "pytest>=9.0.3",
-    "pytest-cov>=6.2.1",
-    "ruff>=0.12.8",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "regexploit==1.0.0",
+    "ruff==0.16.8",
     "tomli-w>=1.2.0",
     "types-defusedxml>=0.7.0.20260504",
     "types-requests>=2.32.4.20250611",
+    "vulture==2.16",
 ]
+
+# --- Raava CI quality gates (engineering/standards/templates/ci-gates/python) ---
+
+[tool.pytest.ini_options]
+# Keep pytest out of mutmut's working copy. pytest's defaults plus "mutants".
+norecursedirs = [".*", "*.egg", "_darcs", "build", "CVS", "dist", "node_modules", "venv", "{arch}", "mutants"]
+
+[tool.coverage.run]
+# `source` (not `include`): files no test imports report as 0%, so diff-cover sees them.
+source = ["src/foundry_cli"]
+branch = true
+
+[tool.vulture]
+# Package and tests: code used only by tests counts as used.
+paths = ["src", "tests"]
+min_confidence = 60
+# Framework hooks vulture cannot see being called. Add a decorator here, in its
+# own reviewed PR, before relying on it.
+ignore_decorators = ["@pytest.fixture", "@*.command", "@*.callback", "@*.route", "@*.get", "@*.post"]
+ignore_names = ["test_*", "Test*", "setUp*", "tearDown*", "pytest_*"]
+exclude = ["mutants/", ".venv/"]
+
+[tool.deptry]
+known_first_party = ["foundry_cli"]
+extend_exclude = ["mutants", "scripts/ci"]
+
+[tool.mutmut]
+# scripts/ci/mutation.py sets source_paths per run; do NOT set it here.
+# also_copy: everything the tests import or read besides the mutated files.
+pytest_add_cli_args_test_selection = ["tests/"]
+also_copy = ["src/", "scripts/", "skills/", "llms.txt", "README.md"]
